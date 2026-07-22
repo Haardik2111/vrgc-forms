@@ -796,10 +796,10 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                             <img 
                               src={existingSubmission.avatarUrl} 
                               alt="Avatar Watermark" 
-                              className="w-full h-full object-cover opacity-[0.75]"
+                              className="w-full h-full object-cover opacity-95 brightness-110 contrast-105"
                               referrerPolicy="no-referrer"
                             />
-                            <div className="absolute inset-0 bg-[#05010a]/15 bg-gradient-to-b from-transparent via-[#05010a]/40 to-[#05010a]/75"></div>
+                            <div className="absolute inset-0 bg-[#05010a]/10 bg-gradient-to-b from-transparent via-[#05010a]/20 to-[#05010a]/50"></div>
                           </div>
                         )}
 
@@ -999,9 +999,10 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                               <img 
                                 src={avatarPreview} 
                                 alt="Avatar Watermark Preview" 
-                                className="w-full h-full object-cover opacity-[0.75]"
+                                className="w-full h-full object-cover opacity-95 brightness-110 contrast-105"
+                                referrerPolicy="no-referrer"
                               />
-                              <div className="absolute inset-0 bg-[#05010a]/15 bg-gradient-to-b from-transparent via-[#05010a]/40 to-[#05010a]/75"></div>
+                              <div className="absolute inset-0 bg-[#05010a]/10 bg-gradient-to-b from-transparent via-[#05010a]/20 to-[#05010a]/50"></div>
                             </div>
                           )}
 
