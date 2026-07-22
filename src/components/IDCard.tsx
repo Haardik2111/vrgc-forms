@@ -316,9 +316,16 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
     setSubmitError('');
 
     try {
-      // 1. Upload Photo to Supabase Storage
+      // Helper to sanitize text for file names
+      const sanitize = (str: string) => str.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+      const userRegNo = memberData.registrationNumber || 'NO_REG';
+      const userNameStr = sanitize(memberData.name || 'user');
+      const userEmailStr = sanitize(currentUser.email || 'email');
+      const timestamp = Date.now();
+
+      // 1. Upload Identification Photo to 'id-cards' Bucket
       const photoExt = photoFile.name.split('.').pop();
-      const photoFileName = `${memberData.registrationNumber || currentUser.uid}_photo_${Date.now()}.${photoExt}`;
+      const photoFileName = `${userRegNo}_${userNameStr}_${userEmailStr}_photo_${timestamp}.${photoExt}`;
       const photoFilePath = `id-photos/${photoFileName}`;
 
       const { error: photoUploadError } = await supabase.storage
@@ -336,29 +343,42 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
         .from('id-cards')
         .getPublicUrl(photoFilePath);
 
-      // 2. Upload Avatar to Supabase Storage (if file provided) or use direct URL
+      // 2. Upload Gaming Avatar to dedicated 'id-avatars' Bucket (or use direct URL link)
       let avatarPublicUrl = avatarUrlInput.trim();
       if (avatarFile) {
         const avatarExt = avatarFile.name.split('.').pop();
-        const avatarFileName = `${memberData.registrationNumber || currentUser.uid}_avatar_${Date.now()}.${avatarExt}`;
-        const avatarFilePath = `id-photos/${avatarFileName}`;
+        const avatarFileName = `${userRegNo}_${userNameStr}_${userEmailStr}_avatar_${timestamp}.${avatarExt}`;
+        const avatarFilePath = `avatars/${avatarFileName}`;
 
-        const { error: avatarUploadError } = await supabase.storage
-          .from('id-cards')
+        // Attempt upload to 'avatar' bucket (fallback to 'id-cards' if bucket not created yet)
+        let targetBucket = 'avatar';
+        let { error: avatarUploadError } = await supabase.storage
+          .from(targetBucket)
           .upload(avatarFilePath, avatarFile, {
             cacheControl: '3600',
             upsert: true
           });
 
-        if (avatarUploadError) {
+        if (avatarUploadError && avatarUploadError.message.includes('not found')) {
+          // Fallback to id-cards bucket if id-avatars bucket is not created yet
+          targetBucket = 'id-cards';
+          const fallbackRes = await supabase.storage
+            .from(targetBucket)
+            .upload(`id-photos/${avatarFileName}`, avatarFile, {
+              cacheControl: '3600',
+              upsert: true
+            });
+          avatarUploadError = fallbackRes.error;
+          const { data: fallbackUrlData } = supabase.storage.from(targetBucket).getPublicUrl(`id-photos/${avatarFileName}`);
+          avatarPublicUrl = fallbackUrlData.publicUrl;
+        } else if (!avatarUploadError) {
+          const { data: { publicUrl: uploadedUrl } } = supabase.storage
+            .from(targetBucket)
+            .getPublicUrl(avatarFilePath);
+          avatarPublicUrl = uploadedUrl;
+        } else {
           throw new Error(`Supabase avatar upload failed: ${avatarUploadError.message}.`);
         }
-
-        const { data: { publicUrl: uploadedUrl } } = supabase.storage
-          .from('id-cards')
-          .getPublicUrl(avatarFilePath);
-          
-        avatarPublicUrl = uploadedUrl;
       }
 
       // 3. Save Submission details to Firestore
@@ -486,24 +506,26 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
     }
 
     try {
-      const filesToDelete: string[] = [];
       if (candidate.photoUrl) {
         const index = candidate.photoUrl.indexOf('id-photos/');
         if (index !== -1) {
-          filesToDelete.push(decodeURIComponent(candidate.photoUrl.substring(index)));
+          const filePath = decodeURIComponent(candidate.photoUrl.substring(index));
+          await supabase.storage.from('id-cards').remove([filePath]);
         }
       }
       if (candidate.avatarUrl) {
-        const index = candidate.avatarUrl.indexOf('id-photos/');
-        if (index !== -1) {
-          filesToDelete.push(decodeURIComponent(candidate.avatarUrl.substring(index)));
+        const avatarIdx = candidate.avatarUrl.indexOf('avatars/');
+        if (avatarIdx !== -1) {
+          const avatarFilePath = decodeURIComponent(candidate.avatarUrl.substring(avatarIdx));
+          const bucketName = candidate.avatarUrl.includes('/avatar/') ? 'avatar' : 'id-cards';
+          await supabase.storage.from(bucketName).remove([avatarFilePath]);
+        } else {
+          const photoIdx = candidate.avatarUrl.indexOf('id-photos/');
+          if (photoIdx !== -1) {
+            const filePath = decodeURIComponent(candidate.avatarUrl.substring(photoIdx));
+            await supabase.storage.from('id-cards').remove([filePath]);
+          }
         }
-      }
-
-      if (filesToDelete.length > 0) {
-        await supabase.storage
-          .from('id-cards')
-          .remove(filesToDelete);
       }
 
       await deleteDoc(doc(db, 'id_cards', candidate.email.toLowerCase()));

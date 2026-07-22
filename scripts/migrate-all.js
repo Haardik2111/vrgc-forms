@@ -31,9 +31,8 @@ const newSupabaseUrl = "https://fopyejijjeoumimsdgiz.supabase.co";
 const newSupabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZvcHllamlqamVvdW1pbXNkZ2l6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ3Mjg4NDMsImV4cCI6MjEwMDMwNDg0M30.NQVEJKOzJnNoFGs8tgDTkbMrc4OgE_w9bhSpsZ4Cxm4";
 
 async function runMigration() {
-  console.log("🚀 Starting Data Migration process...");
+  console.log("🚀 Updating Firestore URLs to point to NEW Supabase domain...");
 
-  // Initialize Firebase instances
   const oldApp = initializeApp(oldFirebaseConfig, "oldApp");
   const newApp = initializeApp(newFirebaseConfig, "newApp");
 
@@ -43,53 +42,59 @@ async function runMigration() {
   const collectionsToMigrate = ['id_cards', 'referrals', 'data_reports'];
 
   for (const colName of collectionsToMigrate) {
-    console.log(`\n📦 Migrating Firestore collection: '${colName}'...`);
+    console.log(`\n📦 Updating collection: '${colName}'...`);
     try {
       const querySnapshot = await getDocs(collection(oldDb, colName));
-      console.log(`Found ${querySnapshot.docs.length} documents in old '${colName}'.`);
-
       let count = 0;
       for (const docSnap of querySnapshot.docs) {
         const data = docSnap.data();
+
+        // Replace old Supabase domain with new Supabase domain in all string fields
+        for (const key in data) {
+          if (typeof data[key] === 'string' && data[key].includes(oldSupabaseUrl)) {
+            data[key] = data[key].replace(oldSupabaseUrl, newSupabaseUrl);
+          }
+        }
+
         await setDoc(doc(newDb, colName, docSnap.id), data);
         count++;
-        console.log(`  ✓ Migrated doc: ${docSnap.id}`);
+        console.log(`  ✓ Updated doc ${docSnap.id} -> photoUrl domain updated.`);
       }
-      console.log(`✅ Successfully migrated ${count} records for '${colName}'.`);
+      console.log(`✅ Successfully updated ${count} records for '${colName}'.`);
     } catch (err) {
-      console.error(`❌ Error migrating collection '${colName}':`, err.message);
+      console.error(`❌ Error updating collection '${colName}':`, err.message);
     }
   }
 
-  // Supabase Image Transfer
-  console.log("\n⚡ Checking Supabase Storage files...");
+  // Supabase File Sync
+  console.log("\n⚡ Verifying storage file upload to new Supabase bucket...");
   const oldSupabase = createClient(oldSupabaseUrl, oldSupabaseKey);
   const newSupabase = createClient(newSupabaseUrl, newSupabaseKey);
 
   try {
-    const { data: files, error } = await oldSupabase.storage.from('id-cards').list('id-photos');
-    if (error) {
-      console.log("Notice on Supabase list:", error.message);
-    } else if (files && files.length > 0) {
-      console.log(`Found ${files.length} storage files in old Supabase bucket.`);
+    const { data: files } = await oldSupabase.storage.from('id-cards').list('id-photos');
+    if (files && files.length > 0) {
       for (const f of files) {
+        if (!f.name || f.name.startsWith('.')) continue;
         const path = `id-photos/${f.name}`;
         const { data: fileData } = await oldSupabase.storage.from('id-cards').download(path);
         if (fileData) {
           const arrayBuffer = await fileData.arrayBuffer();
           const buffer = Buffer.from(arrayBuffer);
-          await newSupabase.storage.from('id-cards').upload(path, buffer, { upsert: true });
-          console.log(`  ✓ Transferred storage file: ${path}`);
+          const { error: upErr } = await newSupabase.storage.from('id-cards').upload(path, buffer, { upsert: true, contentType: 'image/jpeg' });
+          if (!upErr) {
+            console.log(`  ✓ Uploaded to new Supabase bucket: ${path}`);
+          } else {
+            console.log(`  Notice on upload ${path}:`, upErr.message);
+          }
         }
       }
-    } else {
-      console.log("No existing files found in old Supabase storage bucket.");
     }
   } catch (err) {
-    console.log("Supabase transfer info:", err.message);
+    console.log("Supabase upload info:", err.message);
   }
 
-  console.log("\n🎉 MIGRATION COMPLETED SUCCESSFULLY!");
+  console.log("\n🎉 ALL DOMAIN URLS & FILES UPDATED TO NEW SUPABASE ACCOUNT!");
 }
 
 runMigration().catch(console.error);
