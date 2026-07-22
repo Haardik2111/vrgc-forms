@@ -11,14 +11,19 @@ export const CONFIG = {
 
   // ID Card Form Whitelisted Admins
   ADMIN_EMAILS: [
-    "parardha.24bcg10003@vitbhopal.ac.in",
-    "haardik.24bcg10051@vitbhopal.ac.in",
-    "rishav.24bsa10096@vitbhopal.ac.in",
+    "aayush.23mim10104@vitbhopal.ac.in",
     "abhinav.25bcy10254@vitbhopal.ac.in",
-    "anmol.25bai10263@vitbhopal.ac.in",
-    "jaiyansh.25bcy10268@vitbhopal.ac.in",
     "admin@vrgc.club",
-    "alex.dev@gmail.com"
+    "alex.dev@gmail.com",
+    "anmol.25bai10263@vitbhopal.ac.in",
+    "haardik.24bcg10051@vitbhopal.ac.in",
+    "jaiyansh.25bcy10268@vitbhopal.ac.in",
+    "lokesh.23bcg10015@vitbhopal.ac.in",
+    "mohit.25bcg10008@vitbhopal.ac.in",
+    "parardha.24bcg10003@vitbhopal.ac.in",
+    "rishav.24bsa10096@vitbhopal.ac.in",
+    "riya.24bcg10082@vitbhopal.ac.in",
+    "shivansh.23bce11158@vitbhopal.ac.in"
   ],
 
   // Live Firebase Production Configuration
