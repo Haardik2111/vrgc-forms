@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth, googleProvider, db } from '../lib/firebase';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
-import { collection, onSnapshot, doc, deleteDoc, updateDoc, setDoc, getDoc, addDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, deleteDoc, updateDoc, setDoc, getDoc, addDoc, getDocs } from 'firebase/firestore';
 import { supabase } from '../lib/supabase';
 import { CONFIG } from '../lib/config';
 
@@ -99,6 +99,8 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
   const [previewModalTab, setPreviewModalTab] = useState<'details' | 'card'>('card');
   const [previewFlipped, setPreviewFlipped] = useState<boolean>(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [menuDirections, setMenuDirections] = useState<Record<string, 'up' | 'down'>>({});
+  const [candidateToDelete, setCandidateToDelete] = useState<CandidateSubmission | null>(null);
 
   // Close mobile 3-dots menu on outside click
   useEffect(() => {
@@ -474,7 +476,16 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
     setIsSyncingSheets(true);
 
     try {
-      const syncPromises = candidates.map(c => {
+      // Fetch latest active records from Firestore to ensure clean list (excluding deleted entries)
+      const querySnap = await getDocs(collection(db, 'id_cards'));
+      const activeCandidates: CandidateSubmission[] = [];
+      querySnap.forEach((d) => activeCandidates.push({ id: d.id, ...d.data() } as CandidateSubmission));
+
+      // Update local state list
+      const sortedCandidates = activeCandidates.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+      setCandidates(sortedCandidates);
+
+      const syncPromises = sortedCandidates.map(c => {
         const sheetSyncUrl = `${CONFIG.GOOGLE_SCRIPT_ID_CARD_URL}?action=sync_idcard&email=${encodeURIComponent(c.email)}&name=${encodeURIComponent(c.name)}&regNo=${encodeURIComponent(c.registrationNumber)}&phone=${encodeURIComponent(c.phone || '')}&team=${encodeURIComponent(c.team || '')}&position=${encodeURIComponent(c.position || 'Member')}&photoUrl=${encodeURIComponent(c.photoUrl || '')}&submittedAt=${encodeURIComponent(c.submittedAt || '')}&status=${encodeURIComponent(c.status || 'Pending')}`;
         return fetch(sheetSyncUrl, { mode: 'no-cors' })
           .then(() => true)
@@ -487,7 +498,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
       const results = await Promise.allSettled(syncPromises);
       const successCount = results.filter(r => r.status === 'fulfilled' && r.value).length;
 
-      setSyncToastMessage(`Parallel sync completed! Transmitted ${successCount} ID record(s) to IDCardDetails.`);
+      setSyncToastMessage(`Parallel sync completed! Transmitted ${successCount} active ID record(s) to Google Sheets.`);
       setTimeout(() => setSyncToastMessage(null), 4500);
       setSheetsCooldown(60);
     } catch (err) {
@@ -523,10 +534,14 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
     }
   };
 
-  const handleDelete = async (candidate: CandidateSubmission) => {
-    if (!window.confirm(`Are you sure you want to delete the entry for ${candidate.name}? This will unlock their form response.`)) {
-      return;
-    }
+  const handleDelete = (candidate: CandidateSubmission) => {
+    setCandidateToDelete(candidate);
+  };
+
+  const confirmDeleteCandidate = async () => {
+    if (!candidateToDelete) return;
+    const candidate = candidateToDelete;
+    setCandidateToDelete(null);
 
     try {
       if (candidate.photoUrl) {
@@ -551,18 +566,36 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
         }
       }
 
+      // Delete from Firestore database
       await deleteDoc(doc(db, 'id_cards', candidate.email.toLowerCase()));
+
+      // Instantly remove from local candidates state array
+      setCandidates(prev => prev.filter(c => c.email.toLowerCase() !== candidate.email.toLowerCase()));
+
+      // Send deletion signal to Google Sheets via Apps Script
+      if (CONFIG.GOOGLE_SCRIPT_ID_CARD_URL) {
+        const deleteSheetUrl = `${CONFIG.GOOGLE_SCRIPT_ID_CARD_URL}?action=delete_idcard&email=${encodeURIComponent(candidate.email)}`;
+        fetch(deleteSheetUrl, { mode: 'no-cors' })
+          .then(() => console.log("Sent deletion notification to Google Sheets for:", candidate.email))
+          .catch(err => console.error("Sheets deletion call failed:", err));
+      }
+
+      // Close preview modal if deleting current candidate
+      if (previewCandidate && previewCandidate.email.toLowerCase() === candidate.email.toLowerCase()) {
+        setPreviewCandidate(null);
+      }
 
       if (currentUser && candidate.email.toLowerCase() === (currentUser.email || '').toLowerCase()) {
         setExistingSubmission(null);
         setSubmitSuccess(false);
       }
 
-      setSyncToastMessage(`Deleted submission for ${candidate.name}. Form response unlocked.`);
-      setTimeout(() => setSyncToastMessage(null), 4000);
+      setSyncToastMessage(`Deleted submission for ${candidate.name}. Form response unlocked & Google Sheets notified.`);
+      setTimeout(() => setSyncToastMessage(null), 4500);
     } catch (err: any) {
       console.error("Delete failed:", err);
-      alert("Failed to delete entry: " + err.message);
+      setSyncToastMessage("Failed to delete entry: " + (err?.message || err));
+      setTimeout(() => setSyncToastMessage(null), 4500);
     }
   };
 
@@ -574,12 +607,29 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
         status: newStatus
       });
 
+      // Update local state list
+      setCandidates(prev => prev.map(c => 
+        c.email.toLowerCase() === candidate.email.toLowerCase() 
+          ? { ...c, status: newStatus }
+          : c
+      ));
+
+      // Trigger status update in Google Sheets
+      if (CONFIG.GOOGLE_SCRIPT_ID_CARD_URL) {
+        const statusSyncUrl = `${CONFIG.GOOGLE_SCRIPT_ID_CARD_URL}?action=sync_idcard&email=${encodeURIComponent(candidate.email)}&name=${encodeURIComponent(candidate.name)}&regNo=${encodeURIComponent(candidate.registrationNumber)}&phone=${encodeURIComponent(candidate.phone || '')}&team=${encodeURIComponent(candidate.team || '')}&position=${encodeURIComponent(candidate.position || 'Member')}&photoUrl=${encodeURIComponent(candidate.photoUrl || '')}&submittedAt=${encodeURIComponent(candidate.submittedAt || '')}&status=${encodeURIComponent(newStatus)}`;
+        fetch(statusSyncUrl, { mode: 'no-cors' }).catch(err => console.error("Sheets status sync error:", err));
+      }
+
       if (previewCandidate && previewCandidate.email.toLowerCase() === candidate.email.toLowerCase()) {
         setPreviewCandidate(prev => prev ? { ...prev, status: newStatus } : null);
       }
+
+      setSyncToastMessage(`Updated status for ${candidate.name} to ${newStatus}.`);
+      setTimeout(() => setSyncToastMessage(null), 3000);
     } catch (err: any) {
       console.error("Status update failed:", err);
-      alert("Failed to update status: " + err.message);
+      setSyncToastMessage("Failed to update status: " + (err?.message || err));
+      setTimeout(() => setSyncToastMessage(null), 4000);
     }
   };
 
@@ -1362,7 +1412,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
               </div>
             </div>
 
-            <div className="glass-panel p-4 rounded-2xl relative overflow-hidden space-y-4">
+            <div className="glass-panel p-4 rounded-2xl relative space-y-4 pb-28 sm:pb-16">
               <div className="space-y-4 relative z-10">
                 {loadingData ? (
                   <div className="py-12 text-center text-on-surface-variant font-code-sm animate-pulse">
@@ -1382,9 +1432,10 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                       <div className="col-span-2 text-right">ACTIONS</div>
                     </div>
 
-                    {filteredCandidates.map((c) => {
+                    {filteredCandidates.map((c, index) => {
                       const submissionDate = c.submittedAt ? new Date(c.submittedAt).toLocaleDateString() : "N/A";
                       const display = getAdminDisplayRoleOrTeam(c.team, c.position);
+                      const isNearBottom = index >= Math.max(1, filteredCandidates.length - 2);
 
                       return (
                         <div
@@ -1513,6 +1564,10 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       const menuKey = c.id || c.email;
+                                      const rect = e.currentTarget.getBoundingClientRect();
+                                      const spaceBelow = window.innerHeight - rect.bottom;
+                                      const openUp = spaceBelow < 220;
+                                      setMenuDirections(prev => ({ ...prev, [menuKey]: openUp ? 'up' : 'down' }));
                                       setOpenMenuId(openMenuId === menuKey ? null : menuKey);
                                     }}
                                     className="p-1.5 rounded-lg bg-black/60 border border-white/10 text-white/80 hover:text-white hover:border-purple-500/50 transition-all"
@@ -1524,7 +1579,9 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                                   {openMenuId === (c.id || c.email) && (
                                     <div
                                       onClick={(e) => e.stopPropagation()}
-                                      className="absolute right-0 top-9 z-[150] w-48 bg-[#12081c] border border-[#a855f7]/40 backdrop-blur-2xl rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.9)] py-1.5 text-xs font-body-md"
+                                      className={`absolute right-0 ${
+                                        menuDirections[c.id || c.email] === 'up' ? 'bottom-full mb-2' : 'top-9'
+                                      } z-[300] w-48 bg-[#12081c] border border-[#a855f7]/40 backdrop-blur-2xl rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.9)] py-1.5 text-xs font-body-md`}
                                     >
                                       <button
                                         onClick={(e) => {
@@ -2202,6 +2259,54 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
               >
                 <span className="material-symbols-outlined text-sm font-bold">delete</span>
                 <span>DELETE DOSSIER</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Glassmorphic Delete Confirmation Modal */}
+      {candidateToDelete && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[300] overflow-y-auto p-4 sm:p-6 flex min-h-full items-center justify-center">
+          <div className="glass-panel p-6 sm:p-8 rounded-3xl max-w-md w-full border border-red-500/30 bg-[#0e0618]/95 relative space-y-6 text-left shadow-[0_0_50px_rgba(239,68,68,0.25)] my-auto">
+            <div className="flex items-center gap-3 border-b border-white/10 pb-4">
+              <div className="w-10 h-10 rounded-2xl bg-red-500/15 border border-red-500/40 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-red-400 text-xl">delete_forever</span>
+              </div>
+              <div>
+                <h3 className="font-display-lg text-sm sm:text-base text-white font-black uppercase tracking-wider">
+                  Confirm Dossier Deletion
+                </h3>
+                <span className="font-code-sm text-[10px] text-red-400 font-bold uppercase tracking-widest block">
+                  PERMANENT ACTION
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs font-body-md text-white/80">
+              <p>
+                Are you sure you want to delete the ID dossier for <strong className="text-white font-bold">{candidateToDelete.name}</strong> (<span className="text-[#ddb7ff] font-code-sm">{candidateToDelete.registrationNumber}</span>)?
+              </p>
+              <p className="text-white/70 text-[11px] leading-relaxed bg-white/5 p-3 rounded-xl border border-white/10">
+                ⚠️ This will unlock their form response in the portal and send a row removal signal to Google Sheets.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setCandidateToDelete(null)}
+                className="px-5 py-2.5 rounded-full border border-white/20 hover:bg-white/10 text-white text-xs font-bold font-label-caps transition-all"
+              >
+                CANCEL
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteCandidate}
+                className="bg-red-500/20 border border-red-500/50 hover:bg-red-500/30 text-red-400 px-6 py-2.5 rounded-full text-xs font-bold font-label-caps flex items-center gap-2 shadow-[0_0_20px_rgba(239,68,68,0.2)] transition-all active:scale-95"
+              >
+                <span className="material-symbols-outlined text-sm">delete</span>
+                <span>CONFIRM DELETE</span>
               </button>
             </div>
           </div>
