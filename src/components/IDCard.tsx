@@ -343,42 +343,29 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
         .from('id-cards')
         .getPublicUrl(photoFilePath);
 
-      // 2. Upload Gaming Avatar to dedicated 'id-avatars' Bucket (or use direct URL link)
+      // 2. Upload Gaming Avatar strictly to 'avatar' Bucket (or use direct URL link)
       let avatarPublicUrl = avatarUrlInput.trim();
       if (avatarFile) {
         const avatarExt = avatarFile.name.split('.').pop();
         const avatarFileName = `${userRegNo}_${userNameStr}_${userEmailStr}_avatar_${timestamp}.${avatarExt}`;
         const avatarFilePath = `avatars/${avatarFileName}`;
 
-        // Attempt upload to 'avatar' bucket (fallback to 'id-cards' if bucket not created yet)
-        let targetBucket = 'avatar';
-        let { error: avatarUploadError } = await supabase.storage
-          .from(targetBucket)
+        const { error: avatarUploadError } = await supabase.storage
+          .from('avatar')
           .upload(avatarFilePath, avatarFile, {
             cacheControl: '3600',
             upsert: true
           });
 
-        if (avatarUploadError && avatarUploadError.message.includes('not found')) {
-          // Fallback to id-cards bucket if id-avatars bucket is not created yet
-          targetBucket = 'id-cards';
-          const fallbackRes = await supabase.storage
-            .from(targetBucket)
-            .upload(`id-photos/${avatarFileName}`, avatarFile, {
-              cacheControl: '3600',
-              upsert: true
-            });
-          avatarUploadError = fallbackRes.error;
-          const { data: fallbackUrlData } = supabase.storage.from(targetBucket).getPublicUrl(`id-photos/${avatarFileName}`);
-          avatarPublicUrl = fallbackUrlData.publicUrl;
-        } else if (!avatarUploadError) {
-          const { data: { publicUrl: uploadedUrl } } = supabase.storage
-            .from(targetBucket)
-            .getPublicUrl(avatarFilePath);
-          avatarPublicUrl = uploadedUrl;
-        } else {
-          throw new Error(`Supabase avatar upload failed: ${avatarUploadError.message}.`);
+        if (avatarUploadError) {
+          throw new Error(`Supabase avatar upload failed to 'avatar' bucket: ${avatarUploadError.message}. Make sure 'avatar' bucket is created as Public with RLS upload policies.`);
         }
+
+        const { data: { publicUrl: uploadedUrl } } = supabase.storage
+          .from('avatar')
+          .getPublicUrl(avatarFilePath);
+          
+        avatarPublicUrl = uploadedUrl;
       }
 
       // 3. Save Submission details to Firestore
@@ -1132,11 +1119,24 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                             onChange={handleAvatarChange}
                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                           />
-                          <span className="material-symbols-outlined text-2xl text-purple-400/80 mb-0.5">sports_esports</span>
-                          <p className="font-body-md text-xs text-white/90 font-bold truncate max-w-[200px]">
-                            {avatarFile ? avatarFile.name : "Choose File (PNG/JPG/GIF)"}
-                          </p>
-                          <p className="font-code-sm text-[9px] text-slate-400 mt-0.5">Up to 5MB file upload</p>
+                          {avatarPreview ? (
+                            <div className="relative w-16 h-16 rounded-xl overflow-hidden border border-yellow-400/80 shadow-[0_0_15px_rgba(234,179,8,0.3)]">
+                              <img 
+                                src={avatarPreview} 
+                                alt="Avatar Preview" 
+                                className="w-full h-full object-cover" 
+                                referrerPolicy="no-referrer"
+                              />
+                            </div>
+                          ) : (
+                            <>
+                              <span className="material-symbols-outlined text-2xl text-purple-400/80 mb-0.5">sports_esports</span>
+                              <p className="font-body-md text-xs text-white/90 font-bold truncate max-w-[200px]">
+                                {avatarFile ? avatarFile.name : "Choose File (PNG/JPG/GIF)"}
+                              </p>
+                              <p className="font-code-sm text-[9px] text-slate-400 mt-0.5">Up to 5MB file upload</p>
+                            </>
+                          )}
                         </div>
 
                         {/* Direct GIF / Avatar URL Input */}
@@ -1150,10 +1150,18 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                               placeholder="https://media.giphy.com/media/.../giphy.gif"
                               value={avatarUrlInput}
                               onChange={(e) => {
-                                const url = e.target.value;
+                                let url = e.target.value.trim();
                                 setAvatarUrlInput(url);
-                                if (url.trim()) {
-                                  setAvatarPreview(url.trim());
+                                if (url) {
+                                  // Auto-format Giphy webpage URLs to direct raw GIF URLs
+                                  if (url.includes('giphy.com/gifs/')) {
+                                    const parts = url.split('-');
+                                    const gifId = parts[parts.length - 1];
+                                    if (gifId) url = `https://media.giphy.com/media/${gifId}/giphy.gif`;
+                                  }
+                                  setAvatarPreview(url);
+                                } else if (!avatarFile) {
+                                  setAvatarPreview(null);
                                 }
                               }}
                               className="w-full bg-black/80 border border-purple-500/30 rounded-xl px-3 py-2 text-[11px] text-white focus:outline-none focus:border-purple-400 font-code-sm placeholder:text-slate-500"
@@ -1163,7 +1171,8 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                                 type="button"
                                 onClick={() => {
                                   setAvatarUrlInput('');
-                                  if (!avatarFile) setAvatarPreview(null);
+                                  setAvatarFile(null);
+                                  setAvatarPreview(null);
                                 }}
                                 className="absolute right-2 top-2 text-slate-400 hover:text-white"
                               >
