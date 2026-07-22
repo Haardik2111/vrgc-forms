@@ -343,29 +343,49 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
         .from('id-cards')
         .getPublicUrl(photoFilePath);
 
-      // 2. Upload Gaming Avatar strictly to 'avatar' Bucket (or use direct URL link)
+      // 2. Upload Gaming Avatar strictly to 'avatar' Bucket (from file OR fetched from pasted GIF link)
       let avatarPublicUrl = avatarUrlInput.trim();
-      if (avatarFile) {
-        const avatarExt = avatarFile.name.split('.').pop();
-        const avatarFileName = `${userRegNo}_${userNameStr}_${userEmailStr}_avatar_${timestamp}.${avatarExt}`;
-        const avatarFilePath = `avatars/${avatarFileName}`;
+      if (avatarFile || avatarUrlInput.trim()) {
+        const timestamp = Date.now();
+        let uploadBlob: Blob | File | null = avatarFile;
+        let avatarExt = 'gif';
 
-        const { error: avatarUploadError } = await supabase.storage
-          .from('avatar')
-          .upload(avatarFilePath, avatarFile, {
-            cacheControl: '3600',
-            upsert: true
-          });
-
-        if (avatarUploadError) {
-          throw new Error(`Supabase avatar upload failed to 'avatar' bucket: ${avatarUploadError.message}. Make sure 'avatar' bucket is created as Public with RLS upload policies.`);
+        if (!uploadBlob && avatarUrlInput.trim()) {
+          try {
+            // Fetch pasted GIF link and convert to Blob for Supabase storage
+            const gifRes = await fetch(avatarUrlInput.trim());
+            uploadBlob = await gifRes.blob();
+            if (uploadBlob.type.includes('png')) avatarExt = 'png';
+            else if (uploadBlob.type.includes('jpeg') || uploadBlob.type.includes('jpg')) avatarExt = 'jpg';
+            else if (uploadBlob.type.includes('webp')) avatarExt = 'webp';
+          } catch (e) {
+            console.warn("Could not fetch remote GIF link as blob, saving link directly:", e);
+          }
+        } else if (avatarFile) {
+          avatarExt = avatarFile.name.split('.').pop() || 'gif';
         }
 
-        const { data: { publicUrl: uploadedUrl } } = supabase.storage
-          .from('avatar')
-          .getPublicUrl(avatarFilePath);
-          
-        avatarPublicUrl = uploadedUrl;
+        if (uploadBlob) {
+          const avatarFileName = `${userRegNo}_${userNameStr}_${userEmailStr}_avatar_${timestamp}.${avatarExt}`;
+          const avatarFilePath = `avatars/${avatarFileName}`;
+
+          const { error: avatarUploadError } = await supabase.storage
+            .from('avatar')
+            .upload(avatarFilePath, uploadBlob, {
+              cacheControl: '3600',
+              upsert: true,
+              contentType: uploadBlob.type || 'image/gif'
+            });
+
+          if (avatarUploadError) {
+            console.warn("Supabase avatar upload error, keeping direct link:", avatarUploadError.message);
+          } else {
+            const { data: { publicUrl: uploadedUrl } } = supabase.storage
+              .from('avatar')
+              .getPublicUrl(avatarFilePath);
+            avatarPublicUrl = uploadedUrl;
+          }
+        }
       }
 
       // 3. Save Submission details to Firestore
