@@ -98,6 +98,16 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
   const [flippedCardsMap, setFlippedCardsMap] = useState<Record<string, boolean>>({});
   const [previewModalTab, setPreviewModalTab] = useState<'details' | 'card'>('card');
   const [previewFlipped, setPreviewFlipped] = useState<boolean>(false);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+  // Close mobile 3-dots menu on outside click
+  useEffect(() => {
+    const handleOutsideClick = () => setOpenMenuId(null);
+    if (openMenuId) {
+      window.addEventListener('click', handleOutsideClick);
+      return () => window.removeEventListener('click', handleOutsideClick);
+    }
+  }, [openMenuId]);
 
   // Google Sheets Force Sync states
   const [isSyncingSheets, setIsSyncingSheets] = useState<boolean>(false);
@@ -580,7 +590,24 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
     const search = searchQuery.toLowerCase();
 
     const matchesSearch = name.includes(search) || reg.includes(search) || email.includes(search);
-    const matchesTeam = selectedTeam === 'All' || (c.team && c.team.toLowerCase() === selectedTeam.toLowerCase());
+    
+    let matchesTeam = false;
+    if (selectedTeam === 'All') {
+      matchesTeam = true;
+    } else if (selectedTeam.toLowerCase() === 'management') {
+      const team = (c.team || '').toLowerCase();
+      const pos = (c.position || '').toLowerCase();
+      matchesTeam = 
+        team.includes('management') || 
+        team.includes('coordinator') || 
+        team.includes('president') ||
+        pos.includes('management') || 
+        pos.includes('coordinator') || 
+        pos.includes('president');
+    } else {
+      matchesTeam = c.team && c.team.toLowerCase() === selectedTeam.toLowerCase();
+    }
+
     return matchesSearch && matchesTeam;
   });
 
@@ -1234,12 +1261,12 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
 
                         <button
                           disabled={isSubmitting}
-                          className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 text-black font-black py-3.5 px-8 rounded-full shadow-[0_0_30px_rgba(16,185,129,0.4)] hover:shadow-[0_0_40px_rgba(16,185,129,0.6)] hover:scale-[1.01] active:scale-95 transition-all flex items-center justify-center gap-2 text-xs font-label-caps tracking-widest uppercase"
+                          className="w-full sm:w-auto bg-white/5 hover:bg-white/15 text-white border border-white/25 hover:border-white/50 font-bold py-3.5 px-8 rounded-full shadow-[0_0_20px_rgba(255,255,255,0.05)] hover:shadow-[0_0_30px_rgba(255,255,255,0.15)] hover:scale-[1.01] active:scale-95 transition-all flex items-center justify-center gap-2 text-xs font-label-caps tracking-widest uppercase"
                           type="submit"
                         >
                           {isSubmitting ? (
                             <>
-                              <span className="material-symbols-outlined animate-spin text-sm text-black">sync</span> REGISTERING...
+                              <span className="material-symbols-outlined animate-spin text-sm text-white">sync</span> REGISTERING...
                             </>
                           ) : (
                             'SUBMIT DOSSIER'
@@ -1274,10 +1301,10 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                 className={`px-4 py-2.5 rounded-xl border text-xs font-label-caps tracking-wider flex items-center justify-center gap-2 shrink-0 transition-all duration-300 font-bold ${
                   sheetsCooldown > 0 || isSyncingSheets
                     ? 'bg-black/40 border-outline-variant/30 text-on-surface-variant/50 cursor-not-allowed'
-                    : 'bg-primary/10 border-primary/40 text-primary hover:bg-primary/20 hover:border-primary shadow-[0_0_15px_rgba(207,92,255,0.2)] active:scale-95'
+                    : 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)] active:scale-95'
                 }`}
               >
-                <span className={`material-symbols-outlined text-base ${isSyncingSheets ? 'animate-spin text-primary' : ''}`}>
+                <span className={`material-symbols-outlined text-base ${isSyncingSheets ? 'animate-spin text-emerald-400' : ''}`}>
                   {isSyncingSheets ? 'sync' : sheetsCooldown > 0 ? 'hourglass_top' : 'cloud_upload'}
                 </span>
                 <span>
@@ -1290,8 +1317,8 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
               </button>
             </div>
 
-            <div className="glass-panel p-4 rounded-xl border border-white/5 bg-white/5 flex flex-col md:flex-row md:items-center gap-4">
-              <div className="relative flex-1">
+            <div className="glass-panel p-3.5 sm:p-4 rounded-xl border border-white/5 bg-white/5 flex flex-col md:flex-row md:items-center gap-3 sm:gap-4">
+              <div className="relative flex-1 w-full">
                 <span className="material-symbols-outlined absolute left-3 top-2.5 text-outline text-sm">search</span>
                 <input
                   type="text"
@@ -1302,13 +1329,13 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                 />
               </div>
 
-              <div className="flex flex-wrap items-center gap-3 shrink-0">
-                <div className="flex items-center gap-2">
-                  <label className="text-[10px] font-label-caps text-outline tracking-wider font-bold">TEAM:</label>
+              <div className="flex items-center justify-between md:justify-end gap-3 shrink-0 w-full md:w-auto">
+                <div className="flex items-center gap-2 min-w-0">
+                  <label className="text-[10px] font-label-caps text-outline tracking-wider font-bold shrink-0">TEAM:</label>
                   <select
                     value={selectedTeam}
                     onChange={(e) => setSelectedTeam(e.target.value)}
-                    className="bg-black/50 border border-outline-variant/30 text-white rounded-lg px-3 py-1.5 text-xs focus:ring-0 focus:border-primary cursor-pointer hover:bg-black/80 font-label-caps"
+                    className="bg-black/50 border border-outline-variant/30 text-white rounded-lg px-3 py-1.5 text-xs focus:ring-0 focus:border-primary cursor-pointer hover:bg-black/80 font-label-caps shrink-0"
                   >
                     <option value="All">All Teams</option>
                     <option value="Design">Design</option>
@@ -1321,32 +1348,17 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                   </select>
                 </div>
 
-                <div className="flex items-center bg-black/40 border border-outline-variant/30 rounded-lg p-1">
-                  <button
-                    type="button"
-                    onClick={() => setAdminViewMode('list')}
-                    className={`px-3 py-1.5 rounded-md text-[10px] font-label-caps font-bold tracking-wider flex items-center gap-1.5 transition-all ${
-                      adminViewMode === 'list'
-                        ? 'bg-primary text-black shadow-[0_0_12px_rgba(207,92,255,0.4)]'
-                        : 'text-on-surface-variant hover:text-white'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-xs">format_list_bulleted</span>
-                    <span>LIST VIEW</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAdminViewMode('cards')}
-                    className={`px-3 py-1.5 rounded-md text-[10px] font-label-caps font-bold tracking-wider flex items-center gap-1.5 transition-all ${
-                      adminViewMode === 'cards'
-                        ? 'bg-primary text-black shadow-[0_0_12px_rgba(207,92,255,0.4)]'
-                        : 'text-on-surface-variant hover:text-white'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-xs">style</span>
-                    <span>3D CARDS ({filteredCandidates.length})</span>
-                  </button>
-                </div>
+                {/* 3D Card View Push Button Switch (Logo Only) */}
+                <button
+                  type="button"
+                  onClick={() => setAdminViewMode(prev => prev === 'cards' ? 'list' : 'cards')}
+                  className="p-2 rounded-lg bg-black/40 border border-white/10 text-white/80 hover:text-white hover:border-primary/50 transition-all duration-300 flex items-center justify-center shrink-0 active:scale-95"
+                  title={adminViewMode === 'cards' ? 'Switch to List View' : 'Switch to 3D Cards View'}
+                >
+                  <span className="material-symbols-outlined text-lg">
+                    {adminViewMode === 'cards' ? 'format_list_bulleted' : 'style'}
+                  </span>
+                </button>
               </div>
             </div>
 
@@ -1372,6 +1384,8 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
 
                     {filteredCandidates.map((c) => {
                       const submissionDate = c.submittedAt ? new Date(c.submittedAt).toLocaleDateString() : "N/A";
+                      const display = getAdminDisplayRoleOrTeam(c.team, c.position);
+
                       return (
                         <div
                           key={c.id || c.email}
@@ -1380,93 +1394,210 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                             setPreviewModalTab('details');
                             setPreviewFlipped(false);
                           }}
-                          className="grid grid-cols-12 gap-2 md:gap-4 p-3.5 md:p-4 rounded-xl border border-white/5 bg-white/5 items-center hover:scale-[1.01] hover:border-primary/30 transition-all duration-200 cursor-pointer"
+                          className="rounded-xl border border-white/5 bg-white/5 hover:border-primary/30 hover:bg-white/10 transition-all duration-200 cursor-pointer overflow-visible"
                         >
-                          <div className="col-span-8 md:col-span-3 flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-lg border border-primary/30 bg-black/40 overflow-hidden shrink-0">
-                              <img src={c.photoUrl} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          {/* DESKTOP TABLE ROW VIEW */}
+                          <div className="hidden md:grid grid-cols-12 gap-4 p-4 items-center">
+                            <div className="col-span-3 flex items-center gap-3 min-w-0">
+                              <div className="w-10 h-10 rounded-lg border border-primary/30 bg-black/40 overflow-hidden shrink-0">
+                                <img src={c.photoUrl} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-bold text-white text-sm truncate">{c.name}</div>
+                                <div className="text-xs text-primary font-code-sm">{c.registrationNumber}</div>
+                              </div>
                             </div>
-                            <div className="min-w-0">
-                              <div className="font-bold text-white text-xs md:text-sm truncate">{c.name}</div>
-                              <div className="text-[10px] md:text-xs text-primary font-code-sm">{c.registrationNumber}</div>
-                            </div>
-                          </div>
 
-                          <div className="hidden md:block col-span-3 text-xs text-on-surface-variant font-code-sm space-y-0.5">
-                            <div className="truncate text-white">{c.email}</div>
-                            <div>
-                              {c.phone || "No Phone"} |{' '}
-                              <span className="text-primary font-bold uppercase">
-                                {(() => {
-                                  const display = getAdminDisplayRoleOrTeam(c.team, c.position);
-                                  return display.value;
-                                })()}
+                            <div className="col-span-3 text-xs text-on-surface-variant font-code-sm space-y-0.5 min-w-0">
+                              <div className="truncate text-white">{c.email}</div>
+                              <div className="truncate">
+                                {c.phone || "No Phone"} |{' '}
+                                <span className="text-primary font-bold uppercase">
+                                  {display.value}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="col-span-2 text-center text-xs text-on-surface-variant font-code-sm">
+                              {submissionDate}
+                            </div>
+
+                            <div className="col-span-2 text-center flex justify-center">
+                              <span
+                                className={`px-3 py-1 rounded-full border text-[9px] font-label-caps font-bold tracking-wider ${
+                                  c.status === 'Approved'
+                                    ? 'bg-green-500/10 border-green-500/30 text-green-400'
+                                    : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400'
+                                }`}
+                              >
+                                {c.status || 'Pending'}
                               </span>
                             </div>
+
+                            <div className="col-span-2 flex justify-end gap-1.5 relative z-30">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPreviewCandidate(c);
+                                  setPreviewModalTab('card');
+                                  setPreviewFlipped(false);
+                                }}
+                                className="p-2 rounded-lg bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 transition-all shrink-0"
+                                title="View Interactive 3D Card"
+                              >
+                                <span className="material-symbols-outlined text-sm">style</span>
+                              </button>
+
+                              <button
+                                onClick={(e) => { e.stopPropagation(); toggleStatus(c); }}
+                                className={`p-2 rounded-lg border transition-all shrink-0 ${
+                                  c.status === 'Approved'
+                                    ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20'
+                                    : 'bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20'
+                                }`}
+                                title={c.status === 'Approved' ? 'Mark as Pending' : 'Approve Dossier'}
+                              >
+                                <span className="material-symbols-outlined text-sm">
+                                  {c.status === 'Approved' ? 'history' : 'verified'}
+                                </span>
+                              </button>
+
+                              <button
+                                disabled={downloadingId === c.id}
+                                onClick={(e) => { e.stopPropagation(); handleDownload(c); }}
+                                className="p-2 rounded-lg bg-white/5 border border-white/5 text-on-surface-variant hover:text-white hover:border-white/20 transition-all shrink-0"
+                                title="Download ID Photo"
+                              >
+                                <span className={`material-symbols-outlined text-sm ${downloadingId === c.id ? 'animate-spin' : ''}`}>
+                                  {downloadingId === c.id ? 'sync' : 'download'}
+                                </span>
+                              </button>
+
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDelete(c); }}
+                                className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 hover:border-red-500/40 transition-all shrink-0"
+                                title="Delete and Unlock Response"
+                              >
+                                <span className="material-symbols-outlined text-sm">delete</span>
+                              </button>
+                            </div>
                           </div>
 
-                          <div className="hidden md:block col-span-2 text-center text-xs text-on-surface-variant font-code-sm">
-                            {submissionDate}
-                          </div>
+                          {/* MOBILE CLEAN DOSSIER CARD VIEW */}
+                          <div className="flex md:hidden flex-col p-3.5 space-y-2.5">
+                            <div className="flex items-center justify-between gap-2.5">
+                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                                <div className="w-10 h-10 rounded-lg border border-primary/30 bg-black/40 overflow-hidden shrink-0">
+                                  <img src={c.photoUrl} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="font-bold text-white text-xs truncate">{c.name}</div>
+                                  <div className="text-[10px] text-primary font-code-sm font-bold">{c.registrationNumber}</div>
+                                </div>
+                              </div>
 
-                          <div className="col-span-2 md:col-span-2 text-center flex justify-center">
-                            <span
-                              className={`px-3 py-1 rounded-full border text-[9px] font-label-caps font-bold tracking-wider ${
-                                c.status === 'Approved'
-                                  ? 'bg-green-500/10 border-green-500/30 text-green-400'
-                                  : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400'
-                              }`}
-                            >
-                              {c.status || 'Pending'}
-                            </span>
-                          </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span
+                                  className={`px-2 py-0.5 rounded-full border text-[8px] font-label-caps font-bold tracking-wider ${
+                                    c.status === 'Approved'
+                                      ? 'bg-green-500/10 border-green-500/30 text-green-400'
+                                      : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400'
+                                  }`}
+                                >
+                                  {c.status || 'Pending'}
+                                </span>
 
-                          <div className="col-span-2 md:col-span-2 flex justify-end gap-1.5">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setPreviewCandidate(c);
-                                setPreviewModalTab('card');
-                                setPreviewFlipped(false);
-                              }}
-                              className="p-2 rounded-lg bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 transition-all shrink-0 relative z-30"
-                              title="View Interactive 3D Card"
-                            >
-                              <span className="material-symbols-outlined text-sm">style</span>
-                            </button>
+                                {/* Mobile 3-Dots Menu Box */}
+                                <div className="relative">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const menuKey = c.id || c.email;
+                                      setOpenMenuId(openMenuId === menuKey ? null : menuKey);
+                                    }}
+                                    className="p-1.5 rounded-lg bg-black/60 border border-white/10 text-white/80 hover:text-white hover:border-purple-500/50 transition-all"
+                                    title="Actions Menu"
+                                  >
+                                    <span className="material-symbols-outlined text-base">more_vert</span>
+                                  </button>
 
-                            <button
-                              onClick={(e) => { e.stopPropagation(); toggleStatus(c); }}
-                              className={`p-2 rounded-lg border transition-all shrink-0 relative z-30 ${
-                                c.status === 'Approved'
-                                  ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20'
-                                  : 'bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20'
-                              }`}
-                              title={c.status === 'Approved' ? 'Mark as Pending' : 'Approve Dossier'}
-                            >
-                              <span className="material-symbols-outlined text-sm">
-                                {c.status === 'Approved' ? 'history' : 'verified'}
+                                  {openMenuId === (c.id || c.email) && (
+                                    <div
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="absolute right-0 top-9 z-[150] w-48 bg-[#12081c] border border-[#a855f7]/40 backdrop-blur-2xl rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.9)] py-1.5 text-xs font-body-md"
+                                    >
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setOpenMenuId(null);
+                                          setPreviewCandidate(c);
+                                          setPreviewModalTab('card');
+                                          setPreviewFlipped(false);
+                                        }}
+                                        className="w-full px-3.5 py-2.5 text-left flex items-center gap-2.5 text-purple-400 font-bold hover:bg-white/10 transition-colors"
+                                      >
+                                        <span className="material-symbols-outlined text-base">style</span>
+                                        <span>3D Card View</span>
+                                      </button>
+
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setOpenMenuId(null);
+                                          toggleStatus(c);
+                                        }}
+                                        className={`w-full px-3.5 py-2.5 text-left flex items-center gap-2.5 hover:bg-white/10 transition-colors ${
+                                          c.status === 'Approved' ? 'text-yellow-400 font-bold' : 'text-green-400 font-bold'
+                                        }`}
+                                      >
+                                        <span className="material-symbols-outlined text-base">
+                                          {c.status === 'Approved' ? 'history' : 'verified'}
+                                        </span>
+                                        <span>{c.status === 'Approved' ? 'Mark Pending' : 'Approve Dossier'}</span>
+                                      </button>
+
+                                      <button
+                                        disabled={downloadingId === c.id}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setOpenMenuId(null);
+                                          handleDownload(c);
+                                        }}
+                                        className="w-full px-3.5 py-2.5 text-left flex items-center gap-2.5 text-white/90 hover:bg-white/10 transition-colors font-bold"
+                                      >
+                                        <span className={`material-symbols-outlined text-base ${downloadingId === c.id ? 'animate-spin' : ''}`}>
+                                          {downloadingId === c.id ? 'sync' : 'download'}
+                                        </span>
+                                        <span>Download ID Photo</span>
+                                      </button>
+
+                                      <div className="my-1 border-t border-white/10"></div>
+
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setOpenMenuId(null);
+                                          handleDelete(c);
+                                        }}
+                                        className="w-full px-3.5 py-2.5 text-left flex items-center gap-2.5 text-red-400 hover:bg-red-500/20 transition-colors font-bold"
+                                      >
+                                        <span className="material-symbols-outlined text-base">delete</span>
+                                        <span>Delete Dossier</span>
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/5 text-[10px]">
+                              <span className="px-2 py-0.5 rounded bg-purple-500/15 text-purple-300 font-bold uppercase text-[9px] font-label-caps border border-purple-500/20 truncate max-w-[150px]">
+                                {display.value}
                               </span>
-                            </button>
-
-                            <button
-                              disabled={downloadingId === c.id}
-                              onClick={(e) => { e.stopPropagation(); handleDownload(c); }}
-                              className="p-2 rounded-lg bg-white/5 border border-white/5 text-on-surface-variant hover:text-white hover:border-white/20 transition-all shrink-0 relative z-30"
-                              title="Download ID Photo"
-                            >
-                              <span className={`material-symbols-outlined text-sm ${downloadingId === c.id ? 'animate-spin' : ''}`}>
-                                {downloadingId === c.id ? 'sync' : 'download'}
+                              <span className="text-white/50 truncate font-code-sm text-[10px]">
+                                {c.email}
                               </span>
-                            </button>
-
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleDelete(c); }}
-                              className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 hover:border-red-500/40 transition-all shrink-0 relative z-30"
-                              title="Delete and Unlock Response"
-                            >
-                              <span className="material-symbols-outlined text-sm">delete</span>
-                            </button>
+                            </div>
                           </div>
                         </div>
                       );
@@ -1774,32 +1905,17 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
               </div>
 
               <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                <div className="flex items-center bg-black/60 border border-outline-variant/30 rounded-xl p-1">
-                  <button
-                    type="button"
-                    onClick={() => setPreviewModalTab('details')}
-                    className={`px-2.5 sm:px-3 py-1 rounded-lg text-[9px] sm:text-[10px] font-label-caps font-bold tracking-wider flex items-center gap-1 transition-all ${
-                      previewModalTab === 'details'
-                        ? 'bg-primary text-black shadow-md'
-                        : 'text-on-surface-variant hover:text-white'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-xs">info</span>
-                    <span>DETAILS</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPreviewModalTab('card')}
-                    className={`px-2.5 sm:px-3 py-1 rounded-lg text-[9px] sm:text-[10px] font-label-caps font-bold tracking-wider flex items-center gap-1 transition-all ${
-                      previewModalTab === 'card'
-                        ? 'bg-primary text-black shadow-md'
-                        : 'text-on-surface-variant hover:text-white'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-xs">style</span>
-                    <span>3D CARD</span>
-                  </button>
-                </div>
+                {/* 3D Card View Push Button Switch (Logo Only) */}
+                <button
+                  type="button"
+                  onClick={() => setPreviewModalTab(prev => prev === 'card' ? 'details' : 'card')}
+                  className="p-2 rounded-lg bg-black/40 border border-white/10 text-white/80 hover:text-white hover:border-primary/50 transition-all duration-300 flex items-center justify-center shrink-0 active:scale-95"
+                  title={previewModalTab === 'card' ? 'Switch to Candidate Details' : 'Switch to Interactive 3D Card'}
+                >
+                  <span className="material-symbols-outlined text-lg">
+                    {previewModalTab === 'card' ? 'format_list_bulleted' : 'style'}
+                  </span>
+                </button>
 
                 <button 
                   onClick={() => setPreviewCandidate(null)}
@@ -1812,9 +1928,9 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
             </div>
 
             {previewModalTab === 'details' ? (
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
-                <div className="md:col-span-5 flex flex-col items-center justify-center relative py-4">
-                  <div className="w-48 h-48 rounded-2xl border-2 border-[#a855f7]/30 p-1 relative z-10 bg-black/40 shadow-[0_0_30px_rgba(168,85,247,0.15)] group">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 sm:gap-8 items-center">
+                <div className="md:col-span-5 flex flex-col items-center justify-center relative py-2 sm:py-4">
+                  <div className="w-36 h-36 sm:w-48 sm:h-48 rounded-2xl border-2 border-[#a855f7]/30 p-1 relative z-10 bg-black/40 shadow-[0_0_30px_rgba(168,85,247,0.15)] group">
                     <div className="w-full h-full rounded-xl overflow-hidden bg-black relative">
                       <img 
                         src={previewCandidate.photoUrl} 
@@ -1826,8 +1942,8 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                   </div>
                 </div>
 
-                <div className="md:col-span-7 space-y-5">
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-xs font-body-md">
+                <div className="md:col-span-7 space-y-4 sm:space-y-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5 text-xs font-body-md">
                     <div className="border-b border-white/5 pb-2">
                       <span className="font-code-sm text-[8px] text-[#a855f7] uppercase tracking-widest block font-bold mb-0.5">FULL NAME</span>
                       <span className="text-white text-sm font-bold block truncate">{previewCandidate.name}</span>
@@ -1840,7 +1956,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                       const display = getAdminDisplayRoleOrTeam(previewCandidate.team, previewCandidate.position);
                       if (display.isSpecial) {
                         return (
-                          <div className="col-span-2 border-b border-white/5 pb-2">
+                          <div className="col-span-1 sm:col-span-2 border-b border-white/5 pb-2">
                             <span className="font-code-sm text-[8px] text-[#a855f7] uppercase tracking-widest block font-bold mb-0.5">ROLE / POSITION</span>
                             <span className="text-white text-sm font-bold block uppercase">{display.value}</span>
                           </div>
@@ -1870,13 +1986,13 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                         {previewCandidate.submittedAt ? new Date(previewCandidate.submittedAt).toLocaleDateString() : "N/A"}
                       </span>
                     </div>
-                    <div className="col-span-2 border-b border-white/5 pb-2">
+                    <div className="col-span-1 sm:col-span-2 border-b border-white/5 pb-2">
                       <span className="font-code-sm text-[8px] text-[#a855f7] uppercase tracking-widest block mb-0.5 font-bold">EMAIL ADDRESS</span>
                       <span className="text-white block font-code-sm text-xs font-semibold break-all">{previewCandidate.email}</span>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2.5 pt-2">
+                  <div className="flex items-center gap-2.5 pt-1">
                     <span className="font-code-sm text-[8px] text-white/45 tracking-widest block font-bold uppercase">DOSSIER STATUS:</span>
                     <span
                       className={`px-3 py-1 rounded-full border text-[9px] font-label-caps font-black tracking-wider uppercase ${
