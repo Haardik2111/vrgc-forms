@@ -223,7 +223,7 @@ export default function VerifyCardPage({ params }: PublicIDCardProps) {
                     <div className="my-3 flex flex-col items-center justify-center relative z-10">
                       <div className="w-28 h-28 rounded-xl border border-white/10 bg-white p-1.5 shadow-[0_0_25px_rgba(168,85,247,0.25)]">
                         <img 
-                          src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&color=a855f7&bgcolor=ffffff&data=${encodeURIComponent(`https://vrgc.club/card/${member?.registrationNumber}`)}`} 
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&color=0-0-0&bgcolor=ffffff&data=${encodeURIComponent(typeof window !== 'undefined' ? `${window.location.origin}/card/${member?.registrationNumber || ''}` : `https://vrgc.club/card/${member?.registrationNumber || ''}`)}`} 
                           alt="Scan to Verify" 
                           className="w-full h-full object-contain"
                         />

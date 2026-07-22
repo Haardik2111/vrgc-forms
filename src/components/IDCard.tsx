@@ -92,6 +92,12 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
   const [selectedTeam, setSelectedTeam] = useState<string>('All');
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [previewCandidate, setPreviewCandidate] = useState<CandidateSubmission | null>(null);
+  
+  // Admin 3D Card View & Flipping states
+  const [adminViewMode, setAdminViewMode] = useState<'list' | 'cards'>('list');
+  const [flippedCardsMap, setFlippedCardsMap] = useState<Record<string, boolean>>({});
+  const [previewModalTab, setPreviewModalTab] = useState<'details' | 'card'>('card');
+  const [previewFlipped, setPreviewFlipped] = useState<boolean>(false);
 
   // Google Sheets Force Sync states
   const [isSyncingSheets, setIsSyncingSheets] = useState<boolean>(false);
@@ -818,7 +824,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                         <div className="my-3 flex flex-col items-center justify-center relative z-10">
                           <div className="w-28 h-28 rounded-xl border border-white/10 bg-white p-1.5 shadow-[0_0_25px_rgba(168,85,247,0.25)]">
                             <img 
-                              src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&color=a855f7&bgcolor=ffffff&data=${encodeURIComponent(`${typeof window !== 'undefined' ? window.location.origin : 'https://vrgc-forms.vercel.app'}/card/${existingSubmission.registrationNumber}`)}`} 
+                              src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&color=0-0-0&bgcolor=ffffff&data=${encodeURIComponent(`${typeof window !== 'undefined' ? window.location.origin : 'https://vrgc.club'}/card/${existingSubmission.registrationNumber || ''}`)}`} 
                               alt="Scan to Verify" 
                               className="w-full h-full object-contain"
                             />
@@ -1021,7 +1027,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                           <div className="my-3 flex flex-col items-center justify-center relative z-10">
                             <div className="w-28 h-28 rounded-xl border border-white/10 bg-white p-1.5 shadow-[0_0_20px_rgba(168,85,247,0.15)]">
                               <img 
-                                src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&color=a855f7&bgcolor=ffffff&data=${encodeURIComponent(`${typeof window !== 'undefined' ? window.location.origin : 'https://vrgc-forms.vercel.app'}/card/${memberData?.registrationNumber || '24XXXXXX'}`)}`} 
+                                src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&color=0-0-0&bgcolor=ffffff&data=${encodeURIComponent(`${typeof window !== 'undefined' ? window.location.origin : 'https://vrgc.club'}/card/${memberData?.registrationNumber || '24XXXXXX'}`)}`} 
                                 alt="Scan to Verify" 
                                 className="w-full h-full object-contain"
                               />
@@ -1296,127 +1302,385 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                 />
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <label className="text-[10px] font-label-caps text-outline tracking-wider font-bold">TEAM:</label>
-                <select
-                  value={selectedTeam}
-                  onChange={(e) => setSelectedTeam(e.target.value)}
-                  className="bg-black/50 border border-outline-variant/30 text-white rounded-lg px-3 py-1.5 text-xs focus:ring-0 focus:border-primary cursor-pointer hover:bg-black/80 font-label-caps"
-                >
-                  <option value="All">All Teams</option>
-                  <option value="Design">Design</option>
-                  <option value="Education">Education</option>
-                  <option value="Esports">Esports</option>
-                  <option value="PR">PR</option>
-                  <option value="Social Media">Social Media</option>
-                  <option value="Technical">Technical</option>
-                  <option value="Management">Management</option>
-                </select>
+              <div className="flex flex-wrap items-center gap-3 shrink-0">
+                <div className="flex items-center gap-2">
+                  <label className="text-[10px] font-label-caps text-outline tracking-wider font-bold">TEAM:</label>
+                  <select
+                    value={selectedTeam}
+                    onChange={(e) => setSelectedTeam(e.target.value)}
+                    className="bg-black/50 border border-outline-variant/30 text-white rounded-lg px-3 py-1.5 text-xs focus:ring-0 focus:border-primary cursor-pointer hover:bg-black/80 font-label-caps"
+                  >
+                    <option value="All">All Teams</option>
+                    <option value="Design">Design</option>
+                    <option value="Education">Education</option>
+                    <option value="Esports">Esports</option>
+                    <option value="PR">PR</option>
+                    <option value="Social Media">Social Media</option>
+                    <option value="Technical">Technical</option>
+                    <option value="Management">Management</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center bg-black/40 border border-outline-variant/30 rounded-lg p-1">
+                  <button
+                    type="button"
+                    onClick={() => setAdminViewMode('list')}
+                    className={`px-3 py-1.5 rounded-md text-[10px] font-label-caps font-bold tracking-wider flex items-center gap-1.5 transition-all ${
+                      adminViewMode === 'list'
+                        ? 'bg-primary text-black shadow-[0_0_12px_rgba(207,92,255,0.4)]'
+                        : 'text-on-surface-variant hover:text-white'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-xs">format_list_bulleted</span>
+                    <span>LIST VIEW</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAdminViewMode('cards')}
+                    className={`px-3 py-1.5 rounded-md text-[10px] font-label-caps font-bold tracking-wider flex items-center gap-1.5 transition-all ${
+                      adminViewMode === 'cards'
+                        ? 'bg-primary text-black shadow-[0_0_12px_rgba(207,92,255,0.4)]'
+                        : 'text-on-surface-variant hover:text-white'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-xs">style</span>
+                    <span>3D CARDS ({filteredCandidates.length})</span>
+                  </button>
+                </div>
               </div>
             </div>
 
             <div className="glass-panel p-4 rounded-2xl relative overflow-hidden space-y-4">
               <div className="space-y-4 relative z-10">
-                <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-2 border-b border-outline-variant/20 text-xs text-on-surface-variant font-label-caps tracking-widest font-bold">
-                  <div className="col-span-3">CANDIDATE</div>
-                  <div className="col-span-3">CONTACT / TEAM</div>
-                  <div className="col-span-2 text-center">SUBMITTED</div>
-                  <div className="col-span-2 text-center">STATUS</div>
-                  <div className="col-span-2 text-right">ACTIONS</div>
-                </div>
-
                 {loadingData ? (
                   <div className="py-12 text-center text-on-surface-variant font-code-sm animate-pulse">
                     LOADING SECURE RECORDS...
                   </div>
-                ) : filteredCandidates.length > 0 ? (
-                  filteredCandidates.map((c) => {
-                    const submissionDate = c.submittedAt ? new Date(c.submittedAt).toLocaleDateString() : "N/A";
-                    return (
-                      <div
-                        key={c.id}
-                        onClick={() => setPreviewCandidate(c)}
-                        className="grid grid-cols-12 gap-2 md:gap-4 p-3.5 md:p-4 rounded-xl border border-white/5 bg-white/5 items-center hover:scale-[1.01] hover:border-primary/30 transition-all duration-200 cursor-pointer"
-                      >
-                        <div className="col-span-8 md:col-span-3 flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg border border-primary/30 bg-black/40 overflow-hidden shrink-0">
-                            <img src={c.photoUrl} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="font-bold text-white text-xs md:text-sm truncate">{c.name}</div>
-                            <div className="text-[10px] md:text-xs text-primary font-code-sm">{c.registrationNumber}</div>
-                          </div>
-                        </div>
-
-                        <div className="hidden md:block col-span-3 text-xs text-on-surface-variant font-code-sm space-y-0.5">
-                          <div className="truncate text-white">{c.email}</div>
-                          <div>
-                            {c.phone || "No Phone"} |{' '}
-                            <span className="text-primary font-bold uppercase">
-                              {(() => {
-                                const display = getAdminDisplayRoleOrTeam(c.team, c.position);
-                                return display.value;
-                              })()}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="hidden md:block col-span-2 text-center text-xs text-on-surface-variant font-code-sm">
-                          {submissionDate}
-                        </div>
-
-                        <div className="col-span-2 md:col-span-2 text-center flex justify-center">
-                          <span
-                            className={`px-3 py-1 rounded-full border text-[9px] font-label-caps font-bold tracking-wider ${
-                              c.status === 'Approved'
-                                ? 'bg-green-500/10 border-green-500/30 text-green-400'
-                                : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400'
-                            }`}
-                          >
-                            {c.status || 'Pending'}
-                          </span>
-                        </div>
-
-                        <div className="col-span-2 md:col-span-2 flex justify-end gap-2">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); toggleStatus(c); }}
-                            className={`p-2 rounded-lg border transition-all shrink-0 relative z-30 ${
-                              c.status === 'Approved'
-                                ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20'
-                                : 'bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20'
-                            }`}
-                            title={c.status === 'Approved' ? 'Mark as Pending' : 'Approve Dossier'}
-                          >
-                            <span className="material-symbols-outlined text-sm">
-                              {c.status === 'Approved' ? 'history' : 'verified'}
-                            </span>
-                          </button>
-
-                          <button
-                            disabled={downloadingId === c.id}
-                            onClick={(e) => { e.stopPropagation(); handleDownload(c); }}
-                            className="p-2 rounded-lg bg-white/5 border border-white/5 text-on-surface-variant hover:text-white hover:border-white/20 transition-all shrink-0 relative z-30"
-                            title="Download ID Photo"
-                          >
-                            <span className={`material-symbols-outlined text-sm ${downloadingId === c.id ? 'animate-spin' : ''}`}>
-                              {downloadingId === c.id ? 'sync' : 'download'}
-                            </span>
-                          </button>
-
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleDelete(c); }}
-                            className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 hover:border-red-500/40 transition-all shrink-0 relative z-30"
-                            title="Delete and Unlock Response"
-                          >
-                            <span className="material-symbols-outlined text-sm">delete</span>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
+                ) : filteredCandidates.length === 0 ? (
                   <div className="py-16 text-center text-on-surface-variant italic text-xs md:text-sm">
                     No matching candidate ID dossiers found.
+                  </div>
+                ) : adminViewMode === 'list' ? (
+                  <>
+                    <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-2 border-b border-outline-variant/20 text-xs text-on-surface-variant font-label-caps tracking-widest font-bold">
+                      <div className="col-span-3">CANDIDATE</div>
+                      <div className="col-span-3">CONTACT / TEAM</div>
+                      <div className="col-span-2 text-center">SUBMITTED</div>
+                      <div className="col-span-2 text-center">STATUS</div>
+                      <div className="col-span-2 text-right">ACTIONS</div>
+                    </div>
+
+                    {filteredCandidates.map((c) => {
+                      const submissionDate = c.submittedAt ? new Date(c.submittedAt).toLocaleDateString() : "N/A";
+                      return (
+                        <div
+                          key={c.id || c.email}
+                          onClick={() => {
+                            setPreviewCandidate(c);
+                            setPreviewModalTab('details');
+                            setPreviewFlipped(false);
+                          }}
+                          className="grid grid-cols-12 gap-2 md:gap-4 p-3.5 md:p-4 rounded-xl border border-white/5 bg-white/5 items-center hover:scale-[1.01] hover:border-primary/30 transition-all duration-200 cursor-pointer"
+                        >
+                          <div className="col-span-8 md:col-span-3 flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-lg border border-primary/30 bg-black/40 overflow-hidden shrink-0">
+                              <img src={c.photoUrl} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-bold text-white text-xs md:text-sm truncate">{c.name}</div>
+                              <div className="text-[10px] md:text-xs text-primary font-code-sm">{c.registrationNumber}</div>
+                            </div>
+                          </div>
+
+                          <div className="hidden md:block col-span-3 text-xs text-on-surface-variant font-code-sm space-y-0.5">
+                            <div className="truncate text-white">{c.email}</div>
+                            <div>
+                              {c.phone || "No Phone"} |{' '}
+                              <span className="text-primary font-bold uppercase">
+                                {(() => {
+                                  const display = getAdminDisplayRoleOrTeam(c.team, c.position);
+                                  return display.value;
+                                })()}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="hidden md:block col-span-2 text-center text-xs text-on-surface-variant font-code-sm">
+                            {submissionDate}
+                          </div>
+
+                          <div className="col-span-2 md:col-span-2 text-center flex justify-center">
+                            <span
+                              className={`px-3 py-1 rounded-full border text-[9px] font-label-caps font-bold tracking-wider ${
+                                c.status === 'Approved'
+                                  ? 'bg-green-500/10 border-green-500/30 text-green-400'
+                                  : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400'
+                              }`}
+                            >
+                              {c.status || 'Pending'}
+                            </span>
+                          </div>
+
+                          <div className="col-span-2 md:col-span-2 flex justify-end gap-1.5">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPreviewCandidate(c);
+                                setPreviewModalTab('card');
+                                setPreviewFlipped(false);
+                              }}
+                              className="p-2 rounded-lg bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 transition-all shrink-0 relative z-30"
+                              title="View Interactive 3D Card"
+                            >
+                              <span className="material-symbols-outlined text-sm">style</span>
+                            </button>
+
+                            <button
+                              onClick={(e) => { e.stopPropagation(); toggleStatus(c); }}
+                              className={`p-2 rounded-lg border transition-all shrink-0 relative z-30 ${
+                                c.status === 'Approved'
+                                  ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20'
+                                  : 'bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20'
+                              }`}
+                              title={c.status === 'Approved' ? 'Mark as Pending' : 'Approve Dossier'}
+                            >
+                              <span className="material-symbols-outlined text-sm">
+                                {c.status === 'Approved' ? 'history' : 'verified'}
+                              </span>
+                            </button>
+
+                            <button
+                              disabled={downloadingId === c.id}
+                              onClick={(e) => { e.stopPropagation(); handleDownload(c); }}
+                              className="p-2 rounded-lg bg-white/5 border border-white/5 text-on-surface-variant hover:text-white hover:border-white/20 transition-all shrink-0 relative z-30"
+                              title="Download ID Photo"
+                            >
+                              <span className={`material-symbols-outlined text-sm ${downloadingId === c.id ? 'animate-spin' : ''}`}>
+                                {downloadingId === c.id ? 'sync' : 'download'}
+                              </span>
+                            </button>
+
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleDelete(c); }}
+                              className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 hover:border-red-500/40 transition-all shrink-0 relative z-30"
+                              title="Delete and Unlock Response"
+                            >
+                              <span className="material-symbols-outlined text-sm">delete</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </>
+                ) : (
+                  /* 3D CARDS GRID VIEW FOR ADMIN */
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 py-4">
+                    {filteredCandidates.map((c) => {
+                      const cardId = c.id || c.email;
+                      const isFlipped = !!flippedCardsMap[cardId];
+                      const displayInfo = getAdminDisplayRoleOrTeam(c.team, c.position);
+
+                      return (
+                        <div key={cardId} className="flex flex-col items-center gap-3">
+                          {/* 3D Flippable Card Element */}
+                          <div 
+                            onClick={() => setFlippedCardsMap(prev => ({ ...prev, [cardId]: !prev[cardId] }))}
+                            className="relative w-full max-w-[290px] aspect-[2.2/3.4] cursor-pointer group [perspective:1000px]"
+                          >
+                            <div className={`relative w-full h-full duration-700 [transform-style:preserve-3d] ${isFlipped ? '[transform:rotateY(180deg)]' : ''}`}>
+                              
+                              {/* FRONT OF THE ID CARD */}
+                              <div className="absolute inset-0 w-full h-full [backface-visibility:hidden] select-none">
+                                <div className="relative overflow-hidden w-full h-full rounded-3xl border border-[#a855f7]/35 bg-gradient-to-b from-[#12051e] via-[#05010a] to-[#0c0416] p-5 flex flex-col justify-between shadow-[0_0_35px_rgba(168,85,247,0.2)]">
+                                  <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.005)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.005)_1px,transparent_1px)] bg-[size:12px_12px] pointer-events-none opacity-40"></div>
+                                  
+                                  <div className="absolute top-2.5 left-2.5 w-2.5 h-2.5 border-t-2 border-l-2 border-[#a855f7]/40 pointer-events-none"></div>
+                                  <div className="absolute top-2.5 right-2.5 w-2.5 h-2.5 border-t-2 border-r-2 border-[#a855f7]/40 pointer-events-none"></div>
+                                  <div className="absolute bottom-2.5 left-2.5 w-2.5 h-2.5 border-b-2 border-l-2 border-[#a855f7]/40 pointer-events-none"></div>
+                                  <div className="absolute bottom-2.5 right-2.5 w-2.5 h-2.5 border-b-2 border-r-2 border-[#a855f7]/40 pointer-events-none"></div>
+
+                                  <div className="flex justify-between items-start border-b border-[#a855f7]/25 pb-2 relative z-10">
+                                    <div className="text-left w-full">
+                                      <div className="flex items-center gap-1 justify-center">
+                                        <span className="material-symbols-outlined text-[12px] text-[#a855f7]">sports_esports</span>
+                                        <h4 className="font-display-lg text-xs text-white font-black tracking-widest leading-none">VRGC</h4>
+                                      </div>
+                                      <span className="text-[#a855f7]/80 text-[4.5px] font-code-sm tracking-wider uppercase block mt-0.5 font-bold text-center">VIRTUAL REALITY & GAMING CLUB</span>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex flex-col items-center justify-center my-2 relative z-10">
+                                    <div className="w-28 h-28 rounded-xl border-2 border-[#a855f7]/30 p-1 bg-black/40 shadow-[0_0_20px_rgba(168,85,247,0.15)] relative overflow-hidden">
+                                      <img 
+                                        src={c.photoUrl} 
+                                        alt={c.name} 
+                                        className="w-full h-full object-cover rounded-lg"
+                                        referrerPolicy="no-referrer"
+                                      />
+                                      <div className={`absolute bottom-1 right-1 text-white text-[5px] font-black px-1 py-0.5 rounded tracking-widest uppercase shadow-md pointer-events-none ${
+                                        c.status === 'Approved' ? 'bg-green-500/80' : 'bg-yellow-500/80'
+                                      }`}>
+                                        {c.status === 'Approved' ? 'VERIFIED' : 'PENDING'}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="bg-[#0b0512]/90 border border-[#a855f7]/25 p-2.5 rounded-xl relative z-10 space-y-1.5">
+                                    <div className="border-b border-white/5 pb-1 text-left">
+                                      <span className="font-code-sm text-[5px] text-[#a855f7] uppercase tracking-widest block mb-0.5 font-extrabold">NAME</span>
+                                      <h3 className="font-display-lg text-xs text-white font-extrabold tracking-wide uppercase truncate leading-none">
+                                        {c.name}
+                                      </h3>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-1.5 text-left">
+                                      <div>
+                                        <span className="font-code-sm text-[5px] text-[#a855f7] uppercase tracking-widest block mb-0.5 font-extrabold">REG NO.</span>
+                                        <span className="font-code-sm text-[9px] text-white font-bold tracking-wider block">
+                                          {c.registrationNumber}
+                                        </span>
+                                      </div>
+                                      <div>
+                                        <span className="font-code-sm text-[5px] text-[#a855f7] uppercase tracking-widest block mb-0.5 font-extrabold">
+                                          {displayInfo.label === 'TEAM / DIVISION' ? 'TEAM' : 'ROLE'}
+                                        </span>
+                                        <span className="font-code-sm text-[9px] text-white font-bold tracking-wider block uppercase truncate">
+                                          {displayInfo.value}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <div className="pt-1 border-t border-white/5 flex items-center gap-1 justify-start">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-[#a855f7] shadow-[0_0_8px_#a855f7] animate-pulse"></span>
+                                      <span className="font-code-sm text-[7px] text-[#ddb7ff] font-extrabold uppercase tracking-widest leading-none truncate">
+                                        {displayInfo.isSpecial ? displayInfo.value : (c.position || 'MEMBER')}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div className="absolute bottom-1 right-2 text-[5px] font-bold text-white/30 font-code-sm uppercase tracking-widest pointer-events-none">
+                                    TAP TO FLIP 🔄
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* BACK OF THE ID CARD */}
+                              <div className="absolute inset-0 w-full h-full [backface-visibility:hidden] [transform:rotateY(180deg)] select-none">
+                                <div className="relative overflow-hidden w-full h-full rounded-3xl border border-[#a855f7]/35 bg-gradient-to-b from-[#12051e] via-[#05010a] to-[#0c0416] p-5 flex flex-col justify-between shadow-[0_0_35px_rgba(168,85,247,0.2)]">
+                                  {c.avatarUrl && (
+                                    <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none rounded-3xl">
+                                      <img 
+                                        src={c.avatarUrl} 
+                                        alt="Avatar Watermark" 
+                                        className="w-full h-full object-cover opacity-95 brightness-110 contrast-105"
+                                        referrerPolicy="no-referrer"
+                                      />
+                                      <div className="absolute inset-0 bg-[#05010a]/10 bg-gradient-to-b from-transparent via-[#05010a]/20 to-[#05010a]/50"></div>
+                                    </div>
+                                  )}
+
+                                  <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.005)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.005)_1px,transparent_1px)] bg-[size:12px_12px] pointer-events-none opacity-40"></div>
+                                  
+                                  <div className="absolute top-2.5 left-2.5 w-2.5 h-2.5 border-t-2 border-l-2 border-[#a855f7]/40 pointer-events-none"></div>
+                                  <div className="absolute top-2.5 right-2.5 w-2.5 h-2.5 border-t-2 border-r-2 border-[#a855f7]/40 pointer-events-none"></div>
+                                  <div className="absolute bottom-2.5 left-2.5 w-2.5 h-2.5 border-b-2 border-l-2 border-[#a855f7]/40 pointer-events-none"></div>
+                                  <div className="absolute bottom-2.5 right-2.5 w-2.5 h-2.5 border-b-2 border-r-2 border-[#a855f7]/40 pointer-events-none"></div>
+
+                                  <div className="text-center relative z-10 border-b border-[#a855f7]/25 pb-1.5">
+                                    <h4 className="font-display-lg text-xs text-white font-black tracking-widest uppercase">VRGC</h4>
+                                    <span className="font-code-sm text-[4.5px] text-[#a855f7]/80 tracking-wider block mt-0.5">VIRTUAL REALITY & GAMING CLUB</span>
+                                  </div>
+
+                                  <div className="my-2 flex flex-col items-center justify-center relative z-10">
+                                    <div className="w-24 h-24 rounded-xl border border-white/10 bg-white p-1.5 shadow-[0_0_20px_rgba(168,85,247,0.2)]">
+                                      <img 
+                                        src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&color=0-0-0&bgcolor=ffffff&data=${encodeURIComponent(`${typeof window !== 'undefined' ? window.location.origin : 'https://vrgc.club'}/card/${c.registrationNumber || ''}`)}`} 
+                                        alt="Scan to Verify" 
+                                        className="w-full h-full object-contain"
+                                      />
+                                    </div>
+                                    <span className="font-code-sm text-[5.5px] text-[#a855f7] font-black uppercase tracking-widest block mt-1.5">SCAN TO CONNECT</span>
+                                  </div>
+
+                                  <div className="space-y-1 border-t border-[#a855f7]/25 pt-2 relative z-10 text-[6.5px] font-code-sm text-white/70 text-left w-full pl-2">
+                                    <div className="flex items-center gap-1">
+                                      <span className="material-symbols-outlined text-[9px] text-[#a855f7]">alternate_email</span>
+                                      <span>@vrgc_official</span>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <span className="material-symbols-outlined text-[9px] text-[#a855f7]">forum</span>
+                                      <span>discord.gg/vrgc</span>
+                                    </div>
+                                  </div>
+
+                                  <div className="text-center text-[6px] font-extrabold text-[#a855f7]/80 tracking-widest mt-1.5 uppercase relative z-10">
+                                    PLAY • CREATE • INNOVATE
+                                  </div>
+
+                                  <div className="absolute bottom-1 right-2 text-[5px] font-bold text-white/30 font-code-sm uppercase tracking-widest pointer-events-none">
+                                    TAP TO FLIP 🔄
+                                  </div>
+                                </div>
+                              </div>
+
+                            </div>
+                          </div>
+
+                          {/* Quick Admin Actions toolbar under 3D card */}
+                          <div className="flex items-center gap-2 bg-black/60 border border-white/10 p-1.5 rounded-xl">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPreviewCandidate(c);
+                                setPreviewModalTab('details');
+                                setPreviewFlipped(false);
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-white text-[10px] font-bold font-label-caps flex items-center gap-1 border border-white/10"
+                              title="View Full Dossier"
+                            >
+                              <span className="material-symbols-outlined text-xs">folder_shared</span>
+                              <span>DOSSIER</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => toggleStatus(c)}
+                              className={`p-1.5 rounded-lg border transition-all ${
+                                c.status === 'Approved'
+                                  ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20'
+                                  : 'bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20'
+                              }`}
+                              title={c.status === 'Approved' ? 'Mark as Pending' : 'Approve Dossier'}
+                            >
+                              <span className="material-symbols-outlined text-xs">
+                                {c.status === 'Approved' ? 'history' : 'verified'}
+                              </span>
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={downloadingId === c.id}
+                              onClick={() => handleDownload(c)}
+                              className="p-1.5 rounded-lg bg-white/5 border border-white/5 text-on-surface-variant hover:text-white transition-all"
+                              title="Download ID Photo"
+                            >
+                              <span className={`material-symbols-outlined text-xs ${downloadingId === c.id ? 'animate-spin' : ''}`}>
+                                {downloadingId === c.id ? 'sync' : 'download'}
+                              </span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(c)}
+                              className="p-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-all"
+                              title="Delete Dossier"
+                            >
+                              <span className="material-symbols-outlined text-xs">delete</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1428,8 +1692,8 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
 
       {/* Mismatch report modal */}
       {showReportModal && (
-        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-6 z-[200]">
-          <div className="glass-panel p-6 md:p-8 rounded-2xl max-w-lg w-full border border-outline-variant/30 relative space-y-6 text-left">
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[200] overflow-y-auto p-4 sm:p-6 flex min-h-full items-center justify-center">
+          <div className="glass-panel p-6 md:p-8 rounded-2xl max-w-lg w-full border border-outline-variant/30 relative space-y-6 text-left my-auto shadow-2xl">
             <div className="flex justify-between items-center border-b border-outline-variant/20 pb-4">
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-red-500 text-base">report_problem</span>
@@ -1499,100 +1763,299 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
 
       {/* Candidate detailed view modal */}
       {previewCandidate && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center p-6 z-[200]">
-          <div className="bg-[#0b0612]/95 border border-[#a855f7]/30 backdrop-blur-2xl p-6 md:p-8 rounded-3xl max-w-2xl w-full relative text-left space-y-6 shadow-[0_0_50px_rgba(168,85,247,0.25)] overflow-hidden">
-            <button 
-              onClick={() => setPreviewCandidate(null)}
-              className="absolute right-4 top-4 text-white/50 hover:text-white hover:rotate-90 transition-all duration-300 p-1"
-            >
-              <span className="material-symbols-outlined text-lg">close</span>
-            </button>
-
-            <div className="flex items-center gap-2 border-b border-white/15 pb-3">
-              <span className="material-symbols-outlined text-primary text-base animate-pulse">folder_shared</span>
-              <h4 className="font-display-lg text-sm text-white font-extrabold uppercase tracking-widest">
-                Candidate ID Card Dossier
-              </h4>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
-              <div className="md:col-span-5 flex flex-col items-center justify-center relative py-4">
-                <div className="w-48 h-48 rounded-2xl border-2 border-[#a855f7]/30 p-1 relative z-10 bg-black/40 shadow-[0_0_30px_rgba(168,85,247,0.15)] group">
-                  <div className="w-full h-full rounded-xl overflow-hidden bg-black relative">
-                    <img 
-                      src={previewCandidate.photoUrl} 
-                      alt="Avatar" 
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
-                      referrerPolicy="no-referrer" 
-                    />
-                  </div>
-                </div>
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[200] overflow-y-auto p-4 sm:p-6 md:p-8 flex min-h-full items-center justify-center">
+          <div className="bg-[#0b0612]/95 border border-[#a855f7]/30 backdrop-blur-2xl p-5 sm:p-6 md:p-8 rounded-3xl max-w-2xl w-full relative text-left space-y-6 shadow-[0_0_50px_rgba(168,85,247,0.25)] my-auto max-h-[90vh] overflow-y-auto flex flex-col">
+            <div className="sticky top-0 z-50 bg-[#0b0612]/90 backdrop-blur-md flex flex-row justify-between items-center gap-3 border-b border-white/15 pb-3 pt-1 -mt-1">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary text-base animate-pulse">folder_shared</span>
+                <h4 className="font-display-lg text-xs sm:text-sm text-white font-extrabold uppercase tracking-widest truncate">
+                  Candidate ID Dossier
+                </h4>
               </div>
 
-              <div className="md:col-span-7 space-y-5">
-                <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-xs font-body-md">
-                  <div className="border-b border-white/5 pb-2">
-                    <span className="font-code-sm text-[8px] text-[#a855f7] uppercase tracking-widest block font-bold mb-0.5">FULL NAME</span>
-                    <span className="text-white text-sm font-bold block truncate">{previewCandidate.name}</span>
-                  </div>
-                  <div className="border-b border-white/5 pb-2">
-                    <span className="font-code-sm text-[8px] text-[#a855f7] uppercase tracking-widest block font-bold mb-0.5">REG NO</span>
-                    <span className="text-[#ddb7ff] text-sm font-bold font-code-sm block">{previewCandidate.registrationNumber}</span>
-                  </div>
-                  {(() => {
-                    const display = getAdminDisplayRoleOrTeam(previewCandidate.team, previewCandidate.position);
-                    if (display.isSpecial) {
-                      return (
-                        <div className="col-span-2 border-b border-white/5 pb-2">
-                          <span className="font-code-sm text-[8px] text-[#a855f7] uppercase tracking-widest block font-bold mb-0.5">ROLE / POSITION</span>
-                          <span className="text-white text-sm font-bold block uppercase">{display.value}</span>
-                        </div>
-                      );
-                    } else {
-                      return (
-                        <>
-                          <div className="border-b border-white/5 pb-2">
-                            <span className="font-code-sm text-[8px] text-[#a855f7] uppercase tracking-widest block font-bold mb-0.5">TEAM / DIVISION</span>
-                            <span className="text-white text-sm font-bold block uppercase">{previewCandidate.team}</span>
-                          </div>
-                          <div className="border-b border-white/5 pb-2">
-                            <span className="font-code-sm text-[8px] text-[#a855f7] uppercase tracking-widest block font-bold mb-0.5">ROLE / POSITION</span>
-                            <span className="text-white text-sm font-bold block uppercase">{previewCandidate.position}</span>
-                          </div>
-                        </>
-                      );
-                    }
-                  })()}
-                  <div className="border-b border-white/5 pb-2">
-                    <span className="font-code-sm text-[8px] text-[#a855f7] uppercase tracking-widest block font-bold mb-0.5">PHONE NUMBER</span>
-                    <span className="text-white text-sm block font-code-sm">{previewCandidate.phone || "N/A"}</span>
-                  </div>
-                  <div className="border-b border-white/5 pb-2">
-                    <span className="font-code-sm text-[8px] text-[#a855f7] uppercase tracking-widest block font-bold mb-0.5">SUBMISSION DATE</span>
-                    <span className="text-white/60 block font-code-sm">
-                      {previewCandidate.submittedAt ? new Date(previewCandidate.submittedAt).toLocaleDateString() : "N/A"}
-                    </span>
-                  </div>
-                  <div className="col-span-2 border-b border-white/5 pb-2">
-                    <span className="font-code-sm text-[8px] text-[#a855f7] uppercase tracking-widest block mb-0.5 font-bold">EMAIL ADDRESS</span>
-                    <span className="text-white block font-code-sm text-xs font-semibold break-all">{previewCandidate.email}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2.5 pt-2">
-                  <span className="font-code-sm text-[8px] text-white/45 tracking-widest block font-bold uppercase">DOSSIER STATUS:</span>
-                  <span
-                    className={`px-3 py-1 rounded-full border text-[9px] font-label-caps font-black tracking-wider uppercase ${
-                      previewCandidate.status === 'Approved'
-                        ? 'bg-green-500/10 border-green-500/30 text-green-400 shadow-[0_0_15px_rgba(74,222,128,0.1)]'
-                        : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.1)]'
+              <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                <div className="flex items-center bg-black/60 border border-outline-variant/30 rounded-xl p-1">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewModalTab('details')}
+                    className={`px-2.5 sm:px-3 py-1 rounded-lg text-[9px] sm:text-[10px] font-label-caps font-bold tracking-wider flex items-center gap-1 transition-all ${
+                      previewModalTab === 'details'
+                        ? 'bg-primary text-black shadow-md'
+                        : 'text-on-surface-variant hover:text-white'
                     }`}
                   >
-                    {previewCandidate.status || 'Pending'}
-                  </span>
+                    <span className="material-symbols-outlined text-xs">info</span>
+                    <span>DETAILS</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewModalTab('card')}
+                    className={`px-2.5 sm:px-3 py-1 rounded-lg text-[9px] sm:text-[10px] font-label-caps font-bold tracking-wider flex items-center gap-1 transition-all ${
+                      previewModalTab === 'card'
+                        ? 'bg-primary text-black shadow-md'
+                        : 'text-on-surface-variant hover:text-white'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-xs">style</span>
+                    <span>3D CARD</span>
+                  </button>
                 </div>
+
+                <button 
+                  onClick={() => setPreviewCandidate(null)}
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white/70 hover:text-white flex items-center justify-center transition-all duration-200 shrink-0"
+                  title="Close Modal"
+                >
+                  <span className="material-symbols-outlined text-base">close</span>
+                </button>
               </div>
             </div>
+
+            {previewModalTab === 'details' ? (
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
+                <div className="md:col-span-5 flex flex-col items-center justify-center relative py-4">
+                  <div className="w-48 h-48 rounded-2xl border-2 border-[#a855f7]/30 p-1 relative z-10 bg-black/40 shadow-[0_0_30px_rgba(168,85,247,0.15)] group">
+                    <div className="w-full h-full rounded-xl overflow-hidden bg-black relative">
+                      <img 
+                        src={previewCandidate.photoUrl} 
+                        alt="Avatar" 
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+                        referrerPolicy="no-referrer" 
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="md:col-span-7 space-y-5">
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-xs font-body-md">
+                    <div className="border-b border-white/5 pb-2">
+                      <span className="font-code-sm text-[8px] text-[#a855f7] uppercase tracking-widest block font-bold mb-0.5">FULL NAME</span>
+                      <span className="text-white text-sm font-bold block truncate">{previewCandidate.name}</span>
+                    </div>
+                    <div className="border-b border-white/5 pb-2">
+                      <span className="font-code-sm text-[8px] text-[#a855f7] uppercase tracking-widest block font-bold mb-0.5">REG NO</span>
+                      <span className="text-[#ddb7ff] text-sm font-bold font-code-sm block">{previewCandidate.registrationNumber}</span>
+                    </div>
+                    {(() => {
+                      const display = getAdminDisplayRoleOrTeam(previewCandidate.team, previewCandidate.position);
+                      if (display.isSpecial) {
+                        return (
+                          <div className="col-span-2 border-b border-white/5 pb-2">
+                            <span className="font-code-sm text-[8px] text-[#a855f7] uppercase tracking-widest block font-bold mb-0.5">ROLE / POSITION</span>
+                            <span className="text-white text-sm font-bold block uppercase">{display.value}</span>
+                          </div>
+                        );
+                      } else {
+                        return (
+                          <>
+                            <div className="border-b border-white/5 pb-2">
+                              <span className="font-code-sm text-[8px] text-[#a855f7] uppercase tracking-widest block font-bold mb-0.5">TEAM / DIVISION</span>
+                              <span className="text-white text-sm font-bold block uppercase">{previewCandidate.team}</span>
+                            </div>
+                            <div className="border-b border-white/5 pb-2">
+                              <span className="font-code-sm text-[8px] text-[#a855f7] uppercase tracking-widest block font-bold mb-0.5">ROLE / POSITION</span>
+                              <span className="text-white text-sm font-bold block uppercase">{previewCandidate.position}</span>
+                            </div>
+                          </>
+                        );
+                      }
+                    })()}
+                    <div className="border-b border-white/5 pb-2">
+                      <span className="font-code-sm text-[8px] text-[#a855f7] uppercase tracking-widest block font-bold mb-0.5">PHONE NUMBER</span>
+                      <span className="text-white text-sm block font-code-sm">{previewCandidate.phone || "N/A"}</span>
+                    </div>
+                    <div className="border-b border-white/5 pb-2">
+                      <span className="font-code-sm text-[8px] text-[#a855f7] uppercase tracking-widest block font-bold mb-0.5">SUBMISSION DATE</span>
+                      <span className="text-white/60 block font-code-sm">
+                        {previewCandidate.submittedAt ? new Date(previewCandidate.submittedAt).toLocaleDateString() : "N/A"}
+                      </span>
+                    </div>
+                    <div className="col-span-2 border-b border-white/5 pb-2">
+                      <span className="font-code-sm text-[8px] text-[#a855f7] uppercase tracking-widest block mb-0.5 font-bold">EMAIL ADDRESS</span>
+                      <span className="text-white block font-code-sm text-xs font-semibold break-all">{previewCandidate.email}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 pt-2">
+                    <span className="font-code-sm text-[8px] text-white/45 tracking-widest block font-bold uppercase">DOSSIER STATUS:</span>
+                    <span
+                      className={`px-3 py-1 rounded-full border text-[9px] font-label-caps font-black tracking-wider uppercase ${
+                        previewCandidate.status === 'Approved'
+                          ? 'bg-green-500/10 border-green-500/30 text-green-400 shadow-[0_0_15px_rgba(74,222,128,0.1)]'
+                          : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.1)]'
+                      }`}
+                    >
+                      {previewCandidate.status || 'Pending'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* 3D FLIPPABLE CARD TAB IN MODAL */
+              <div className="flex flex-col items-center justify-center py-4 space-y-4">
+                <div 
+                  onClick={() => setPreviewFlipped(!previewFlipped)}
+                  className="relative w-full max-w-[310px] aspect-[2.2/3.4] cursor-pointer group [perspective:1000px]"
+                >
+                  <div className={`relative w-full h-full duration-700 [transform-style:preserve-3d] ${previewFlipped ? '[transform:rotateY(180deg)]' : ''}`}>
+                    
+                    {/* FRONT OF CARD */}
+                    <div className="absolute inset-0 w-full h-full [backface-visibility:hidden] select-none">
+                      <div className="relative overflow-hidden w-full h-full rounded-3xl border border-[#a855f7]/35 bg-gradient-to-b from-[#12051e] via-[#05010a] to-[#0c0416] p-6 flex flex-col justify-between shadow-[0_0_50px_rgba(168,85,247,0.25)]">
+                        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.005)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.005)_1px,transparent_1px)] bg-[size:12px_12px] pointer-events-none opacity-40"></div>
+                        
+                        <div className="absolute top-3 left-3 w-3 h-3 border-t-2 border-l-2 border-[#a855f7]/40 pointer-events-none"></div>
+                        <div className="absolute top-3 right-3 w-3 h-3 border-t-2 border-r-2 border-[#a855f7]/40 pointer-events-none"></div>
+                        <div className="absolute bottom-3 left-3 w-3 h-3 border-b-2 border-l-2 border-[#a855f7]/40 pointer-events-none"></div>
+                        <div className="absolute bottom-3 right-3 w-3 h-3 border-b-2 border-r-2 border-[#a855f7]/40 pointer-events-none"></div>
+
+                        <div className="flex justify-between items-start border-b border-[#a855f7]/25 pb-3 relative z-10">
+                          <div className="text-left w-full">
+                            <div className="flex items-center gap-1 justify-center">
+                              <span className="material-symbols-outlined text-[14px] text-[#a855f7]">sports_esports</span>
+                              <h4 className="font-display-lg text-sm text-white font-black tracking-widest leading-none">VRGC</h4>
+                            </div>
+                            <span className="text-[#a855f7]/80 text-[5px] font-code-sm tracking-wider uppercase block mt-1 font-bold text-center">VIRTUAL REALITY & GAMING CLUB</span>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col items-center justify-center my-3 relative z-10">
+                          <div className="w-32 h-32 rounded-2xl border-2 border-[#a855f7]/30 p-1 bg-black/40 shadow-[0_0_20px_rgba(168,85,247,0.15)] relative overflow-hidden">
+                            <img 
+                              src={previewCandidate.photoUrl} 
+                              alt={previewCandidate.name} 
+                              className="w-full h-full object-cover rounded-xl"
+                              referrerPolicy="no-referrer"
+                            />
+                            <div className={`absolute bottom-1 right-1 text-white text-[6px] font-black px-1.5 py-0.5 rounded tracking-widest uppercase shadow-md pointer-events-none ${
+                              previewCandidate.status === 'Approved' ? 'bg-green-500/80' : 'bg-yellow-500/80'
+                            }`}>
+                              {previewCandidate.status === 'Approved' ? 'VERIFIED' : 'PENDING'}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="bg-[#0b0512]/90 border border-[#a855f7]/25 p-3 rounded-2xl relative z-10 space-y-2">
+                          <div className="border-b border-white/5 pb-1.5 text-left">
+                            <span className="font-code-sm text-[6px] text-[#a855f7] uppercase tracking-widest block mb-0.5 font-extrabold">NAME</span>
+                            <h3 className="font-display-lg text-sm text-white font-extrabold tracking-wide uppercase truncate leading-none">
+                              {previewCandidate.name}
+                            </h3>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 text-left">
+                            <div>
+                              <span className="font-code-sm text-[6px] text-[#a855f7] uppercase tracking-widest block mb-0.5 font-extrabold">REGISTRATION NO.</span>
+                              <span className="font-code-sm text-[10px] text-white font-bold tracking-wider block">
+                                {previewCandidate.registrationNumber}
+                              </span>
+                            </div>
+                            <div>
+                              {(() => {
+                                const displayInfo = getAdminDisplayRoleOrTeam(previewCandidate.team, previewCandidate.position);
+                                return (
+                                  <>
+                                    <span className="font-code-sm text-[6px] text-[#a855f7] uppercase tracking-widest block mb-0.5 font-extrabold">
+                                      {displayInfo.label === 'TEAM / DIVISION' ? 'TEAM' : 'ROLE'}
+                                    </span>
+                                    <span className="font-code-sm text-[10px] text-white font-bold tracking-wider block uppercase truncate">
+                                      {displayInfo.value}
+                                    </span>
+                                  </>
+                                );
+                              })()}
+                            </div>
+                          </div>
+
+                          <div className="pt-1.5 border-t border-white/5 flex items-center gap-1.5 justify-start">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#a855f7] shadow-[0_0_8px_#a855f7] animate-pulse"></span>
+                            <span className="font-code-sm text-[8px] text-[#ddb7ff] font-extrabold uppercase tracking-widest leading-none">
+                              {(() => {
+                                const displayInfo = getAdminDisplayRoleOrTeam(previewCandidate.team, previewCandidate.position);
+                                return displayInfo.isSpecial ? displayInfo.value : (previewCandidate.position || 'MEMBER');
+                              })()}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="absolute bottom-1 right-2 text-[5px] font-bold text-white/30 font-code-sm uppercase tracking-widest pointer-events-none">
+                          TAP CARD TO FLIP 🔄
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* BACK OF CARD */}
+                    <div className="absolute inset-0 w-full h-full [backface-visibility:hidden] [transform:rotateY(180deg)] select-none">
+                      <div className="relative overflow-hidden w-full h-full rounded-3xl border border-[#a855f7]/35 bg-gradient-to-b from-[#12051e] via-[#05010a] to-[#0c0416] p-6 flex flex-col justify-between shadow-[0_0_50px_rgba(168,85,247,0.25)]">
+                        {previewCandidate.avatarUrl && (
+                          <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none rounded-3xl">
+                            <img 
+                              src={previewCandidate.avatarUrl} 
+                              alt="Avatar Watermark" 
+                              className="w-full h-full object-cover opacity-95 brightness-110 contrast-105"
+                              referrerPolicy="no-referrer"
+                            />
+                            <div className="absolute inset-0 bg-[#05010a]/10 bg-gradient-to-b from-transparent via-[#05010a]/20 to-[#05010a]/50"></div>
+                          </div>
+                        )}
+
+                        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.005)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.005)_1px,transparent_1px)] bg-[size:12px_12px] pointer-events-none opacity-40"></div>
+                        
+                        <div className="absolute top-3 left-3 w-3 h-3 border-t-2 border-l-2 border-[#a855f7]/40 pointer-events-none"></div>
+                        <div className="absolute top-3 right-3 w-3 h-3 border-t-2 border-r-2 border-[#a855f7]/40 pointer-events-none"></div>
+                        <div className="absolute bottom-3 left-3 w-3 h-3 border-b-2 border-l-2 border-[#a855f7]/40 pointer-events-none"></div>
+                        <div className="absolute bottom-3 right-3 w-3 h-3 border-b-2 border-r-2 border-[#a855f7]/40 pointer-events-none"></div>
+
+                        <div className="text-center relative z-10 border-b border-[#a855f7]/25 pb-2">
+                          <h4 className="font-display-lg text-sm text-white font-black tracking-widest uppercase">VRGC</h4>
+                          <span className="font-code-sm text-[5px] text-[#a855f7]/80 tracking-wider block mt-0.5">VIRTUAL REALITY & GAMING CLUB</span>
+                        </div>
+
+                        <div className="my-3 flex flex-col items-center justify-center relative z-10">
+                          <div className="w-28 h-28 rounded-xl border border-white/10 bg-white p-1.5 shadow-[0_0_25px_rgba(168,85,247,0.25)]">
+                            <img 
+                              src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&color=0-0-0&bgcolor=ffffff&data=${encodeURIComponent(`${typeof window !== 'undefined' ? window.location.origin : 'https://vrgc.club'}/card/${previewCandidate.registrationNumber || ''}`)}`} 
+                              alt="Scan to Verify" 
+                              className="w-full h-full object-contain"
+                            />
+                          </div>
+                          <span className="font-code-sm text-[6px] text-[#a855f7] font-black uppercase tracking-widest block mt-2">SCAN TO CONNECT</span>
+                        </div>
+
+                        <div className="space-y-1.5 border-t border-[#a855f7]/25 pt-2.5 relative z-10 text-[7px] font-code-sm text-white/70 text-left w-full pl-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="material-symbols-outlined text-[10px] text-[#a855f7]">alternate_email</span>
+                            <span>@vrgc_official</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="material-symbols-outlined text-[10px] text-[#a855f7]">forum</span>
+                            <span>discord.gg/vrgc</span>
+                          </div>
+                        </div>
+
+                        <div className="text-center text-[7px] font-extrabold text-[#a855f7]/80 tracking-widest mt-2.5 uppercase relative z-10">
+                          PLAY • CREATE • INNOVATE
+                        </div>
+
+                        <div className="absolute bottom-1 right-2 text-[5px] font-bold text-white/30 font-code-sm uppercase tracking-widest pointer-events-none">
+                          TAP CARD TO FLIP 🔄
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setPreviewFlipped(!previewFlipped)}
+                  className="px-5 py-2 rounded-full bg-primary/10 border border-primary/40 text-primary text-xs font-bold font-label-caps flex items-center gap-2 hover:bg-primary/20 transition-all"
+                >
+                  <span className="material-symbols-outlined text-sm">flip_to_back</span>
+                  <span>FLIP CARD ({previewFlipped ? 'BACK SIDE' : 'FRONT SIDE'})</span>
+                </button>
+              </div>
+            )}
 
             <div className="flex flex-col sm:flex-row gap-3.5 pt-6 border-t border-white/10">
               <button
