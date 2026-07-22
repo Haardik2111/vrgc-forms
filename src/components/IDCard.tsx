@@ -1038,7 +1038,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                   <form onSubmit={handleSubmit} className="glass-panel p-6 md:p-8 rounded-2xl space-y-8 border border-purple-500/20 text-left bg-black/70 backdrop-blur-xl shadow-[0_0_40px_rgba(0,0,0,0.8)]">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
-                        <label className="block font-label-caps text-[10px] text-purple-300 mb-2 tracking-widest font-bold">MEMBER FULL NAME</label>
+                        <label className="block font-label-caps text-[10px] text-purple-300 mb-2 tracking-widest font-bold">&nbsp;&nbsp;MEMBER FULL NAME : </label>
                         <input
                           readOnly
                           value={memberData?.name || ''}
@@ -1047,7 +1047,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                         />
                       </div>
                       <div>
-                        <label className="block font-label-caps text-[10px] text-purple-300 mb-2 tracking-widest font-bold">REGISTRATION NUMBER</label>
+                        <label className="block font-label-caps text-[10px] text-purple-300 mb-2 tracking-widest font-bold">&nbsp;&nbsp;REGISTRATION NUMBER : </label>
                         <input
                           readOnly
                           value={memberData?.registrationNumber || ''}
@@ -1059,7 +1059,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                       <div>
-                        <label className="block font-label-caps text-[10px] text-purple-300 mb-2 tracking-widest font-bold">PHONE NUMBER</label>
+                        <label className="block font-label-caps text-[10px] text-purple-300 mb-2 tracking-widest font-bold">&nbsp;&nbsp;CONTACT : </label>
                         <input
                           readOnly
                           value={memberData?.phone || ''}
@@ -1068,7 +1068,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                         />
                       </div>
                       <div>
-                        <label className="block font-label-caps text-[10px] text-purple-300 mb-2 tracking-widest font-bold">ASSIGNED TEAM</label>
+                        <label className="block font-label-caps text-[10px] text-purple-300 mb-2 tracking-widest font-bold">&nbsp;&nbsp;ASSIGNED TEAM : </label>
                         <input
                           readOnly
                           value={memberData?.team || ''}
@@ -1077,7 +1077,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                         />
                       </div>
                       <div>
-                        <label className="block font-label-caps text-[10px] text-purple-300 mb-2 tracking-widest font-bold">ROLE / POSITION</label>
+                        <label className="block font-label-caps text-[10px] text-purple-300 mb-2 tracking-widest font-bold">&nbsp;&nbsp;ROLE / POSITION : </label>
                         <input
                           readOnly
                           value={memberData?.position || 'Member'}
@@ -1091,7 +1091,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
                       <div className="flex flex-col space-y-2 h-full">
                         <label className="block font-label-caps text-[10px] text-purple-300 tracking-widest font-bold uppercase truncate">
-                          UPLOAD IDENTIFICATION PHOTO *
+                        &nbsp;UPLOAD IDENTIFICATION PHOTO :
                         </label>
                         <div className="border-2 border-dashed border-purple-500/30 hover:border-purple-400/60 rounded-2xl p-5 transition-all duration-300 bg-black/60 hover:bg-black/80 relative flex-1 min-h-[140px] flex flex-col items-center justify-center text-center cursor-pointer">
                           <input
@@ -1110,7 +1110,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
 
                       <div className="flex flex-col space-y-2 h-full">
                         <label className="block font-label-caps text-[10px] text-purple-300 tracking-widest font-bold uppercase truncate">
-                          UPLOAD GAMING AVATAR (FOR BACKSIDE) *
+                        &nbsp;UPLOAD GAMING AVATAR (FOR BACKSIDE) :
                         </label>
                         <div className="border-2 border-dashed border-purple-500/30 hover:border-purple-400/60 rounded-2xl p-4 transition-all duration-300 bg-black/60 hover:bg-black/80 relative flex-1 min-h-[110px] flex flex-col items-center justify-center text-center cursor-pointer">
                           <input
@@ -1142,7 +1142,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                         {/* Direct GIF / Avatar URL Input */}
                         <div className="pt-1">
                           <label className="block text-[9px] font-label-caps text-purple-300/80 mb-1 tracking-wider font-bold">
-                            OR PASTE DIRECT GIF / IMAGE URL LINK:
+                          &nbsp;OR PASTE DIRECT GIF / IMAGE URL &nbsp;LINK:
                           </label>
                           <div className="relative">
                             <input
