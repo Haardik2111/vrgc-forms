@@ -70,6 +70,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarUrlInput, setAvatarUrlInput] = useState<string>('');
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [isFlipped, setIsFlipped] = useState<boolean>(false);
   const [isPreviewFlipped, setIsPreviewFlipped] = useState<boolean>(false);
@@ -306,8 +307,8 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
       setSubmitError('Please upload an identification photo.');
       return;
     }
-    if (!avatarFile) {
-      setSubmitError('Please upload a gaming avatar.');
+    if (!avatarFile && !avatarUrlInput.trim()) {
+      setSubmitError('Please upload a gaming avatar file or paste a direct GIF/Image URL link.');
       return;
     }
 
@@ -335,25 +336,30 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
         .from('id-cards')
         .getPublicUrl(photoFilePath);
 
-      // 2. Upload Avatar to Supabase Storage
-      const avatarExt = avatarFile.name.split('.').pop();
-      const avatarFileName = `${memberData.registrationNumber || currentUser.uid}_avatar_${Date.now()}.${avatarExt}`;
-      const avatarFilePath = `id-photos/${avatarFileName}`;
+      // 2. Upload Avatar to Supabase Storage (if file provided) or use direct URL
+      let avatarPublicUrl = avatarUrlInput.trim();
+      if (avatarFile) {
+        const avatarExt = avatarFile.name.split('.').pop();
+        const avatarFileName = `${memberData.registrationNumber || currentUser.uid}_avatar_${Date.now()}.${avatarExt}`;
+        const avatarFilePath = `id-photos/${avatarFileName}`;
 
-      const { error: avatarUploadError } = await supabase.storage
-        .from('id-cards')
-        .upload(avatarFilePath, avatarFile, {
-          cacheControl: '3600',
-          upsert: true
-        });
+        const { error: avatarUploadError } = await supabase.storage
+          .from('id-cards')
+          .upload(avatarFilePath, avatarFile, {
+            cacheControl: '3600',
+            upsert: true
+          });
 
-      if (avatarUploadError) {
-        throw new Error(`Supabase avatar upload failed: ${avatarUploadError.message}.`);
+        if (avatarUploadError) {
+          throw new Error(`Supabase avatar upload failed: ${avatarUploadError.message}.`);
+        }
+
+        const { data: { publicUrl: uploadedUrl } } = supabase.storage
+          .from('id-cards')
+          .getPublicUrl(avatarFilePath);
+          
+        avatarPublicUrl = uploadedUrl;
       }
-
-      const { data: { publicUrl: avatarPublicUrl } } = supabase.storage
-        .from('id-cards')
-        .getPublicUrl(avatarFilePath);
 
       // 3. Save Submission details to Firestore
       const submissionData: CandidateSubmission = {
@@ -561,38 +567,44 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
   if (!currentUser || !isAuthorized) {
     return (
       <main className="flex-grow min-h-screen flex items-center justify-center p-6 relative overflow-hidden text-left bg-mesh">
-        <div className="glass-panel p-10 md:p-12 rounded-2xl max-w-lg w-full text-center space-y-8 border border-outline-variant/30 relative z-10 shadow-[0_0_50px_rgba(168,85,247,0.1)]">
+        <div className="glass-panel p-10 md:p-12 rounded-2xl max-w-lg w-full text-center space-y-6 border border-purple-500/20 relative z-10 shadow-[0_0_50px_rgba(168,85,247,0.15)] bg-black/70 backdrop-blur-xl">
           <div className="space-y-3">
-            <span className="font-label-caps text-xs text-primary tracking-widest block font-bold">IDENTITY CONFIRMATION</span>
+            <span className="font-label-caps text-xs text-purple-400 tracking-widest block font-bold">IDENTITY CONFIRMATION</span>
             <h2 className="font-display-lg text-3xl md:text-4xl text-white font-extrabold tracking-tight uppercase">
               Member ID Portal
             </h2>
-            <p className="font-body-md text-on-surface-variant max-w-sm mx-auto">
+            <p className="font-body-md text-slate-300 max-w-sm mx-auto text-sm">
               Please authenticate using your registered email address to access the digital ID Card System.
             </p>
           </div>
 
           {authError && (
-            <div className="bg-error/10 border border-error/30 text-error px-4 py-3 rounded-lg text-sm font-body-md text-left">
-              {authError}
+            <div className="p-4 rounded-xl bg-red-950/20 border border-red-500/30 text-red-400 text-sm font-body-md text-left flex items-start gap-3">
+              <span className="material-symbols-outlined text-red-500 text-lg shrink-0 mt-0.5">lock_hazard</span>
+              <div>
+                <strong className="block font-bold">AUTHENTICATION ERROR</strong>
+                <span className="opacity-95">{authError}</span>
+              </div>
             </div>
           )}
 
-          <button
-            onClick={handleLogin}
-            className="w-full bg-primary text-background font-bold py-4 px-8 rounded-full shadow-[0_0_30px_rgba(168,85,247,0.3)] hover:shadow-[0_0_50px_rgba(168,85,247,0.5)] hover:scale-[1.01] active:scale-98 transition-all flex items-center justify-center gap-3"
-          >
-            <span className="material-symbols-outlined font-bold">login</span>
-            <span>AUTHENTICATE WITH GOOGLE</span>
-          </button>
+          <div className="space-y-3 pt-2">
+            <button
+              onClick={handleLogin}
+              className="w-full bg-white text-black font-extrabold py-4 px-8 rounded-2xl shadow-[0_0_30px_rgba(255,255,255,0.2)] hover:bg-slate-100 hover:scale-[1.01] active:scale-98 transition-all flex items-center justify-center gap-3 font-label-caps text-xs tracking-wider"
+            >
+              <span className="material-symbols-outlined font-bold text-black">login</span>
+              <span>AUTHENTICATE WITH GOOGLE</span>
+            </button>
 
-          <button
-            onClick={onRedirect}
-            className="w-full bg-transparent border border-outline text-on-surface hover:bg-surface-variant/10 py-4 px-8 rounded-full transition-all flex items-center justify-center gap-3 text-xs font-bold font-label-caps"
-          >
-            <span className="material-symbols-outlined">arrow_back</span>
-            <span>BACK TO HOME</span>
-          </button>
+            <button
+              onClick={onRedirect}
+              className="w-full bg-black/40 border border-purple-500/30 hover:border-purple-400 text-slate-300 hover:text-white py-3.5 px-8 rounded-2xl transition-all flex items-center justify-center gap-3 text-xs font-bold font-label-caps tracking-wider"
+            >
+              <span className="material-symbols-outlined text-sm">arrow_back</span>
+              <span>BACK TO DASHBOARD</span>
+            </button>
+          </div>
         </div>
       </main>
     );
@@ -1091,18 +1103,52 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                         <label className="block font-label-caps text-[10px] text-purple-300 tracking-widest font-bold uppercase truncate">
                           UPLOAD GAMING AVATAR (FOR BACKSIDE) *
                         </label>
-                        <div className="border-2 border-dashed border-purple-500/30 hover:border-purple-400/60 rounded-2xl p-5 transition-all duration-300 bg-black/60 hover:bg-black/80 relative flex-1 min-h-[140px] flex flex-col items-center justify-center text-center cursor-pointer">
+                        <div className="border-2 border-dashed border-purple-500/30 hover:border-purple-400/60 rounded-2xl p-4 transition-all duration-300 bg-black/60 hover:bg-black/80 relative flex-1 min-h-[110px] flex flex-col items-center justify-center text-center cursor-pointer">
                           <input
                             type="file"
                             accept="image/*,image/gif"
                             onChange={handleAvatarChange}
                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                           />
-                          <span className="material-symbols-outlined text-3xl text-purple-400/80 mb-1">sports_esports</span>
+                          <span className="material-symbols-outlined text-2xl text-purple-400/80 mb-0.5">sports_esports</span>
                           <p className="font-body-md text-xs text-white/90 font-bold truncate max-w-[200px]">
-                            {avatarFile ? avatarFile.name : "Choose Avatar Image"}
+                            {avatarFile ? avatarFile.name : "Choose File (PNG/JPG/GIF)"}
                           </p>
-                          <p className="font-code-sm text-[9px] text-slate-400 mt-1">PNG, JPG, WEBP, or GIF up to 5MB</p>
+                          <p className="font-code-sm text-[9px] text-slate-400 mt-0.5">Up to 5MB file upload</p>
+                        </div>
+
+                        {/* Direct GIF / Avatar URL Input */}
+                        <div className="pt-1">
+                          <label className="block text-[9px] font-label-caps text-purple-300/80 mb-1 tracking-wider font-bold">
+                            OR PASTE DIRECT GIF / IMAGE URL LINK:
+                          </label>
+                          <div className="relative">
+                            <input
+                              type="url"
+                              placeholder="https://media.giphy.com/media/.../giphy.gif"
+                              value={avatarUrlInput}
+                              onChange={(e) => {
+                                const url = e.target.value;
+                                setAvatarUrlInput(url);
+                                if (url.trim()) {
+                                  setAvatarPreview(url.trim());
+                                }
+                              }}
+                              className="w-full bg-black/80 border border-purple-500/30 rounded-xl px-3 py-2 text-[11px] text-white focus:outline-none focus:border-purple-400 font-code-sm placeholder:text-slate-500"
+                            />
+                            {avatarUrlInput && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAvatarUrlInput('');
+                                  if (!avatarFile) setAvatarPreview(null);
+                                }}
+                                className="absolute right-2 top-2 text-slate-400 hover:text-white"
+                              >
+                                <span className="material-symbols-outlined text-sm">cancel</span>
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1130,12 +1176,12 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
 
                         <button
                           disabled={isSubmitting}
-                          className="w-full sm:w-auto bg-primary text-background font-bold py-3.5 px-8 rounded-full hover:shadow-[0_0_30px_rgba(168,85,247,0.3)] hover:scale-[1.01] active:scale-95 transition-all flex items-center justify-center gap-2 text-xs font-bold"
+                          className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 text-black font-black py-3.5 px-8 rounded-full shadow-[0_0_30px_rgba(16,185,129,0.4)] hover:shadow-[0_0_40px_rgba(16,185,129,0.6)] hover:scale-[1.01] active:scale-95 transition-all flex items-center justify-center gap-2 text-xs font-label-caps tracking-widest uppercase"
                           type="submit"
                         >
                           {isSubmitting ? (
                             <>
-                              <span className="material-symbols-outlined animate-spin text-sm">sync</span> REGISTERING...
+                              <span className="material-symbols-outlined animate-spin text-sm text-black">sync</span> REGISTERING...
                             </>
                           ) : (
                             'SUBMIT DOSSIER'
