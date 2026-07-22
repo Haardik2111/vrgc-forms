@@ -798,7 +798,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                         <div className="my-3 flex flex-col items-center justify-center relative z-10">
                           <div className="w-28 h-28 rounded-xl border border-white/10 bg-white p-1.5 shadow-[0_0_25px_rgba(168,85,247,0.25)]">
                             <img 
-                              src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&color=a855f7&bgcolor=ffffff&data=${encodeURIComponent(`${window.location.origin}/#/card/${existingSubmission.registrationNumber}`)}`} 
+                              src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&color=a855f7&bgcolor=ffffff&data=${encodeURIComponent(`${typeof window !== 'undefined' ? window.location.origin : 'https://vrgc-forms.vercel.app'}/card/${existingSubmission.registrationNumber}`)}`} 
                               alt="Scan to Verify" 
                               className="w-full h-full object-contain"
                             />
@@ -1000,7 +1000,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                           <div className="my-3 flex flex-col items-center justify-center relative z-10">
                             <div className="w-28 h-28 rounded-xl border border-white/10 bg-white p-1.5 shadow-[0_0_20px_rgba(168,85,247,0.15)]">
                               <img 
-                                src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&color=a855f7&bgcolor=ffffff&data=${encodeURIComponent(`${window.location.origin}/#/card/${memberData?.registrationNumber || '24XXXXXX'}`)}`} 
+                                src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&color=a855f7&bgcolor=ffffff&data=${encodeURIComponent(`${typeof window !== 'undefined' ? window.location.origin : 'https://vrgc-forms.vercel.app'}/card/${memberData?.registrationNumber || '24XXXXXX'}`)}`} 
                                 alt="Scan to Verify" 
                                 className="w-full h-full object-contain"
                               />
