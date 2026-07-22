@@ -237,9 +237,15 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
     setAuthError('');
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Login error:', err);
-      setAuthError('Failed to sign in. Please verify your Google Account.');
+      if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized domain')) {
+        setAuthError('Unauthorized Domain: Add your Vercel domain (e.g. your-app.vercel.app) to Firebase Console > Authentication > Settings > Authorized Domains.');
+      } else if (err?.code === 'auth/popup-closed-by-user') {
+        setAuthError('Sign-in popup was closed before completion. Please try again.');
+      } else {
+        setAuthError(err?.message || 'Failed to sign in. Please verify your Google Account.');
+      }
     }
   };
 

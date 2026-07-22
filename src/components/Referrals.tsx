@@ -244,9 +244,15 @@ const Referrals: React.FC<ReferralsProps> = ({ onRedirect }) => {
     try {
       await signInWithPopup(auth, googleProvider);
       setIsSubmitting(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Auth Sign In Error:', err);
-      setAuthError('Authentication failed. Please try again.');
+      if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized domain')) {
+        setAuthError('Unauthorized Domain: Add your Vercel domain (e.g. your-app.vercel.app) to Firebase Console > Authentication > Settings > Authorized Domains.');
+      } else if (err?.code === 'auth/popup-closed-by-user') {
+        setAuthError('Sign-in popup was closed before completion. Please try again.');
+      } else {
+        setAuthError(err?.message || 'Authentication failed. Please try again.');
+      }
       setIsSubmitting(false);
     }
   };
