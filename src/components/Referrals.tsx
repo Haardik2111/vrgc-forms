@@ -63,9 +63,15 @@ const Referrals: React.FC<ReferralsProps> = ({ onRedirect }) => {
   const [isConnectionOffline, setIsConnectionOffline] = useState<boolean>(false);
   const [targetTeam, setTargetTeam] = useState<string>('Technical');
   const [inspectingCandidate, setInspectingCandidate] = useState<ReferralRecord | null>(null);
-  const [pendingStatusChange, setPendingStatusChange] = useState<{ docId?: string; regNo: string; newStatus: string } | null>(null);
+  const [pendingStatusChange, setPendingStatusChange] = useState<{ docId?: string; regNo: string; candidateName: string; newStatus: string } | null>(null);
 
-  // Parse email regex to get VIT Registration number
+  // Admin filter states
+  const [adminSearchQuery, setAdminSearchQuery] = useState<string>('');
+  const [adminTeamFilter, setAdminTeamFilter] = useState<string>('All');
+  const [adminStatusFilter, setAdminStatusFilter] = useState<string>('All');
+  const [showAdminFilters, setShowAdminFilters] = useState<boolean>(true);
+  const [syncToastMessage, setSyncToastMessage] = useState<string | null>(null);
+
   const extractRegNo = (emailAddress?: string | null) => {
     if (!emailAddress) return 'UNKNOWN';
     const match = emailAddress.match(/\b\d{2}[a-zA-Z]{3}\d{5}\b/);
@@ -341,11 +347,22 @@ const Referrals: React.FC<ReferralsProps> = ({ onRedirect }) => {
         const docRef = doc(db, 'referrals', docId);
         await updateDoc(docRef, { status: newStatus });
       }
+      setSyncToastMessage(`Candidate dossier status updated to ${newStatus.toUpperCase()}`);
+      setTimeout(() => setSyncToastMessage(null), 4000);
     } catch (err) {
       console.error('Error updating status in Firestore:', err);
     } finally {
       setIsUpdatingStatus(null);
       setPendingStatusChange(null);
+    }
+  };
+
+  const handleUpdateStatus = (docId?: string, regNo?: string, candidateName?: string, newStatus?: string) => {
+    if (!regNo || !newStatus) return;
+    if (newStatus === 'Admitted' || newStatus === 'Rejected') {
+      setPendingStatusChange({ docId, regNo, candidateName: candidateName || 'Candidate', newStatus });
+    } else {
+      executeStatusUpdate(docId, regNo, newStatus);
     }
   };
 
@@ -458,46 +475,92 @@ const Referrals: React.FC<ReferralsProps> = ({ onRedirect }) => {
     });
   };
 
+  const getActiveAdminReferrals = () => {
+    return referrals.filter(ref => {
+      // 1. Search Query Filter
+      if (adminSearchQuery.trim()) {
+        const query = adminSearchQuery.toLowerCase();
+        const cName = (getRefVal(ref, 'Candidate Name') || getRefVal(ref, 'candidateName')).toLowerCase();
+        const cReg = (getRefVal(ref, 'Candidate Registration Number') || getRefVal(ref, 'candidateRegNo')).toLowerCase();
+        const cEmail = (getRefVal(ref, 'Candidate Email') || getRefVal(ref, 'candidateEmail')).toLowerCase();
+        const cPhone = (getRefVal(ref, 'Candidate Phone') || getRefVal(ref, 'candidatePhone')).toLowerCase();
+        const rName = (getRefVal(ref, 'Referrer Name') || getRefVal(ref, 'referrerName')).toLowerCase();
+
+        if (!cName.includes(query) && !cReg.includes(query) && !cEmail.includes(query) && !cPhone.includes(query) && !rName.includes(query)) {
+          return false;
+        }
+      }
+
+      // 2. Team Filter
+      if (adminTeamFilter !== 'All') {
+        const team = getRefVal(ref, 'Target Team') || getRefVal(ref, 'targetTeam') || 'Technical';
+        if (team.toLowerCase() !== adminTeamFilter.toLowerCase()) return false;
+      }
+
+      // 3. Status Filter
+      if (adminStatusFilter !== 'All') {
+        const status = (getRefVal(ref, 'Status') || getRefVal(ref, 'status') || 'Pending').toLowerCase();
+        if (adminStatusFilter === 'Pending' && status !== 'pending') return false;
+        if (adminStatusFilter === 'In Process' && !status.includes('process')) return false;
+        if (adminStatusFilter === 'Invited to Interview' && !status.includes('interview')) return false;
+        if (adminStatusFilter === 'Interview Taken' && status !== 'interview taken') return false;
+        if (adminStatusFilter === 'Admitted' && status !== 'admitted') return false;
+        if (adminStatusFilter === 'Rejected' && status !== 'rejected') return false;
+      }
+
+      return true;
+    });
+  };
+
   const getStatusPill = (statusText?: string) => {
     const s = (statusText || 'Pending').toLowerCase();
     if (s === 'admitted') {
       return (
-        <span className="flex items-center gap-1 text-[10px] bg-green-500/20 border border-green-500/50 text-green-400 font-bold px-3 py-1 rounded-full uppercase font-code-sm">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+        <span className="flex items-center gap-1.5 text-[10px] bg-emerald-500/20 border border-emerald-400 text-emerald-300 font-extrabold px-3 py-1 rounded-full uppercase tracking-wider font-code-sm shadow-[0_0_12px_rgba(16,185,129,0.35)]">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
           ADMITTED
         </span>
       );
     }
     if (s.includes('interview')) {
       return (
-        <span className="flex items-center gap-1 text-[10px] bg-purple-500/20 border border-purple-500/50 text-purple-300 font-bold px-3 py-1 rounded-full uppercase font-code-sm">
-          <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse"></span>
+        <span className="flex items-center gap-1.5 text-[10px] bg-purple-500/20 border border-purple-400 text-purple-300 font-extrabold px-3 py-1 rounded-full uppercase tracking-wider font-code-sm shadow-[0_0_12px_rgba(168,85,247,0.35)]">
+          <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse"></span>
           INTERVIEW
         </span>
       );
     }
     if (s.includes('process')) {
       return (
-        <span className="flex items-center gap-1 text-[10px] bg-yellow-500/20 border border-yellow-500/50 text-yellow-300 font-bold px-3 py-1 rounded-full uppercase font-code-sm">
-          <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse"></span>
+        <span className="flex items-center gap-1.5 text-[10px] bg-amber-500/20 border border-amber-400 text-amber-300 font-extrabold px-3 py-1 rounded-full uppercase tracking-wider font-code-sm shadow-[0_0_12px_rgba(245,158,11,0.35)]">
+          <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
           IN PROCESS
         </span>
       );
     }
     if (s === 'rejected') {
       return (
-        <span className="flex items-center gap-1 text-[10px] bg-red-500/20 border border-red-500/50 text-red-400 font-bold px-3 py-1 rounded-full uppercase font-code-sm">
-          <span className="w-1.5 h-1.5 rounded-full bg-red-400"></span>
+        <span className="flex items-center gap-1.5 text-[10px] bg-red-500/20 border border-red-500 text-red-400 font-extrabold px-3 py-1 rounded-full uppercase tracking-wider font-code-sm shadow-[0_0_12px_rgba(239,68,68,0.35)]">
+          <span className="w-2 h-2 rounded-full bg-red-500"></span>
           REJECTED
         </span>
       );
     }
     return (
-      <span className="flex items-center gap-1 text-[10px] bg-cyan-500/20 border border-cyan-500/50 text-cyan-300 font-bold px-3 py-1 rounded-full uppercase font-code-sm">
-        <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+      <span className="flex items-center gap-1.5 text-[10px] bg-cyan-500/20 border border-cyan-400 text-cyan-300 font-extrabold px-3 py-1 rounded-full uppercase tracking-wider font-code-sm shadow-[0_0_12px_rgba(6,182,212,0.35)]">
+        <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
         PENDING
       </span>
     );
+  };
+
+  const getSelectStatusColor = (statusText?: string) => {
+    const s = (statusText || 'Pending').toLowerCase();
+    if (s === 'admitted') return 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300 font-bold';
+    if (s.includes('interview')) return 'bg-purple-950/80 border-purple-500/60 text-purple-300 font-bold';
+    if (s.includes('process')) return 'bg-amber-950/80 border-amber-500/60 text-amber-300 font-bold';
+    if (s === 'rejected') return 'bg-red-950/80 border-red-500/60 text-red-400 font-bold';
+    return 'bg-cyan-950/80 border-cyan-500/60 text-cyan-300 font-bold';
   };
 
   const leaderboard = getLeaderboardData();
@@ -966,50 +1029,280 @@ const Referrals: React.FC<ReferralsProps> = ({ onRedirect }) => {
           </div>
         )}
 
-        {/* TAB 4: ADMIN PANEL */}
+        {/* TAB 4: MASTER ADMIN CONTROL PANEL */}
         {activeTab === 'admin' && isMasterAdmin && (
-          <div className="glass-panel p-6 rounded-2xl border border-red-500/30 space-y-6 text-left">
-            <h3 className="text-xl font-bold text-white uppercase flex items-center gap-2">
-              <span className="material-symbols-outlined text-red-400">admin_panel_settings</span>
-              MASTER RECRUITMENT REGISTRY
-            </h3>
+          <div className="glass-panel p-6 md:p-8 rounded-2xl border border-red-500/30 space-y-6 text-left shadow-[0_0_40px_rgba(239,68,68,0.15)]">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/5 pb-4">
+              <div>
+                <h3 className="text-xl font-bold text-white uppercase flex items-center gap-2">
+                  <span className="material-symbols-outlined text-red-400">admin_panel_settings</span>
+                  Master Admin Control Panel
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Administrative overlay. Select the operation status for candidate dossiers. The database will update and re-calculate recruiter leaderboard scores immediately in referrals and analytics.
+                </p>
+              </div>
 
-            <div className="space-y-4">
-              {referrals.map((ref, idx) => {
-                const regNo = getRefVal(ref, 'Candidate Registration Number') || getRefVal(ref, 'candidateRegNo');
-                const docId = ref.id;
-                const status = getRefVal(ref, 'Status') || getRefVal(ref, 'status') || 'Pending';
-
-                return (
-                  <div key={idx} className="p-4 bg-black/50 border border-white/5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                      <h4 className="text-white font-bold text-sm">{getRefVal(ref, 'Candidate Name') || getRefVal(ref, 'candidateName')}</h4>
-                      <div className="flex items-center gap-3 text-xs text-slate-400 font-code-sm mt-1">
-                        <span>{regNo}</span>
-                        <span>•</span>
-                        <span>Referred by: {getRefVal(ref, 'Referrer Name') || getRefVal(ref, 'referrerName')}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <select
-                        value={status}
-                        onChange={(e) => executeStatusUpdate(docId, regNo, e.target.value)}
-                        className="bg-black/60 border border-purple-500/30 text-white text-xs rounded-xl px-3 py-2 font-code-sm focus:outline-none cursor-pointer"
-                      >
-                        <option value="Pending">Pending</option>
-                        <option value="In Process">In Process</option>
-                        <option value="Invited to Interview">Invited to Interview</option>
-                        <option value="Interview Taken">Interview Taken</option>
-                        <option value="Admitted">Admitted</option>
-                        <option value="Rejected">Rejected</option>
-                      </select>
-                      {getStatusPill(status)}
-                    </div>
-                  </div>
-                );
-              })}
+              <button
+                onClick={() => setShowAdminFilters(!showAdminFilters)}
+                className="self-start md:self-auto bg-black/50 border border-red-500/40 hover:border-red-500 text-red-300 px-4 py-2 rounded-xl text-xs font-bold font-label-caps transition-all flex items-center gap-2"
+              >
+                <span className="material-symbols-outlined text-sm">
+                  {showAdminFilters ? 'filter_list_off' : 'filter_alt'}
+                </span>
+                <span>{showAdminFilters ? 'HIDE FILTERS' : 'FILTER'}</span>
+              </button>
             </div>
+
+            {/* Candidate Dossiers Log Header & Filter Bar */}
+            {showAdminFilters && (
+              <div className="glass-panel p-4 rounded-xl border border-white/5 bg-black/40 flex flex-col md:flex-row md:items-center gap-4">
+                {/* Search Box */}
+                <div className="relative flex-1">
+                  <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-500 text-sm">
+                    search
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Search candidate name, registration number, email, phone, or referrer..."
+                    value={adminSearchQuery}
+                    onChange={(e) => setAdminSearchQuery(e.target.value)}
+                    className="w-full bg-black/60 border border-purple-500/30 rounded-lg pl-9 pr-8 py-2 text-xs text-white focus:outline-none focus:border-purple-500 placeholder:text-slate-500"
+                  />
+                  {adminSearchQuery && (
+                    <button 
+                      onClick={() => setAdminSearchQuery('')}
+                      className="absolute right-3 top-2 text-slate-400 hover:text-white text-xs"
+                    >
+                      clear
+                    </button>
+                  )}
+                </div>
+
+                {/* Team Filter */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <label className="text-[10px] font-label-caps text-purple-300 tracking-wider font-bold">TEAM:</label>
+                  <select
+                    value={adminTeamFilter}
+                    onChange={(e) => setAdminTeamFilter(e.target.value)}
+                    className="bg-[#0e0518] border border-purple-500/30 text-white rounded-lg px-3 py-1.5 text-xs focus:outline-none cursor-pointer font-label-caps"
+                  >
+                    <option value="All">All Teams</option>
+                    <option value="Design">Design</option>
+                    <option value="Education">Education</option>
+                    <option value="Esports(Mobile)">Esports(Mobile)</option>
+                    <option value="Esports(PC)">Esports(PC)</option>
+                    <option value="PR">PR</option>
+                    <option value="Social Media">Social Media</option>
+                    <option value="Technical">Technical</option>
+                  </select>
+                </div>
+
+                {/* Status Filter */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <label className="text-[10px] font-label-caps text-purple-300 tracking-wider font-bold">STATUS:</label>
+                  <select
+                    value={adminStatusFilter}
+                    onChange={(e) => setAdminStatusFilter(e.target.value)}
+                    className="bg-[#0e0518] border border-purple-500/30 text-white rounded-lg px-3 py-1.5 text-xs focus:outline-none cursor-pointer font-label-caps"
+                  >
+                    <option value="All">All Active</option>
+                    <option value="Pending">Pending</option>
+                    <option value="In Process">In Process</option>
+                    <option value="Invited to Interview">Interview</option>
+                    <option value="Interview Taken">Interview Taken</option>
+                    <option value="Admitted">Admitted</option>
+                    <option value="Rejected">Rejected</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {/* Candidate Dossiers Log Table */}
+            <div className="overflow-x-auto custom-scrollbar">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-purple-500/20 text-xs text-slate-400 font-label-caps tracking-widest font-bold">
+                    <th className="py-3 px-4 font-bold text-left">CANDIDATE</th>
+                    <th className="py-3 px-4 font-bold text-left">REFERRER</th>
+                    <th className="py-3 px-4 font-bold text-left">TARGET TEAM</th>
+                    <th className="py-3 px-4 font-bold text-right">DOSSIER STATUS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {getActiveAdminReferrals().length > 0 ? (
+                    getActiveAdminReferrals().map((ref, idx) => {
+                      const cName = getRefVal(ref, "Candidate Name") || getRefVal(ref, "candidateName") || "Candidate Profile";
+                      const cReg = getRefVal(ref, "Candidate Registration Number") || getRefVal(ref, "candidateRegNo") || "UNKNOWN";
+                      const refName = getRefVal(ref, "Referrer Name") || getRefVal(ref, "referrerName") || "VRGC Recruiter";
+                      const refReg = getRefVal(ref, "Referrer Registration Number") || getRefVal(ref, "referrerRegNo") || "UNKNOWN";
+                      const currentStatus = getRefVal(ref, "Status") || getRefVal(ref, "status") || "Pending";
+                      const isUpdating = isUpdatingStatus === cReg;
+
+                      return (
+                        <tr 
+                          key={cReg + idx}
+                          onClick={() => setInspectingCandidate(ref)}
+                          className="border-b border-white/5 hover:bg-white/5 cursor-pointer transition-colors duration-200"
+                        >
+                          <td className="py-4 px-4 text-left">
+                            <div className="font-bold text-white">{cName}</div>
+                            <div className="text-xs text-purple-400 font-code-sm">{cReg}</div>
+                            <div className="text-[10px] text-slate-400 truncate max-w-[160px]">
+                              {getRefVal(ref, "Candidate Email") || getRefVal(ref, "candidateEmail")}
+                            </div>
+                          </td>
+                          <td className="py-4 px-4 text-xs text-left">
+                            <div className="font-bold text-slate-200">{refName}</div>
+                            <div className="text-slate-400 font-code-sm">{refReg}</div>
+                          </td>
+                          <td className="py-4 px-4 text-xs text-yellow-400 font-bold text-left">
+                            {getRefVal(ref, "Target Team") || getRefVal(ref, "targetTeam") || "Technical"}
+                          </td>
+                          <td className="py-4 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                            <div className="inline-flex items-center gap-2">
+                              {isUpdating && (
+                                <span className="material-symbols-outlined animate-spin text-purple-400 text-base">sync</span>
+                              )}
+                              <select
+                                disabled={isUpdating}
+                                value={currentStatus}
+                                onChange={(e) => handleUpdateStatus(ref.id, cReg, cName, e.target.value)}
+                                className={`rounded-lg px-3 py-1.5 text-xs focus:outline-none cursor-pointer font-label-caps transition-all ${getSelectStatusColor(currentStatus)}`}
+                              >
+                                <option value="Pending">Pending</option>
+                                <option value="In Process">In Process</option>
+                                <option value="Invited to Interview">Interview</option>
+                                <option value="Interview Taken">Interview Taken</option>
+                                <option value="Admitted">Admitted</option>
+                                <option value="Rejected">Rejected</option>
+                              </select>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={4} className="py-12 text-center text-slate-500 italic">
+                        No candidate referral records match the selected filters.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Status Confirmation Modal */}
+        {pendingStatusChange && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <div className="glass-panel p-8 rounded-2xl max-w-md w-full text-center space-y-6 border border-purple-500/30 shadow-[0_0_50px_rgba(0,0,0,0.8)]">
+              <span className={`material-symbols-outlined text-[64px] animate-pulse ${
+                pendingStatusChange.newStatus.toLowerCase() === 'rejected' ? 'text-red-500' : 'text-green-400'
+              }`}>
+                {pendingStatusChange.newStatus.toLowerCase() === 'rejected' ? 'cancel_presentation' : 'verified'}
+              </span>
+              <div className="space-y-2">
+                <h3 className="font-display-lg text-2xl text-white font-extrabold uppercase">
+                  Confirm Candidate Action
+                </h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Are you sure you want to change the status of candidate <strong className="text-white">"{pendingStatusChange.candidateName}"</strong> to <strong className={pendingStatusChange.newStatus.toLowerCase() === 'rejected' ? 'text-red-400' : 'text-green-400'}>{pendingStatusChange.newStatus.toUpperCase()}</strong>?
+                </p>
+              </div>
+              <div className="flex gap-4 pt-2">
+                <button
+                  onClick={() => setPendingStatusChange(null)}
+                  className="flex-1 py-3 border border-purple-500/30 hover:bg-white/5 rounded-xl font-label-caps text-xs text-white tracking-widest"
+                >
+                  CANCEL
+                </button>
+                <button
+                  onClick={() => {
+                    const { docId, regNo, newStatus } = pendingStatusChange;
+                    executeStatusUpdate(docId, regNo, newStatus);
+                  }}
+                  className={`flex-1 py-3 rounded-xl font-label-caps text-xs text-black font-black tracking-widest ${
+                    pendingStatusChange.newStatus.toLowerCase() === 'rejected' 
+                      ? 'bg-red-500 hover:bg-red-600' 
+                      : 'bg-green-400 hover:bg-green-500'
+                  }`}
+                >
+                  CONFIRM
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Candidate Detail Inspector Modal */}
+        {inspectingCandidate && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <div className="glass-panel p-8 rounded-2xl max-w-lg w-full text-left space-y-6 border border-purple-500/30 shadow-[0_0_50px_rgba(0,0,0,0.8)]">
+              <div className="flex justify-between items-start border-b border-purple-500/20 pb-4">
+                <div>
+                  <h3 className="font-display-lg text-2xl text-white font-extrabold">
+                    Candidate Dossier
+                  </h3>
+                  <p className="text-[10px] text-purple-400 font-code-sm uppercase tracking-wider mt-0.5">
+                    ID: {inspectingCandidate.id || 'LOCAL_RECORD'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setInspectingCandidate(null)}
+                  className="p-1 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white"
+                >
+                  <span className="material-symbols-outlined text-xl">close</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                <div>
+                  <span className="text-[10px] text-purple-300 font-label-caps tracking-widest block font-bold">CANDIDATE NAME</span>
+                  <span className="text-sm font-bold text-white block">{getRefVal(inspectingCandidate, "Candidate Name") || getRefVal(inspectingCandidate, "candidateName")}</span>
+                </div>
+                
+                <div>
+                  <span className="text-[10px] text-purple-300 font-label-caps tracking-widest block font-bold">REGISTRATION NUMBER</span>
+                  <span className="text-sm font-bold text-purple-400 font-code-sm block">{getRefVal(inspectingCandidate, "Candidate Registration Number") || getRefVal(inspectingCandidate, "candidateRegNo")}</span>
+                </div>
+
+                <div>
+                  <span className="text-[10px] text-purple-300 font-label-caps tracking-widest block font-bold">EMAIL ADDRESS</span>
+                  <span className="text-sm font-bold text-white block truncate">{getRefVal(inspectingCandidate, "Candidate Email") || getRefVal(inspectingCandidate, "candidateEmail")}</span>
+                </div>
+
+                <div>
+                  <span className="text-[10px] text-purple-300 font-label-caps tracking-widest block font-bold">PHONE NUMBER</span>
+                  <span className="text-sm font-bold text-white block">{getRefVal(inspectingCandidate, "Candidate Phone") || getRefVal(inspectingCandidate, "candidatePhone")}</span>
+                </div>
+
+                <div>
+                  <span className="text-[10px] text-purple-300 font-label-caps tracking-widest block font-bold">TARGETED TEAM</span>
+                  <span className="text-sm font-bold text-yellow-400 block">{getRefVal(inspectingCandidate, "Target Team") || getRefVal(inspectingCandidate, "targetTeam") || "Technical"}</span>
+                </div>
+
+                <div>
+                  <span className="text-[10px] text-purple-300 font-label-caps tracking-widest block font-bold">SUBMISSION TIMESTAMP</span>
+                  <span className="text-sm font-bold text-white block">{new Date(getRefVal(inspectingCandidate, "Timestamp") || getRefVal(inspectingCandidate, "timestamp") || new Date()).toLocaleString()}</span>
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center border-t border-purple-500/20 pt-4">
+                <span className="text-[10px] text-purple-300 font-label-caps tracking-widest font-bold">DOSSIER STATUS</span>
+                {getStatusPill(getRefVal(inspectingCandidate, "Status") || getRefVal(inspectingCandidate, "status"))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Sync Toast Notification */}
+        {syncToastMessage && (
+          <div className="fixed bottom-6 right-6 z-50 glass-panel p-4 rounded-xl border border-green-500/40 bg-black/90 flex items-center gap-3 text-left shadow-[0_10px_30px_rgba(0,0,0,0.8)]">
+            <span className="material-symbols-outlined text-green-400 text-lg">check_circle</span>
+            <span className="text-xs text-white font-bold">{syncToastMessage}</span>
           </div>
         )}
 
