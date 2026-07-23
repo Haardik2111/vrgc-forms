@@ -1605,7 +1605,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                   <span>Candidate Dossier Submissions</span>
                   <span className="px-3 py-1 rounded-full bg-purple-500/20 border border-purple-500/40 text-purple-300 text-xs font-bold font-code-sm shadow-[0_0_15px_rgba(168,85,247,0.2)] flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                    {candidates.length} /  REGISTERED
+                    {candidates.length} / {loadedMembersList.length  || 48} REGISTERED
                   </span>
                 </h3>
                 <p className="text-xs text-on-surface-variant max-w-lg mt-0.5">
@@ -1732,7 +1732,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                   <span className="text-white/80 font-bold">TOTAL REGISTERED:</span>
                   <span className="text-primary font-black text-sm">{candidates.length}</span>
-                  <span className="text-white/40 font-bold">/ 48</span>
+                  <span className="text-white/40 font-bold">/ {loadedMembersList.length  || 48}</span>
                 </div>
                 {filteredCandidates.length !== candidates.length && (
                   <div className="text-purple-300/90 text-[11px] font-medium bg-purple-500/10 border border-purple-500/20 px-2.5 py-0.5 rounded-full">
