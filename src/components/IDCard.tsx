@@ -676,9 +676,9 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
   };
 
   const toggleStatus = async (candidate: CandidateSubmission) => {
-    if (candidate.status === 'Approved') return;
     try {
-      const newStatus = 'Approved';
+      const currentStatus = candidate.status || 'Pending';
+      const newStatus = currentStatus === 'Approved' ? 'Pending' : 'Approved';
       await updateDoc(doc(db, 'id_cards', candidate.email.toLowerCase()), {
         status: newStatus
       });
@@ -1614,17 +1614,19 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                                 <span className="material-symbols-outlined text-sm">style</span>
                               </button>
 
-                              {c.status !== 'Approved' && (
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); toggleStatus(c); }}
-                                  className="p-2 rounded-lg border transition-all shrink-0 bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20"
-                                  title="Approve Dossier"
-                                >
-                                  <span className="material-symbols-outlined text-sm">
-                                    verified
-                                  </span>
-                                </button>
-                              )}
+                              <button
+                                onClick={(e) => { e.stopPropagation(); toggleStatus(c); }}
+                                className={`p-2 rounded-lg border transition-all shrink-0 ${
+                                  c.status === 'Approved'
+                                    ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20'
+                                    : 'bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20'
+                                }`}
+                                title={c.status === 'Approved' ? 'Mark as Pending' : 'Approve Dossier'}
+                              >
+                                <span className="material-symbols-outlined text-sm">
+                                  {c.status === 'Approved' ? 'history' : 'verified'}
+                                </span>
+                              </button>
 
                               <button
                                 disabled={downloadingId === c.id}
@@ -1648,142 +1650,29 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                           </div>
 
                           {/* MOBILE CLEAN DOSSIER CARD VIEW */}
-                          <div className="flex md:hidden flex-col p-3.5 space-y-2.5">
-                            <div className="flex items-center justify-between gap-2.5">
-                              <div className="flex items-center gap-3 min-w-0 flex-1">
-                                <div className="w-10 h-10 rounded-lg border border-primary/30 bg-black/40 overflow-hidden shrink-0">
-                                  <img src={c.photoUrl} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <div className="font-bold text-white text-xs truncate">{c.name}</div>
-                                  <div className="text-[10px] text-primary font-code-sm font-bold">{c.registrationNumber}</div>
-                                </div>
+                          <div className="flex md:hidden items-center justify-between p-3.5 gap-3">
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <div className="w-11 h-11 rounded-lg border border-primary/30 bg-black/40 overflow-hidden shrink-0">
+                                <img src={c.photoUrl} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                               </div>
-
-                              <div className="flex items-center gap-2 shrink-0">
-                                <span
-                                  className={`px-2 py-0.5 rounded-full border text-[8px] font-label-caps font-bold tracking-wider ${
-                                    c.status === 'Approved'
-                                      ? 'bg-green-500/10 border-green-500/30 text-green-400'
-                                      : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400'
-                                  }`}
-                                >
-                                  {c.status || 'Pending'}
-                                </span>
-
-                                {/* Mobile 3-Dots Menu Box */}
-                                <div className="relative">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      const menuKey = c.id || c.email;
-                                      const rect = e.currentTarget.getBoundingClientRect();
-                                      const spaceBelow = window.innerHeight - rect.bottom;
-                                      const openUp = spaceBelow < 220;
-                                      setMenuDirections(prev => ({ ...prev, [menuKey]: openUp ? 'up' : 'down' }));
-                                      setOpenMenuId(openMenuId === menuKey ? null : menuKey);
-                                    }}
-                                    className="p-1.5 rounded-lg bg-black/60 border border-white/10 text-white/80 hover:text-white hover:border-purple-500/50 transition-all"
-                                    title="Actions Menu"
-                                  >
-                                    <span className="material-symbols-outlined text-base">more_vert</span>
-                                  </button>
-
-                                  {openMenuId === (c.id || c.email) && (
-                                    <div
-                                      onClick={(e) => e.stopPropagation()}
-                                      className={`absolute right-0 ${
-                                        menuDirections[c.id || c.email] === 'up' ? 'bottom-full mb-2' : 'top-9'
-                                      } z-[300] w-48 bg-[#12081c] border border-[#a855f7]/40 backdrop-blur-2xl rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.9)] py-1.5 text-xs font-body-md`}
-                                    >
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setOpenMenuId(null);
-                                          setPreviewCandidate(c);
-                                          setPreviewModalTab('card');
-                                          setPreviewFlipped(false);
-                                        }}
-                                        className="w-full px-3.5 py-2.5 text-left flex items-center gap-2.5 text-purple-400 font-bold hover:bg-white/10 transition-colors"
-                                      >
-                                        <span className="material-symbols-outlined text-base">style</span>
-                                        <span>3D Card View</span>
-                                      </button>
-
-                                      {c.status !== 'Approved' && (
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setOpenMenuId(null);
-                                            toggleStatus(c);
-                                          }}
-                                          className="w-full px-3.5 py-2.5 text-left flex items-center gap-2.5 hover:bg-white/10 transition-colors text-green-400 font-bold"
-                                        >
-                                          <span className="material-symbols-outlined text-base">
-                                            verified
-                                          </span>
-                                          <span>Approve Dossier</span>
-                                        </button>
-                                      )}
-
-                                      <button
-                                        disabled={downloadingId === c.id}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setOpenMenuId(null);
-                                          handleDownload(c);
-                                        }}
-                                        className="w-full px-3.5 py-2.5 text-left flex items-center gap-2.5 text-white/90 hover:bg-white/10 transition-colors font-bold"
-                                      >
-                                        <span className={`material-symbols-outlined text-base ${downloadingId === c.id ? 'animate-spin' : ''}`}>
-                                          {downloadingId === c.id ? 'sync' : 'download'}
-                                        </span>
-                                        <span>Download ID Photo</span>
-                                      </button>
-
-                                      {c.avatarUrl && (
-                                        <button
-                                          disabled={downloadingAvatarId === (c.id || c.email)}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setOpenMenuId(null);
-                                            handleDownloadAvatar(c);
-                                          }}
-                                          className="w-full px-3.5 py-2.5 text-left flex items-center gap-2.5 text-purple-300 hover:bg-white/10 transition-colors font-bold"
-                                        >
-                                          <span className={`material-symbols-outlined text-base ${downloadingAvatarId === (c.id || c.email) ? 'animate-spin' : ''}`}>
-                                            {downloadingAvatarId === (c.id || c.email) ? 'sync' : 'sports_esports'}
-                                          </span>
-                                          <span>Download Avatar</span>
-                                        </button>
-                                      )}
-
-                                      <div className="my-1 border-t border-white/10"></div>
-
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setOpenMenuId(null);
-                                          handleDelete(c);
-                                        }}
-                                        className="w-full px-3.5 py-2.5 text-left flex items-center gap-2.5 text-red-400 hover:bg-red-500/20 transition-colors font-bold"
-                                      >
-                                        <span className="material-symbols-outlined text-base">delete</span>
-                                        <span>Delete Dossier</span>
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="font-bold text-white text-xs truncate">{c.name}</div>
+                                <div className="text-[10px] text-primary font-code-sm font-bold truncate">{c.registrationNumber}</div>
+                                <div className="text-[10px] text-white/50 font-code-sm truncate">{c.team || display.value}</div>
                               </div>
                             </div>
 
-                            <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/5 text-[10px]">
-                              <span className="px-2 py-0.5 rounded bg-purple-500/15 text-purple-300 font-bold uppercase text-[9px] font-label-caps border border-purple-500/20 truncate max-w-[150px]">
-                                {display.value}
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span
+                                className={`px-2.5 py-1 rounded-full border text-[9px] font-label-caps font-bold tracking-wider ${
+                                  c.status === 'Approved'
+                                    ? 'bg-green-500/10 border-green-500/30 text-green-400'
+                                    : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400'
+                                }`}
+                              >
+                                {c.status || 'Pending'}
                               </span>
-                              <span className="text-white/50 truncate font-code-sm text-[10px]">
-                                {c.email}
-                              </span>
+                              <span className="material-symbols-outlined text-white/40 text-sm">chevron_right</span>
                             </div>
                           </div>
                         </div>
@@ -1960,18 +1849,20 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                               <span>DOSSIER</span>
                             </button>
 
-                            {c.status !== 'Approved' && (
-                              <button
-                                type="button"
-                                onClick={() => toggleStatus(c)}
-                                className="p-1.5 rounded-lg border transition-all bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20"
-                                title="Approve Dossier"
-                              >
-                                <span className="material-symbols-outlined text-xs">
-                                  verified
-                                </span>
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => toggleStatus(c)}
+                              className={`p-1.5 rounded-lg border transition-all ${
+                                c.status === 'Approved'
+                                  ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20'
+                                  : 'bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20'
+                              }`}
+                              title={c.status === 'Approved' ? 'Mark as Pending' : 'Approve Dossier'}
+                            >
+                              <span className="material-symbols-outlined text-xs">
+                                {c.status === 'Approved' ? 'history' : 'verified'}
+                              </span>
+                            </button>
 
                             <button
                               type="button"
@@ -2373,17 +2264,19 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
             )}
 
             <div className="flex flex-col sm:flex-row gap-3.5 pt-6 border-t border-white/10">
-              {previewCandidate.status !== 'Approved' && (
-                <button
-                  onClick={() => toggleStatus(previewCandidate)}
-                  className="w-full sm:flex-1 font-bold py-3 px-6 rounded-full text-xs font-bold font-label-caps flex items-center justify-center gap-2 border transition-all duration-300 hover:scale-[1.01] bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20 shadow-[0_0_20px_rgba(74,222,128,0.15)]"
-                >
-                  <span className="material-symbols-outlined text-sm font-bold">
-                    verified
-                  </span>
-                  <span>APPROVE DOSSIER</span>
-                </button>
-              )}
+              <button
+                onClick={() => toggleStatus(previewCandidate)}
+                className={`w-full sm:flex-1 font-bold py-3 px-6 rounded-full text-xs font-bold font-label-caps flex items-center justify-center gap-2 border transition-all duration-300 hover:scale-[1.01] ${
+                  previewCandidate.status === 'Approved'
+                    ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20 shadow-[0_0_20px_rgba(250,204,21,0.15)]'
+                    : 'bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20 shadow-[0_0_20px_rgba(74,222,128,0.15)]'
+                }`}
+              >
+                <span className="material-symbols-outlined text-sm font-bold">
+                  {previewCandidate.status === 'Approved' ? 'history' : 'verified'}
+                </span>
+                <span>{previewCandidate.status === 'Approved' ? 'MARK PENDING' : 'APPROVE DOSSIER'}</span>
+              </button>
 
               <button
                 onClick={() => { handleDownload(previewCandidate); setPreviewCandidate(null); }}
