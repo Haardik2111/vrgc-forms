@@ -85,11 +85,8 @@ async function migrateQrCodes() {
       console.log(`--------------------------------------------------`);
       console.log(`Candidate: ${name} (${regNo}) | ${email}`);
 
-      if (data.qrCodeUrl && data.qrCodeUrl.includes('/qr-codes/')) {
-        console.log(`⏩ Already has Supabase QR code: ${data.qrCodeUrl}`);
-        skippedCount++;
-        continue;
-      }
+      // Force replace existing QR codes to update host URL to vrgcforms.vercel.app
+      console.log(`🔄 Re-generating 300x300 QR Code for ${regNo} (Host: vrgcforms.vercel.app)...`);
 
       console.log(`🔄 Generating 300x300 QR Code for ${regNo}...`);
       const qrBuffer = downloadQrCode(regNo);
