@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth, googleProvider, db } from '../lib/firebase';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
-import { collection, onSnapshot, doc, deleteDoc, updateDoc, setDoc, getDoc, addDoc, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot, doc, deleteDoc, updateDoc, setDoc, getDoc, addDoc, getDocs, query, orderBy, limit } from 'firebase/firestore';
 import { supabase } from '../lib/supabase';
 import { CONFIG } from '../lib/config';
 
@@ -32,6 +32,17 @@ interface CandidateSubmission {
   avatarUrl: string;
   submittedAt: string;
   status: string;
+}
+
+interface AdminActivityLog {
+  id?: string;
+  action: 'DELETE_DOSSIER' | 'APPROVE_DOSSIER' | 'REVERT_PENDING_DOSSIER' | 'FORCE_SHEETS_SYNC' | 'DATA_REPORT_SUBMITTED';
+  performedBy: string;
+  targetEmail?: string;
+  targetName?: string;
+  targetRegNo?: string;
+  details: string;
+  timestamp: string;
 }
 
 const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
@@ -103,6 +114,72 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [menuDirections, setMenuDirections] = useState<Record<string, 'up' | 'down'>>({});
   const [candidateToDelete, setCandidateToDelete] = useState<CandidateSubmission | null>(null);
+
+  // Admin Activity Logs States
+  const [adminSectionTab, setAdminSectionTab] = useState<'dossiers' | 'logs'>('dossiers');
+  const [adminLogs, setAdminLogs] = useState<AdminActivityLog[]>([]);
+  const [logSearchQuery, setLogSearchQuery] = useState<string>('');
+  const [logActionFilter, setLogActionFilter] = useState<string>('All');
+
+  // Log helper for admin activity audit trail
+  const logAdminAction = async (
+    action: AdminActivityLog['action'],
+    details: string,
+    targetEmail?: string,
+    targetName?: string,
+    targetRegNo?: string
+  ) => {
+    try {
+      if (!db || !currentUser) return;
+      const logEntry: AdminActivityLog = {
+        action,
+        performedBy: currentUser.email || 'Admin',
+        targetEmail: targetEmail || 'N/A',
+        targetName: targetName || 'N/A',
+        targetRegNo: targetRegNo || 'N/A',
+        details,
+        timestamp: new Date().toISOString()
+      };
+      await addDoc(collection(db, 'admin_logs'), logEntry);
+    } catch (err) {
+      console.error("Failed to write admin activity log:", err);
+    }
+  };
+
+  // Delete single activity log entry
+  const handleDeleteLog = async (logId?: string) => {
+    if (!logId || !db) return;
+    try {
+      await deleteDoc(doc(db, 'admin_logs', logId));
+      setAdminLogs(prev => prev.filter(l => l.id !== logId));
+      setSyncToastMessage("Activity log entry deleted.");
+      setTimeout(() => setSyncToastMessage(null), 3000);
+    } catch (err: any) {
+      console.error("Failed to delete log entry:", err);
+      setSyncToastMessage("Failed to delete log entry: " + (err?.message || err));
+      setTimeout(() => setSyncToastMessage(null), 4000);
+    }
+  };
+
+  // Real-time listener for admin_logs
+  useEffect(() => {
+    if (!isAdmin || !db) return;
+    try {
+      const logsQuery = query(collection(db, 'admin_logs'), orderBy('timestamp', 'desc'), limit(100));
+      const unsubscribe = onSnapshot(logsQuery, (snapshot) => {
+        const logsList: AdminActivityLog[] = [];
+        snapshot.forEach(docSnap => {
+          logsList.push({ id: docSnap.id, ...docSnap.data() } as AdminActivityLog);
+        });
+        setAdminLogs(logsList);
+      }, (error) => {
+        console.warn("Real-time admin logs listener notice:", error);
+      });
+      return () => unsubscribe();
+    } catch (e) {
+      console.warn("Could not query admin_logs:", e);
+    }
+  }, [isAdmin]);
 
   // Close mobile 3-dots menu on outside click
   useEffect(() => {
@@ -537,6 +614,11 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
       const results = await Promise.allSettled(syncPromises);
       const successCount = results.filter(r => r.status === 'fulfilled' && r.value).length;
 
+      logAdminAction(
+        'FORCE_SHEETS_SYNC',
+        `Initiated parallel sync to Google Sheets for ${sortedCandidates.length} candidate submissions`
+      );
+
       setSyncToastMessage(`Parallel sync completed! Transmitted ${successCount} active ID record(s) to Google Sheets.`);
       setTimeout(() => setSyncToastMessage(null), 4500);
       setSheetsCooldown(60);
@@ -667,6 +749,13 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
       }
 
       setSyncToastMessage(`Deleted submission for ${candidate.name}. Form response unlocked & Google Sheets notified.`);
+      logAdminAction(
+        'DELETE_DOSSIER',
+        `Deleted candidate ID card dossier for ${candidate.name} (${candidate.registrationNumber || 'No Reg'})`,
+        candidate.email,
+        candidate.name,
+        candidate.registrationNumber
+      );
       setTimeout(() => setSyncToastMessage(null), 4500);
     } catch (err: any) {
       console.error("Delete failed:", err);
@@ -682,6 +771,17 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
       await updateDoc(doc(db, 'id_cards', candidate.email.toLowerCase()), {
         status: newStatus
       });
+
+      // Log admin activity
+      logAdminAction(
+        newStatus === 'Approved' ? 'APPROVE_DOSSIER' : 'REVERT_PENDING_DOSSIER',
+        newStatus === 'Approved'
+          ? `Approved digital identity dossier for ${candidate.name} (${candidate.registrationNumber || 'No Reg'})`
+          : `Reverted dossier for ${candidate.name} (${candidate.registrationNumber || 'No Reg'}) back to Pending`,
+        candidate.email,
+        candidate.name,
+        candidate.registrationNumber
+      );
 
       // Update local state list
       setCandidates(prev => prev.map(c => 
@@ -1451,7 +1551,36 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
               </button>
             </div>
 
-            <div className="glass-panel p-3.5 sm:p-4 rounded-xl border border-white/5 bg-white/5 flex flex-col md:flex-row md:items-center gap-3 sm:gap-4">
+            {/* ADMIN SUB-SECTION TABS */}
+            <div className="flex items-center gap-2.5 border-b border-white/10 pb-3">
+              <button
+                onClick={() => setAdminSectionTab('dossiers')}
+                className={`px-4 py-2.5 rounded-xl text-xs font-bold font-label-caps tracking-wider flex items-center gap-2 transition-all duration-200 ${
+                  adminSectionTab === 'dossiers'
+                    ? 'bg-primary/20 border border-primary/40 text-white shadow-[0_0_15px_rgba(168,85,247,0.25)]'
+                    : 'bg-black/30 border border-white/5 text-white/60 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <span className="material-symbols-outlined text-base">badge</span>
+                <span>DOSSIERS ({candidates.length})</span>
+              </button>
+
+              <button
+                onClick={() => setAdminSectionTab('logs')}
+                className={`px-4 py-2.5 rounded-xl text-xs font-bold font-label-caps tracking-wider flex items-center gap-2 transition-all duration-200 ${
+                  adminSectionTab === 'logs'
+                    ? 'bg-primary/20 border border-primary/40 text-white shadow-[0_0_15px_rgba(168,85,247,0.25)]'
+                    : 'bg-black/30 border border-white/5 text-white/60 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <span className="material-symbols-outlined text-base">history</span>
+                <span>ACTIVITY LOGS ({adminLogs.length})</span>
+              </button>
+            </div>
+
+            {adminSectionTab === 'dossiers' && (
+              <div className="space-y-6">
+                <div className="glass-panel p-3.5 sm:p-4 rounded-xl border border-white/5 bg-white/5 flex flex-col md:flex-row md:items-center gap-3 sm:gap-4">
               <div className="relative flex-1 w-full">
                 <span className="material-symbols-outlined absolute left-3 top-2.5 text-outline text-sm">search</span>
                 <input
@@ -1906,6 +2035,169 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                 )}
               </div>
             </div>
+          </div>
+        )}
+
+          {/* ADMIN ACTIVITY LOGS SUBTAB */}
+            {adminSectionTab === 'logs' && (
+              <div className="space-y-4">
+                {/* Search & Action Filter Controls */}
+                <div className="glass-panel p-3.5 sm:p-4 rounded-xl border border-white/5 bg-white/5 flex flex-col md:flex-row md:items-center gap-3 sm:gap-4">
+                  <div className="relative flex-1 w-full">
+                    <span className="material-symbols-outlined absolute left-3 top-2.5 text-outline text-sm">search</span>
+                    <input
+                      type="text"
+                      placeholder="Search admin email, candidate name, reg number, or details..."
+                      value={logSearchQuery}
+                      onChange={(e) => setLogSearchQuery(e.target.value)}
+                      className="w-full bg-black/30 border border-outline-variant/30 rounded-lg pl-9 pr-4 py-2 text-xs text-white focus:outline-none focus:border-primary placeholder:text-white/25 transition-all duration-300"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <label className="text-[10px] font-label-caps text-outline tracking-wider font-bold">ACTION TYPE:</label>
+                    <select
+                      value={logActionFilter}
+                      onChange={(e) => setLogActionFilter(e.target.value)}
+                      className="bg-black/50 border border-outline-variant/30 text-white rounded-lg px-3 py-1.5 text-xs focus:ring-0 focus:border-primary cursor-pointer hover:bg-black/80 font-label-caps"
+                    >
+                      <option value="All">All Actions</option>
+                      <option value="APPROVE_DOSSIER">Approvals</option>
+                      <option value="REVERT_PENDING_DOSSIER">Reversions to Pending</option>
+                      <option value="DELETE_DOSSIER">Deletions</option>
+                      <option value="FORCE_SHEETS_SYNC">Google Sheets Syncs</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Audit Logs Table List */}
+                {(() => {
+                  const filteredLogs = adminLogs.filter(log => {
+                    const matchesSearch =
+                      !logSearchQuery.trim() ||
+                      (log.performedBy || '').toLowerCase().includes(logSearchQuery.toLowerCase()) ||
+                      (log.targetName || '').toLowerCase().includes(logSearchQuery.toLowerCase()) ||
+                      (log.targetRegNo || '').toLowerCase().includes(logSearchQuery.toLowerCase()) ||
+                      (log.details || '').toLowerCase().includes(logSearchQuery.toLowerCase());
+                    const matchesAction = logActionFilter === 'All' || log.action === logActionFilter;
+                    return matchesSearch && matchesAction;
+                  });
+
+                  if (filteredLogs.length === 0) {
+                    return (
+                      <div className="glass-panel p-12 rounded-2xl border border-white/5 bg-white/5 text-center space-y-3">
+                        <span className="material-symbols-outlined text-4xl text-white/30">find_in_page</span>
+                        <div className="text-white font-bold text-sm">No Activity Logs Found</div>
+                        <p className="text-xs text-white/50 max-w-md mx-auto">
+                          {logSearchQuery || logActionFilter !== 'All'
+                            ? 'No logs match your current search query or action type filter.'
+                            : 'All administrative activities (approvals, reversions to pending, deletions, syncs) will automatically record here in real-time.'}
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="glass-panel rounded-2xl border border-white/5 bg-black/40 overflow-hidden shadow-2xl">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="border-b border-white/10 bg-white/5 text-[10px] font-label-caps text-outline tracking-wider uppercase">
+                              <th className="py-3.5 px-4">Timestamp</th>
+                              <th className="py-3.5 px-4">Action</th>
+                              <th className="py-3.5 px-4">Admin Email</th>
+                              <th className="py-3.5 px-4">Target Candidate</th>
+                              <th className="py-3.5 px-4">Activity Details</th>
+                              <th className="py-3.5 px-4 text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5 text-xs">
+                            {filteredLogs.map(log => {
+                              const dateObj = new Date(log.timestamp);
+                              const formattedTime = isNaN(dateObj.getTime())
+                                ? log.timestamp
+                                : dateObj.toLocaleString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    second: '2-digit'
+                                  });
+
+                              let badgeStyle = 'bg-purple-500/20 text-purple-300 border-purple-500/30';
+                              let badgeLabel: string = log.action;
+                              let badgeIcon = 'info';
+
+                              if (log.action === 'APPROVE_DOSSIER') {
+                                badgeStyle = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
+                                badgeLabel = 'APPROVED';
+                                badgeIcon = 'verified';
+                              } else if (log.action === 'REVERT_PENDING_DOSSIER') {
+                                badgeStyle = 'bg-amber-500/20 text-amber-300 border-amber-500/40';
+                                badgeLabel = 'REVERTED PENDING';
+                                badgeIcon = 'history';
+                              } else if (log.action === 'DELETE_DOSSIER') {
+                                badgeStyle = 'bg-red-500/20 text-red-300 border-red-500/40';
+                                badgeLabel = 'DELETED';
+                                badgeIcon = 'delete';
+                              } else if (log.action === 'FORCE_SHEETS_SYNC') {
+                                badgeStyle = 'bg-purple-500/20 text-purple-300 border-purple-500/40';
+                                badgeLabel = 'SHEETS SYNC';
+                                badgeIcon = 'cloud_upload';
+                              }
+
+                              return (
+                                <tr key={log.id || log.timestamp + Math.random()} className="hover:bg-white/5 transition-colors">
+                                  <td className="py-3.5 px-4 font-code-sm text-[11px] text-white/70 whitespace-nowrap">
+                                    {formattedTime}
+                                  </td>
+                                  <td className="py-3.5 px-4 whitespace-nowrap">
+                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[9px] font-bold font-label-caps tracking-wider ${badgeStyle}`}>
+                                      <span className="material-symbols-outlined text-xs">{badgeIcon}</span>
+                                      <span>{badgeLabel}</span>
+                                    </span>
+                                  </td>
+                                  <td className="py-3.5 px-4 font-bold text-white text-[11px] whitespace-nowrap">
+                                    {log.performedBy}
+                                  </td>
+                                  <td className="py-3.5 px-4 whitespace-nowrap">
+                                    {log.targetName && log.targetName !== 'N/A' ? (
+                                      <div>
+                                        <div className="font-bold text-white text-[11px]">{log.targetName}</div>
+                                        <div className="text-[10px] text-primary font-code-sm">{log.targetRegNo}</div>
+                                      </div>
+                                    ) : (
+                                      <span className="text-white/40 text-[11px]">N/A</span>
+                                    )}
+                                  </td>
+                                  <td className="py-3.5 px-4 text-white/80 text-[11px]">
+                                    {log.details}
+                                  </td>
+                                  <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                                    <button
+                                      onClick={() => {
+                                        if (log.id && confirm("Are you sure you want to delete this activity log entry?")) {
+                                          handleDeleteLog(log.id);
+                                        }
+                                      }}
+                                      className="p-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 hover:border-red-500/40 transition-all shrink-0"
+                                      title="Delete Log Entry"
+                                    >
+                                      <span className="material-symbols-outlined text-xs">delete</span>
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
           </div>
         )}
 
