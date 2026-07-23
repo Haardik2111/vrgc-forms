@@ -676,9 +676,9 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
   };
 
   const toggleStatus = async (candidate: CandidateSubmission) => {
+    if (candidate.status === 'Approved') return;
     try {
-      const currentStatus = candidate.status || 'Pending';
-      const newStatus = currentStatus === 'Approved' ? 'Pending' : 'Approved';
+      const newStatus = 'Approved';
       await updateDoc(doc(db, 'id_cards', candidate.email.toLowerCase()), {
         status: newStatus
       });
@@ -1596,19 +1596,17 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                                 <span className="material-symbols-outlined text-sm">style</span>
                               </button>
 
-                              <button
-                                onClick={(e) => { e.stopPropagation(); toggleStatus(c); }}
-                                className={`p-2 rounded-lg border transition-all shrink-0 ${
-                                  c.status === 'Approved'
-                                    ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20'
-                                    : 'bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20'
-                                }`}
-                                title={c.status === 'Approved' ? 'Mark as Pending' : 'Approve Dossier'}
-                              >
-                                <span className="material-symbols-outlined text-sm">
-                                  {c.status === 'Approved' ? 'history' : 'verified'}
-                                </span>
-                              </button>
+                              {c.status !== 'Approved' && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); toggleStatus(c); }}
+                                  className="p-2 rounded-lg border transition-all shrink-0 bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20"
+                                  title="Approve Dossier"
+                                >
+                                  <span className="material-symbols-outlined text-sm">
+                                    verified
+                                  </span>
+                                </button>
+                              )}
 
                               <button
                                 disabled={downloadingId === c.id}
@@ -1694,21 +1692,21 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                                         <span>3D Card View</span>
                                       </button>
 
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setOpenMenuId(null);
-                                          toggleStatus(c);
-                                        }}
-                                        className={`w-full px-3.5 py-2.5 text-left flex items-center gap-2.5 hover:bg-white/10 transition-colors ${
-                                          c.status === 'Approved' ? 'text-yellow-400 font-bold' : 'text-green-400 font-bold'
-                                        }`}
-                                      >
-                                        <span className="material-symbols-outlined text-base">
-                                          {c.status === 'Approved' ? 'history' : 'verified'}
-                                        </span>
-                                        <span>{c.status === 'Approved' ? 'Mark Pending' : 'Approve Dossier'}</span>
-                                      </button>
+                                      {c.status !== 'Approved' && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenMenuId(null);
+                                            toggleStatus(c);
+                                          }}
+                                          className="w-full px-3.5 py-2.5 text-left flex items-center gap-2.5 hover:bg-white/10 transition-colors text-green-400 font-bold"
+                                        >
+                                          <span className="material-symbols-outlined text-base">
+                                            verified
+                                          </span>
+                                          <span>Approve Dossier</span>
+                                        </button>
+                                      )}
 
                                       <button
                                         disabled={downloadingId === c.id}
@@ -1944,20 +1942,18 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                               <span>DOSSIER</span>
                             </button>
 
-                            <button
-                              type="button"
-                              onClick={() => toggleStatus(c)}
-                              className={`p-1.5 rounded-lg border transition-all ${
-                                c.status === 'Approved'
-                                  ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20'
-                                  : 'bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20'
-                              }`}
-                              title={c.status === 'Approved' ? 'Mark as Pending' : 'Approve Dossier'}
-                            >
-                              <span className="material-symbols-outlined text-xs">
-                                {c.status === 'Approved' ? 'history' : 'verified'}
-                              </span>
-                            </button>
+                            {c.status !== 'Approved' && (
+                              <button
+                                type="button"
+                                onClick={() => toggleStatus(c)}
+                                className="p-1.5 rounded-lg border transition-all bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20"
+                                title="Approve Dossier"
+                              >
+                                <span className="material-symbols-outlined text-xs">
+                                  verified
+                                </span>
+                              </button>
+                            )}
 
                             <button
                               type="button"
@@ -2359,19 +2355,17 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
             )}
 
             <div className="flex flex-col sm:flex-row gap-3.5 pt-6 border-t border-white/10">
-              <button
-                onClick={() => toggleStatus(previewCandidate)}
-                className={`w-full sm:flex-1 font-bold py-3 px-6 rounded-full text-xs font-bold font-label-caps flex items-center justify-center gap-2 border transition-all duration-300 hover:scale-[1.01] ${
-                  previewCandidate.status === 'Approved'
-                    ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20 shadow-[0_0_20px_rgba(250,204,21,0.15)]'
-                    : 'bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20 shadow-[0_0_20px_rgba(74,222,128,0.15)]'
-                }`}
-              >
-                <span className="material-symbols-outlined text-sm font-bold">
-                  {previewCandidate.status === 'Approved' ? 'history' : 'verified'}
-                </span>
-                <span>{previewCandidate.status === 'Approved' ? 'MARK PENDING' : 'APPROVE DOSSIER'}</span>
-              </button>
+              {previewCandidate.status !== 'Approved' && (
+                <button
+                  onClick={() => toggleStatus(previewCandidate)}
+                  className="w-full sm:flex-1 font-bold py-3 px-6 rounded-full text-xs font-bold font-label-caps flex items-center justify-center gap-2 border transition-all duration-300 hover:scale-[1.01] bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20 shadow-[0_0_20px_rgba(74,222,128,0.15)]"
+                >
+                  <span className="material-symbols-outlined text-sm font-bold">
+                    verified
+                  </span>
+                  <span>APPROVE DOSSIER</span>
+                </button>
+              )}
 
               <button
                 onClick={() => { handleDownload(previewCandidate); setPreviewCandidate(null); }}
