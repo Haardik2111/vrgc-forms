@@ -146,9 +146,12 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
     }
   };
 
-  // Delete single activity log entry
   const handleDeleteLog = async (logId?: string) => {
     if (!logId || !db) return;
+    const userEmail = (currentUser?.email || '').toLowerCase();
+    if (userEmail !== 'abhinav.25bcy10254@vitbhopal.ac.in') {
+      return;
+    }
     try {
       await deleteDoc(doc(db, 'admin_logs', logId));
       setAdminLogs(prev => prev.filter(l => l.id !== logId));
@@ -156,8 +159,6 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
       setTimeout(() => setSyncToastMessage(null), 3000);
     } catch (err: any) {
       console.error("Failed to delete log entry:", err);
-      setSyncToastMessage("Failed to delete log entry: " + (err?.message || err));
-      setTimeout(() => setSyncToastMessage(null), 4000);
     }
   };
 
@@ -2096,6 +2097,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
 
                 {/* Audit Logs Table List */}
                 {(() => {
+                  const canDeleteLogs = (currentUser?.email || '').toLowerCase() === 'abhinav.25bcy10254@vitbhopal.ac.in';
                   const filteredLogs = adminLogs.filter(log => {
                     const matchesSearch =
                       !logSearchQuery.trim() ||
@@ -2132,7 +2134,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                               <th className="py-3.5 px-4">Admin Email</th>
                               <th className="py-3.5 px-4">Target Candidate</th>
                               <th className="py-3.5 px-4">Activity Details</th>
-                              <th className="py-3.5 px-4 text-right">Actions</th>
+                              {canDeleteLogs && <th className="py-3.5 px-4 text-right">Actions</th>}
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-white/5 text-xs">
@@ -2198,19 +2200,21 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                                   <td className="py-3.5 px-4 text-white/80 text-[11px]">
                                     {log.details}
                                   </td>
-                                  <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                                    <button
-                                      onClick={() => {
-                                        if (log.id && confirm("Are you sure you want to delete this activity log entry?")) {
-                                          handleDeleteLog(log.id);
-                                        }
-                                      }}
-                                      className="p-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 hover:border-red-500/40 transition-all shrink-0"
-                                      title="Delete Log Entry"
-                                    >
-                                      <span className="material-symbols-outlined text-xs">delete</span>
-                                    </button>
-                                  </td>
+                                  {canDeleteLogs && (
+                                    <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                                      <button
+                                        onClick={() => {
+                                          if (log.id && confirm("Are you sure you want to delete this activity log entry?")) {
+                                            handleDeleteLog(log.id);
+                                          }
+                                        }}
+                                        className="p-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 hover:border-red-500/40 transition-all shrink-0"
+                                        title="Delete Log Entry"
+                                      >
+                                        <span className="material-symbols-outlined text-xs">delete</span>
+                                      </button>
+                                    </td>
+                                  )}
                                 </tr>
                               );
                             })}
