@@ -642,18 +642,26 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
     const matchesSearch = name.includes(search) || reg.includes(search) || email.includes(search);
     
     let matchesTeam = false;
+    const teamLower = (c.team || '').toLowerCase();
+    const posLower = (c.position || '').toLowerCase();
+    const selLower = selectedTeam.toLowerCase();
+
     if (selectedTeam === 'All') {
       matchesTeam = true;
-    } else if (selectedTeam.toLowerCase() === 'management') {
-      const team = (c.team || '').toLowerCase();
-      const pos = (c.position || '').toLowerCase();
+    } else if (selLower === 'management') {
       matchesTeam = 
-        team.includes('management') || 
-        team.includes('coordinator') || 
-        team.includes('president') ||
-        pos.includes('management') || 
-        pos.includes('coordinator') || 
-        pos.includes('president');
+        teamLower.includes('management') || 
+        teamLower.includes('coordinator') || 
+        teamLower.includes('president') ||
+        posLower.includes('management') || 
+        posLower.includes('coordinator') || 
+        posLower.includes('president');
+    } else if (selLower.includes('esports') && selLower.includes('pc')) {
+      matchesTeam = teamLower.includes('esports') && teamLower.includes('pc');
+    } else if (selLower.includes('esports') && selLower.includes('mobile')) {
+      matchesTeam = teamLower.includes('esports') && teamLower.includes('mobile');
+    } else if (selLower === 'esports') {
+      matchesTeam = teamLower.includes('esports');
     } else {
       matchesTeam = c.team && c.team.toLowerCase() === selectedTeam.toLowerCase();
     }
@@ -1390,7 +1398,8 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                     <option value="All">All Teams</option>
                     <option value="Design">Design</option>
                     <option value="Education">Education</option>
-                    <option value="Esports">Esports</option>
+                    <option value="Esports (PC)">Esports (PC)</option>
+                    <option value="Esports (Mobile)">Esports (Mobile)</option>
                     <option value="PR">PR</option>
                     <option value="Social Media">Social Media</option>
                     <option value="Technical">Technical</option>

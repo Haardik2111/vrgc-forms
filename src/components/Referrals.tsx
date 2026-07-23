@@ -1096,8 +1096,8 @@ const Referrals: React.FC<ReferralsProps> = ({ onRedirect }) => {
                     <option value="All">All Teams</option>
                     <option value="Design">Design</option>
                     <option value="Education">Education</option>
-                    <option value="Esports(Mobile)">Esports(Mobile)</option>
-                    <option value="Esports(PC)">Esports(PC)</option>
+                    <option value="Esports (PC)">Esports (PC)</option>
+                    <option value="Esports (Mobile)">Esports (Mobile)</option>
                     <option value="PR">PR</option>
                     <option value="Social Media">Social Media</option>
                     <option value="Technical">Technical</option>
