@@ -90,6 +90,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
   const [loadingData, setLoadingData] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedTeam, setSelectedTeam] = useState<string>('All');
+  const [selectedStatus, setSelectedStatus] = useState<string>('All');
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [previewCandidate, setPreviewCandidate] = useState<CandidateSubmission | null>(null);
   
@@ -682,7 +683,11 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
       matchesTeam = c.team && c.team.toLowerCase() === selectedTeam.toLowerCase();
     }
 
-    return matchesSearch && matchesTeam;
+    const matchesStatus =
+      selectedStatus === 'All' ||
+      (c.status || 'Pending').toLowerCase() === selectedStatus.toLowerCase();
+
+    return matchesSearch && matchesTeam && matchesStatus;
   });
 
   if (authLoading) {
@@ -1403,13 +1408,13 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                 />
               </div>
 
-              <div className="flex items-center justify-between md:justify-end gap-3 shrink-0 w-full md:w-auto">
+              <div className="flex flex-wrap items-center justify-between md:justify-end gap-3 shrink-0 w-full md:w-auto">
                 <div className="flex items-center gap-2 min-w-0">
                   <label className="text-[10px] font-label-caps text-outline tracking-wider font-bold shrink-0">TEAM:</label>
                   <select
                     value={selectedTeam}
                     onChange={(e) => setSelectedTeam(e.target.value)}
-                    className="bg-black/50 border border-outline-variant/30 text-white rounded-lg px-3 py-1.5 text-xs focus:ring-0 focus:border-primary cursor-pointer hover:bg-black/80 font-label-caps shrink-0"
+                    className="w-full sm:w-auto bg-black/50 border border-outline-variant/30 text-white rounded-lg px-3 py-1.5 text-xs focus:ring-0 focus:border-primary cursor-pointer hover:bg-black/80 font-label-caps shrink-0"
                   >
                     <option value="All">All Teams</option>
                     <option value="Design">Design</option>
@@ -1420,6 +1425,22 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                     <option value="Social Media">Social Media</option>
                     <option value="Technical">Technical</option>
                     <option value="Management">Management</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <label className="text-[10px] font-label-caps text-outline tracking-wider font-bold">
+                    STATUS:
+                  </label>
+
+                  <select
+                    value={selectedStatus}
+                    onChange={(e) => setSelectedStatus(e.target.value)}
+                    className="w-full sm:w-auto bg-black/50 border border-outline-variant/30 text-white rounded-lg px-3 py-1.5 text-xs focus:ring-0 focus:border-primary cursor-pointer hover:bg-black/80 font-label-caps"
+                  >
+                    <option value="All">All</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Approved">Approved</option>
                   </select>
                 </div>
 
