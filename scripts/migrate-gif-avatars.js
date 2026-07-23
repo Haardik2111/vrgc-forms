@@ -6,17 +6,36 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
+function loadEnv() {
+  const envPath = path.join(__dirname, '..', '.env.local');
+  if (fs.existsSync(envPath)) {
+    const content = fs.readFileSync(envPath, 'utf8');
+    content.split('\n').forEach(line => {
+      const trimmed = line.trim();
+      if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+        const idx = trimmed.indexOf('=');
+        const key = trimmed.substring(0, idx).trim();
+        const val = trimmed.substring(idx + 1).trim();
+        if (key && !process.env[key]) {
+          process.env[key] = val;
+        }
+      }
+    });
+  }
+}
+loadEnv();
+
 const firebaseConfig = {
-  apiKey: "AIzaSyANu9lQsIX2JXGoViJ_Oag66Cltd0YzXI0",
-  authDomain: "vrgc-form.firebaseapp.com",
-  projectId: "vrgc-form",
-  storageBucket: "vrgc-form.firebasestorage.app",
-  messagingSenderId: "830392164988",
-  appId: "1:830392164988:web:9613ae484e4ab64d281ff9"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
-const supabaseUrl = "https://fopyejijjeoumimsdgiz.supabase.co";
-const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZvcHllamlqamVvdW1pbXNkZ2l6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ3Mjg4NDMsImV4cCI6MjEwMDMwNDg0M30.NQVEJKOzJnNoFGs8tgDTkbMrc4OgE_w9bhSpsZ4Cxm4";
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 const sanitize = (str) => (str || '').replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
 
