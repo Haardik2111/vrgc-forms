@@ -92,6 +92,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
   const [selectedTeam, setSelectedTeam] = useState<string>('All');
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadingAvatarId, setDownloadingAvatarId] = useState<string | null>(null);
   const [previewCandidate, setPreviewCandidate] = useState<CandidateSubmission | null>(null);
   
   // Admin 3D Card View & Flipping states
@@ -386,15 +387,36 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
         let avatarExt = 'gif';
 
         if (!uploadBlob && avatarUrlInput.trim()) {
+          const gifUrl = avatarUrlInput.trim();
           try {
-            // Fetch pasted GIF link and convert to Blob for Supabase storage
-            const gifRes = await fetch(avatarUrlInput.trim());
-            uploadBlob = await gifRes.blob();
-            if (uploadBlob.type.includes('png')) avatarExt = 'png';
-            else if (uploadBlob.type.includes('jpeg') || uploadBlob.type.includes('jpg')) avatarExt = 'jpg';
-            else if (uploadBlob.type.includes('webp')) avatarExt = 'webp';
+            // Attempt 1: Direct fetch of remote link
+            const gifRes = await fetch(gifUrl);
+            if (gifRes.ok) {
+              uploadBlob = await gifRes.blob();
+            } else {
+              throw new Error(`Direct fetch status ${gifRes.status}`);
+            }
           } catch (e) {
-            console.warn("Could not fetch remote GIF link as blob, saving link directly:", e);
+            console.warn("Direct fetch of remote GIF link failed or CORS blocked, trying server proxy:", e);
+            try {
+              // Attempt 2: Server proxy fetch bypassing CORS limits
+              const proxyRes = await fetch(`/api/proxy-image?url=${encodeURIComponent(gifUrl)}`);
+              if (proxyRes.ok) {
+                uploadBlob = await proxyRes.blob();
+              } else {
+                console.warn(`Proxy fetch status ${proxyRes.status}`);
+              }
+            } catch (proxyErr) {
+              console.warn("Proxy fetch of remote GIF link failed:", proxyErr);
+            }
+          }
+
+          if (uploadBlob) {
+            const blobType = (uploadBlob.type || '').toLowerCase();
+            if (blobType.includes('png')) avatarExt = 'png';
+            else if (blobType.includes('jpeg') || blobType.includes('jpg')) avatarExt = 'jpg';
+            else if (blobType.includes('webp')) avatarExt = 'webp';
+            else avatarExt = 'gif';
           }
         } else if (avatarFile) {
           avatarExt = avatarFile.name.split('.').pop() || 'gif';
@@ -409,7 +431,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
             .upload(avatarFilePath, uploadBlob, {
               cacheControl: '3600',
               upsert: true,
-              contentType: uploadBlob.type || 'image/gif'
+              contentType: uploadBlob.type || (avatarExt === 'gif' ? 'image/gif' : `image/${avatarExt}`)
             });
 
           if (avatarUploadError) {
@@ -548,6 +570,43 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
       window.open(candidate.photoUrl, '_blank');
     } finally {
       setDownloadingId(null);
+    }
+  };
+
+  const handleDownloadAvatar = async (candidate: CandidateSubmission) => {
+    if (!candidate.avatarUrl) return;
+    const targetId = candidate.id || candidate.email;
+    setDownloadingAvatarId(targetId);
+
+    try {
+      let response;
+      try {
+        response = await fetch(candidate.avatarUrl);
+        if (!response.ok) throw new Error('Direct fetch failed');
+      } catch (e) {
+        response = await fetch(`/api/proxy-image?url=${encodeURIComponent(candidate.avatarUrl)}`);
+      }
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+
+      const urlLower = candidate.avatarUrl.toLowerCase();
+      const isGif = urlLower.includes('.gif') || blob.type.includes('gif');
+      const isPng = urlLower.includes('.png') || blob.type.includes('png');
+      const isWebp = urlLower.includes('.webp') || blob.type.includes('webp');
+      const ext = isGif ? 'gif' : isPng ? 'png' : isWebp ? 'webp' : 'jpg';
+
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `${candidate.registrationNumber || 'ID'}_Avatar.${ext}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error("Direct avatar download failed, opening in new tab:", err);
+      window.open(candidate.avatarUrl, '_blank');
+    } finally {
+      setDownloadingAvatarId(null);
     }
   };
 
@@ -978,25 +1037,12 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                     </button>
                     {existingSubmission.avatarUrl && (
                       <button
-                        onClick={async () => {
-                          try {
-                            const response = await fetch(existingSubmission.avatarUrl);
-                            const blob = await response.blob();
-                            const blobUrl = window.URL.createObjectURL(blob);
-                            const link = document.createElement('a');
-                            link.href = blobUrl;
-                            link.download = `${existingSubmission.registrationNumber || 'ID'}_Avatar.jpg`;
-                            document.body.appendChild(link);
-                            link.click();
-                            document.body.removeChild(link);
-                            window.URL.revokeObjectURL(blobUrl);
-                          } catch (err) {
-                            window.open(existingSubmission.avatarUrl, '_blank');
-                          }
-                        }}
+                        onClick={() => handleDownloadAvatar(existingSubmission)}
                         className="group flex items-center gap-2 px-6 py-2.5 rounded-full border border-[#a855f7]/30 hover:border-[#a855f7] hover:text-white transition-all text-xs font-bold font-label-caps bg-black/40"
                       >
-                        <span className="material-symbols-outlined text-sm">sports_esports</span>
+                        <span className={`material-symbols-outlined text-sm ${downloadingAvatarId === (existingSubmission.id || existingSubmission.email) ? 'animate-spin' : ''}`}>
+                          {downloadingAvatarId === (existingSubmission.id || existingSubmission.email) ? 'sync' : 'sports_esports'}
+                        </span>
                         <span>DOWNLOAD AVATAR</span>
                       </button>
                     )}
@@ -1679,6 +1725,23 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                                         <span>Download ID Photo</span>
                                       </button>
 
+                                      {c.avatarUrl && (
+                                        <button
+                                          disabled={downloadingAvatarId === (c.id || c.email)}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenMenuId(null);
+                                            handleDownloadAvatar(c);
+                                          }}
+                                          className="w-full px-3.5 py-2.5 text-left flex items-center gap-2.5 text-purple-300 hover:bg-white/10 transition-colors font-bold"
+                                        >
+                                          <span className={`material-symbols-outlined text-base ${downloadingAvatarId === (c.id || c.email) ? 'animate-spin' : ''}`}>
+                                            {downloadingAvatarId === (c.id || c.email) ? 'sync' : 'sports_esports'}
+                                          </span>
+                                          <span>Download Avatar</span>
+                                        </button>
+                                      )}
+
                                       <div className="my-1 border-t border-white/10"></div>
 
                                       <button
@@ -1907,6 +1970,20 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                                 {downloadingId === c.id ? 'sync' : 'download'}
                               </span>
                             </button>
+
+                            {c.avatarUrl && (
+                              <button
+                                type="button"
+                                disabled={downloadingAvatarId === (c.id || c.email)}
+                                onClick={() => handleDownloadAvatar(c)}
+                                className="p-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-300 hover:text-white transition-all"
+                                title="Download Gaming Avatar"
+                              >
+                                <span className={`material-symbols-outlined text-xs ${downloadingAvatarId === (c.id || c.email) ? 'animate-spin' : ''}`}>
+                                  {downloadingAvatarId === (c.id || c.email) ? 'sync' : 'sports_esports'}
+                                </span>
+                              </button>
+                            )}
 
                             <button
                               type="button"
@@ -2303,6 +2380,18 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                 <span className="material-symbols-outlined text-sm font-bold">download</span>
                 <span>DOWNLOAD PHOTO</span>
               </button>
+
+              {previewCandidate.avatarUrl && (
+                <button
+                  onClick={() => { handleDownloadAvatar(previewCandidate); setPreviewCandidate(null); }}
+                  className="w-full sm:flex-1 bg-purple-600/30 border border-purple-500/40 hover:bg-purple-600/50 text-white font-bold py-3 px-6 rounded-full text-xs font-bold font-label-caps flex items-center justify-center gap-2 transition-all duration-300 hover:scale-[1.01]"
+                >
+                  <span className={`material-symbols-outlined text-sm font-bold ${downloadingAvatarId === (previewCandidate.id || previewCandidate.email) ? 'animate-spin' : ''}`}>
+                    {downloadingAvatarId === (previewCandidate.id || previewCandidate.email) ? 'sync' : 'sports_esports'}
+                  </span>
+                  <span>DOWNLOAD AVATAR</span>
+                </button>
+              )}
 
               <button
                 onClick={() => { handleDelete(previewCandidate); setPreviewCandidate(null); }}
