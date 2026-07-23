@@ -587,7 +587,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
       await setDoc(doc(db, 'id_cards', (currentUser.email || '').toLowerCase()), submissionData);
 
       if (CONFIG.GOOGLE_SCRIPT_ID_CARD_URL) {
-        const sheetSyncUrl = `${CONFIG.GOOGLE_SCRIPT_ID_CARD_URL}?action=sync_idcard&email=${encodeURIComponent(submissionData.email)}&name=${encodeURIComponent(submissionData.name)}&regNo=${encodeURIComponent(submissionData.registrationNumber)}&phone=${encodeURIComponent(submissionData.phone || '')}&team=${encodeURIComponent(submissionData.team || '')}&position=${encodeURIComponent(submissionData.position || 'Member')}&photoUrl=${encodeURIComponent(submissionData.photoUrl || '')}&submittedAt=${encodeURIComponent(submissionData.submittedAt || '')}&status=${encodeURIComponent(submissionData.status || 'Pending')}`;
+        const sheetSyncUrl = `${CONFIG.GOOGLE_SCRIPT_ID_CARD_URL}?action=sync_idcard&email=${encodeURIComponent(submissionData.email)}&name=${encodeURIComponent(submissionData.name)}&regNo=${encodeURIComponent(submissionData.registrationNumber)}&phone=${encodeURIComponent(submissionData.phone || '')}&team=${encodeURIComponent(submissionData.team || '')}&position=${encodeURIComponent(submissionData.position || 'Member')}&photoUrl=${encodeURIComponent(submissionData.photoUrl || '')}&avatarUrl=${encodeURIComponent(submissionData.avatarUrl || '')}&qrCodeUrl=${encodeURIComponent(submissionData.qrCodeUrl || '')}&submittedAt=${encodeURIComponent(submissionData.submittedAt || '')}&status=${encodeURIComponent(submissionData.status || 'Pending')}`;
         sendGoogleScriptRequest(sheetSyncUrl);
       }
 
@@ -680,20 +680,32 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
       const sortedCandidates = activeCandidates.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
       setCandidates(sortedCandidates);
 
-      const syncPromises = sortedCandidates.map(c => {
-        const sheetSyncUrl = `${CONFIG.GOOGLE_SCRIPT_ID_CARD_URL}?action=sync_idcard&email=${encodeURIComponent(c.email)}&name=${encodeURIComponent(c.name)}&regNo=${encodeURIComponent(c.registrationNumber)}&phone=${encodeURIComponent(c.phone || '')}&team=${encodeURIComponent(c.team || '')}&position=${encodeURIComponent(c.position || 'Member')}&photoUrl=${encodeURIComponent(c.photoUrl || '')}&submittedAt=${encodeURIComponent(c.submittedAt || '')}&status=${encodeURIComponent(c.status || 'Pending')}`;
-        return sendGoogleScriptRequest(sheetSyncUrl);
-      });
+      if (sortedCandidates.length === 0) {
+        setSyncToastMessage("No active candidate records found in Firebase to sync.");
+        setTimeout(() => setSyncToastMessage(null), 4000);
+        setIsSyncingSheets(false);
+        return;
+      }
 
-      const results = await Promise.allSettled(syncPromises);
-      const successCount = results.filter(r => r.status === 'fulfilled' && r.value).length;
+      let successCount = 0;
+      for (let i = 0; i < sortedCandidates.length; i++) {
+        const c = sortedCandidates[i];
+        const sheetSyncUrl = `${CONFIG.GOOGLE_SCRIPT_ID_CARD_URL}?action=sync_idcard&email=${encodeURIComponent(c.email)}&name=${encodeURIComponent(c.name)}&regNo=${encodeURIComponent(c.registrationNumber)}&phone=${encodeURIComponent(c.phone || '')}&team=${encodeURIComponent(c.team || '')}&position=${encodeURIComponent(c.position || 'Member')}&photoUrl=${encodeURIComponent(c.photoUrl || '')}&avatarUrl=${encodeURIComponent(c.avatarUrl || '')}&qrCodeUrl=${encodeURIComponent(c.qrCodeUrl || '')}&submittedAt=${encodeURIComponent(c.submittedAt || '')}&status=${encodeURIComponent(c.status || 'Pending')}`;
+        
+        const ok = await sendGoogleScriptRequest(sheetSyncUrl);
+        if (ok) successCount++;
+
+        if (i < sortedCandidates.length - 1) {
+          await new Promise(res => setTimeout(res, 120));
+        }
+      }
 
       logAdminAction(
         'FORCE_SHEETS_SYNC',
-        `Initiated parallel sync to Google Sheets for ${sortedCandidates.length} candidate submissions`
+        `Initiated full sync to Google Sheets for ${sortedCandidates.length} candidate submissions`
       );
 
-      setSyncToastMessage(`Parallel sync completed! Transmitted ${successCount} active ID record(s) to Google Sheets.`);
+      setSyncToastMessage(`Full Sheet Refresh Complete! Successfully refreshed all ${successCount} of ${sortedCandidates.length} active Firebase candidate records (with QR code links) in Google Sheets.`);
       setTimeout(() => setSyncToastMessage(null), 4500);
       setSheetsCooldown(60);
     } catch (err) {
@@ -864,7 +876,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
 
       // Trigger status update in Google Sheets
       if (CONFIG.GOOGLE_SCRIPT_ID_CARD_URL) {
-        const statusSyncUrl = `${CONFIG.GOOGLE_SCRIPT_ID_CARD_URL}?action=sync_idcard&email=${encodeURIComponent(candidate.email)}&name=${encodeURIComponent(candidate.name)}&regNo=${encodeURIComponent(candidate.registrationNumber)}&phone=${encodeURIComponent(candidate.phone || '')}&team=${encodeURIComponent(candidate.team || '')}&position=${encodeURIComponent(candidate.position || 'Member')}&photoUrl=${encodeURIComponent(candidate.photoUrl || '')}&submittedAt=${encodeURIComponent(candidate.submittedAt || '')}&status=${encodeURIComponent(newStatus)}`;
+        const statusSyncUrl = `${CONFIG.GOOGLE_SCRIPT_ID_CARD_URL}?action=sync_idcard&email=${encodeURIComponent(candidate.email)}&name=${encodeURIComponent(candidate.name)}&regNo=${encodeURIComponent(candidate.registrationNumber)}&phone=${encodeURIComponent(candidate.phone || '')}&team=${encodeURIComponent(candidate.team || '')}&position=${encodeURIComponent(candidate.position || 'Member')}&photoUrl=${encodeURIComponent(candidate.photoUrl || '')}&avatarUrl=${encodeURIComponent(candidate.avatarUrl || '')}&qrCodeUrl=${encodeURIComponent(candidate.qrCodeUrl || '')}&submittedAt=${encodeURIComponent(candidate.submittedAt || '')}&status=${encodeURIComponent(newStatus)}`;
         sendGoogleScriptRequest(statusSyncUrl);
       }
 
