@@ -127,7 +127,9 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
     return () => clearInterval(timer);
   }, [sheetsCooldown]);
 
-  // Fetch CSV files & monitor Auth State on mount
+  const [loadedMembersList, setLoadedMembersList] = useState<MemberData[]>([]);
+
+  // Fetch whitelist admin emails and member roster from CSVs
   useEffect(() => {
     const fetchCSVData = async () => {
       setAuthLoading(true);
@@ -169,6 +171,8 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
           }
         }
 
+        setLoadedMembersList(membersList);
+
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
           if (user) {
             setCurrentUser(user);
@@ -176,8 +180,20 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
             const matchedAdmin = adminEmailsList.includes(lowerEmail);
             setIsAdmin(matchedAdmin);
 
-            const matchedMember = membersList.find(m => m.email === lowerEmail);
-            if (matchedMember) {
+            const userEntries = membersList.filter(m => m.email === lowerEmail);
+            if (userEntries.length > 0) {
+              const teams = Array.from(new Set(userEntries.map(m => m.team).filter(Boolean))).join(', ');
+              const positions = Array.from(new Set(userEntries.map(m => m.position).filter(Boolean))).join(', ');
+
+              const matchedMember: MemberData = {
+                name: userEntries[0].name,
+                registrationNumber: userEntries[0].registrationNumber,
+                phone: userEntries[0].phone,
+                email: userEntries[0].email,
+                team: teams,
+                position: positions
+              };
+
               setMemberData(matchedMember);
               setIsAuthorized(true);
               await checkExistingSubmission(user.email || '');
