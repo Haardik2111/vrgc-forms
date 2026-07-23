@@ -1416,9 +1416,13 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
           <div className="space-y-6 stagger-in text-left">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-white/5 pb-4">
               <div>
-                <h3 className="font-display-lg text-lg text-white font-bold uppercase tracking-wider flex items-center gap-2">
+                <h3 className="font-display-lg text-lg text-white font-bold uppercase tracking-wider flex flex-wrap items-center gap-2.5">
                   <span className="material-symbols-outlined text-primary text-base">admin_panel_settings</span>
-                  Candidate Dossier Submissions
+                  <span>Candidate Dossier Submissions</span>
+                  <span className="px-3 py-1 rounded-full bg-purple-500/20 border border-purple-500/40 text-purple-300 text-xs font-bold font-code-sm shadow-[0_0_15px_rgba(168,85,247,0.2)] flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    {candidates.length} / 48 REGISTERED
+                  </span>
                 </h3>
                 <p className="text-xs text-on-surface-variant max-w-lg mt-0.5">
                   Select and verify candidate digital identity dossiers.
@@ -1510,6 +1514,20 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
             </div>
 
             <div className="glass-panel p-4 rounded-2xl relative space-y-4 pb-28 sm:pb-16">
+              <div className="flex flex-wrap items-center justify-between gap-2 px-1 pb-3 border-b border-white/5 text-xs text-on-surface-variant font-code-sm">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span className="text-white/80 font-bold">TOTAL REGISTERED:</span>
+                  <span className="text-primary font-black text-sm">{candidates.length}</span>
+                  <span className="text-white/40 font-bold">/ 48</span>
+                </div>
+                {filteredCandidates.length !== candidates.length && (
+                  <div className="text-purple-300/90 text-[11px] font-medium bg-purple-500/10 border border-purple-500/20 px-2.5 py-0.5 rounded-full">
+                    Showing {filteredCandidates.length} filtered candidate{filteredCandidates.length === 1 ? '' : 's'}
+                  </div>
+                )}
+              </div>
+
               <div className="space-y-4 relative z-10">
                 {loadingData ? (
                   <div className="py-12 text-center text-on-surface-variant font-code-sm animate-pulse">
