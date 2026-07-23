@@ -461,6 +461,11 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
 
       await setDoc(doc(db, 'id_cards', (currentUser.email || '').toLowerCase()), submissionData);
 
+      if (CONFIG.GOOGLE_SCRIPT_ID_CARD_URL) {
+        const sheetSyncUrl = `${CONFIG.GOOGLE_SCRIPT_ID_CARD_URL}?action=sync_idcard&email=${encodeURIComponent(submissionData.email)}&name=${encodeURIComponent(submissionData.name)}&regNo=${encodeURIComponent(submissionData.registrationNumber)}&phone=${encodeURIComponent(submissionData.phone || '')}&team=${encodeURIComponent(submissionData.team || '')}&position=${encodeURIComponent(submissionData.position || 'Member')}&photoUrl=${encodeURIComponent(submissionData.photoUrl || '')}&submittedAt=${encodeURIComponent(submissionData.submittedAt || '')}&status=${encodeURIComponent(submissionData.status || 'Pending')}`;
+        sendGoogleScriptRequest(sheetSyncUrl);
+      }
+
       setSubmitSuccess(true);
       setExistingSubmission(submissionData);
     } catch (err: any) {
@@ -504,6 +509,32 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
     }
   };
 
+  const sendGoogleScriptRequest = (url: string): Promise<boolean> => {
+    return new Promise((resolve) => {
+      let resolved = false;
+      const done = (success: boolean) => {
+        if (!resolved) {
+          resolved = true;
+          resolve(success);
+        }
+      };
+
+      // 1. Image Beacon ping (Works 100% reliably in cross-origin / hosted environments)
+      const img = new Image();
+      img.onload = () => done(true);
+      img.onerror = () => done(true); // Apps Script response text triggers onerror on <img>, but GET request executed on Google server
+      img.src = url;
+
+      // 2. Fetch no-cors fallback
+      fetch(url, { mode: 'no-cors', cache: 'no-cache' })
+        .then(() => done(true))
+        .catch(() => done(true));
+
+      // 3. Fallback safety timer
+      setTimeout(() => done(true), 2500);
+    });
+  };
+
   const handleSyncAllToSheets = async () => {
     if (sheetsCooldown > 0 || isSyncingSheets) return;
     if (!CONFIG.GOOGLE_SCRIPT_ID_CARD_URL) {
@@ -526,12 +557,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
 
       const syncPromises = sortedCandidates.map(c => {
         const sheetSyncUrl = `${CONFIG.GOOGLE_SCRIPT_ID_CARD_URL}?action=sync_idcard&email=${encodeURIComponent(c.email)}&name=${encodeURIComponent(c.name)}&regNo=${encodeURIComponent(c.registrationNumber)}&phone=${encodeURIComponent(c.phone || '')}&team=${encodeURIComponent(c.team || '')}&position=${encodeURIComponent(c.position || 'Member')}&photoUrl=${encodeURIComponent(c.photoUrl || '')}&submittedAt=${encodeURIComponent(c.submittedAt || '')}&status=${encodeURIComponent(c.status || 'Pending')}`;
-        return fetch(sheetSyncUrl, { mode: 'no-cors' })
-          .then(() => true)
-          .catch(err => {
-            console.error("Sheets row sync failed:", err);
-            return false;
-          });
+        return sendGoogleScriptRequest(sheetSyncUrl);
       });
 
       const results = await Promise.allSettled(syncPromises);
@@ -651,9 +677,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
       // Send deletion signal to Google Sheets via Apps Script
       if (CONFIG.GOOGLE_SCRIPT_ID_CARD_URL) {
         const deleteSheetUrl = `${CONFIG.GOOGLE_SCRIPT_ID_CARD_URL}?action=delete_idcard&email=${encodeURIComponent(candidate.email)}`;
-        fetch(deleteSheetUrl, { mode: 'no-cors' })
-          .then(() => console.log("Sent deletion notification to Google Sheets for:", candidate.email))
-          .catch(err => console.error("Sheets deletion call failed:", err));
+        sendGoogleScriptRequest(deleteSheetUrl);
       }
 
       // Close preview modal if deleting current candidate
@@ -693,7 +717,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
       // Trigger status update in Google Sheets
       if (CONFIG.GOOGLE_SCRIPT_ID_CARD_URL) {
         const statusSyncUrl = `${CONFIG.GOOGLE_SCRIPT_ID_CARD_URL}?action=sync_idcard&email=${encodeURIComponent(candidate.email)}&name=${encodeURIComponent(candidate.name)}&regNo=${encodeURIComponent(candidate.registrationNumber)}&phone=${encodeURIComponent(candidate.phone || '')}&team=${encodeURIComponent(candidate.team || '')}&position=${encodeURIComponent(candidate.position || 'Member')}&photoUrl=${encodeURIComponent(candidate.photoUrl || '')}&submittedAt=${encodeURIComponent(candidate.submittedAt || '')}&status=${encodeURIComponent(newStatus)}`;
-        fetch(statusSyncUrl, { mode: 'no-cors' }).catch(err => console.error("Sheets status sync error:", err));
+        sendGoogleScriptRequest(statusSyncUrl);
       }
 
       if (previewCandidate && previewCandidate.email.toLowerCase() === candidate.email.toLowerCase()) {
