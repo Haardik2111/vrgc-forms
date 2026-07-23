@@ -2268,14 +2268,14 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                 onClick={() => toggleStatus(previewCandidate)}
                 className={`w-full sm:flex-1 font-bold py-3 px-6 rounded-full text-xs font-bold font-label-caps flex items-center justify-center gap-2 border transition-all duration-300 hover:scale-[1.01] ${
                   previewCandidate.status === 'Approved'
-                    ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20 shadow-[0_0_20px_rgba(250,204,21,0.15)]'
-                    : 'bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20 shadow-[0_0_20px_rgba(74,222,128,0.15)]'
+                    ? 'bg-amber-500/20 border-amber-500/40 text-amber-300 hover:bg-amber-500/30 shadow-[0_0_20px_rgba(245,158,11,0.2)]'
+                    : 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30 shadow-[0_0_20px_rgba(16,185,129,0.2)]'
                 }`}
               >
                 <span className="material-symbols-outlined text-sm font-bold">
                   {previewCandidate.status === 'Approved' ? 'history' : 'verified'}
                 </span>
-                <span>{previewCandidate.status === 'Approved' ? 'MARK PENDING' : 'APPROVE DOSSIER'}</span>
+                <span>{previewCandidate.status === 'Approved' ? 'REVERT TO PENDING' : 'APPROVE DOSSIER'}</span>
               </button>
 
               <button
