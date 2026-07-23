@@ -41,7 +41,8 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const sanitize = (str) => (str || '').replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
 
 function downloadQrCode(regNo) {
-  const qrContent = `https://vrgc.club/card/${encodeURIComponent(regNo)}`;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://vrgcforms.vercel.app';
+  const qrContent = `${appUrl}/card/${encodeURIComponent(regNo)}`;
   const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&color=0-0-0&bgcolor=ffffff&data=${encodeURIComponent(qrContent)}`;
   const tempFile = path.join(os.tmpdir(), `qr_temp_${Date.now()}_${Math.random().toString(36).substring(7)}.png`);
   
