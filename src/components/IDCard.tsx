@@ -1339,9 +1339,14 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                         </button>
 
                         <button
-                          disabled={isSubmitting}
-                          className="w-full sm:w-auto bg-white/5 hover:bg-white/15 text-white border border-white/25 hover:border-white/50 font-bold py-3.5 px-8 rounded-full shadow-[0_0_20px_rgba(255,255,255,0.05)] hover:shadow-[0_0_30px_rgba(255,255,255,0.15)] hover:scale-[1.01] active:scale-95 transition-all flex items-center justify-center gap-2 text-xs font-label-caps tracking-widest uppercase"
-                          type="submit"
+                          disabled={isSubmitting ||!photoFile || (!avatarFile && !avatarUrlInput.trim())}
+                          className={`w-full sm:w-auto font-bold py-3.5 px-8 rounded-full transition-all flex items-center justify-center gap-2 text-xs font-label-caps tracking-widest uppercase ${
+  isSubmitting ||
+  !photoFile ||
+  (!avatarFile && !avatarUrlInput.trim())
+    ? 'bg-white/5 text-white/40 border border-white/10 cursor-not-allowed'
+    : 'bg-white/5 hover:bg-white/15 text-white border border-white/25 hover:border-white/50 shadow-[0_0_20px_rgba(255,255,255,0.05)] hover:shadow-[0_0_30px_rgba(255,255,255,0.15)] hover:scale-[1.01] active:scale-95'
+}`}
                         >
                           {isSubmitting ? (
                             <>
