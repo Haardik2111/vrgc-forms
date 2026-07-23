@@ -30,6 +30,7 @@ interface CandidateSubmission {
   email: string;
   photoUrl: string;
   avatarUrl: string;
+  qrCodeUrl?: string;
   submittedAt: string;
   status: string;
 }
@@ -62,6 +63,12 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
       label: 'TEAM / DIVISION',
       value: team
     };
+  };
+
+  const getQrCodeImageUrl = (regNo?: string, savedQrUrl?: string) => {
+    if (savedQrUrl && savedQrUrl.trim()) return savedQrUrl;
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://vrgc.club';
+    return `https://api.qrserver.com/v1/create-qr-code/?size=140x140&color=0-0-0&bgcolor=ffffff&data=${encodeURIComponent(`${origin}/card/${regNo || ''}`)}`;
   };
 
   // Authentication & Member Data States
@@ -522,6 +529,45 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
           }
         }
       }
+      
+      let qrCodePublicUrl = '';
+      try {
+        const qrOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://vrgc.club';
+        const qrContent = `${qrOrigin}/card/${encodeURIComponent(memberData.registrationNumber)}`;
+        const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&color=0-0-0&bgcolor=ffffff&data=${encodeURIComponent(qrContent)}`;
+
+        let qrBlob: Blob | null = null;
+        try {
+          const qrRes = await fetch(qrApiUrl);
+          if (qrRes.ok) qrBlob = await qrRes.blob();
+        } catch {
+          const proxyQrRes = await fetch(`/api/proxy-image?url=${encodeURIComponent(qrApiUrl)}`);
+          if (proxyQrRes.ok) qrBlob = await proxyQrRes.blob();
+        }
+
+        if (qrBlob) {
+          const qrFileName = `${userRegNo}_${userNameStr}_${userEmailStr}_qr_${timestamp}.png`;
+          const qrFilePath = `qrcodes/${qrFileName}`;
+          const { error: qrUploadError } = await supabase.storage
+            .from('qr-codes')
+            .upload(qrFilePath, qrBlob, {
+              cacheControl: '3600',
+              upsert: true,
+              contentType: 'image/png'
+            });
+
+          if (!qrUploadError) {
+            const { data: { publicUrl: uploadedQrUrl } } = supabase.storage
+              .from('qr-codes')
+              .getPublicUrl(qrFilePath);
+            qrCodePublicUrl = uploadedQrUrl;
+          } else {
+            console.warn("Supabase qr-codes upload error:", qrUploadError.message);
+          }
+        }
+      } catch (qrErr) {
+        console.warn("QR code Supabase storage error:", qrErr);
+      }
 
       // 3. Save Submission details to Firestore
       const submissionData: CandidateSubmission = {
@@ -533,6 +579,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
         email: currentUser.email || '',
         photoUrl: photoPublicUrl,
         avatarUrl: avatarPublicUrl,
+        qrCodeUrl: qrCodePublicUrl || '',
         submittedAt: new Date().toISOString(),
         status: 'Pending'
       };
@@ -624,7 +671,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
     setIsSyncingSheets(true);
 
     try {
-      // 1. Fetch latest active records directly from Firestore collection
+      // Fetch latest active records from Firestore to ensure clean list (excluding deleted entries)
       const querySnap = await getDocs(collection(db, 'id_cards'));
       const activeCandidates: CandidateSubmission[] = [];
       querySnap.forEach((d) => activeCandidates.push({ id: d.id, ...d.data() } as CandidateSubmission));
@@ -633,35 +680,21 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
       const sortedCandidates = activeCandidates.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
       setCandidates(sortedCandidates);
 
-      if (sortedCandidates.length === 0) {
-        setSyncToastMessage("No active candidate records found in Firebase to sync.");
-        setTimeout(() => setSyncToastMessage(null), 4000);
-        setIsSyncingSheets(false);
-        return;
-      }
-
-      // 2. Staggered sequential transmission to prevent browser connection throttling & ensure Google Sheet updates cleanly
-      let successCount = 0;
-      for (let i = 0; i < sortedCandidates.length; i++) {
-        const c = sortedCandidates[i];
+      const syncPromises = sortedCandidates.map(c => {
         const sheetSyncUrl = `${CONFIG.GOOGLE_SCRIPT_ID_CARD_URL}?action=sync_idcard&email=${encodeURIComponent(c.email)}&name=${encodeURIComponent(c.name)}&regNo=${encodeURIComponent(c.registrationNumber)}&phone=${encodeURIComponent(c.phone || '')}&team=${encodeURIComponent(c.team || '')}&position=${encodeURIComponent(c.position || 'Member')}&photoUrl=${encodeURIComponent(c.photoUrl || '')}&submittedAt=${encodeURIComponent(c.submittedAt || '')}&status=${encodeURIComponent(c.status || 'Pending')}`;
-        
-        const ok = await sendGoogleScriptRequest(sheetSyncUrl);
-        if (ok) successCount++;
+        return sendGoogleScriptRequest(sheetSyncUrl);
+      });
 
-        // Brief 120ms delay between candidate sync calls
-        if (i < sortedCandidates.length - 1) {
-          await new Promise(res => setTimeout(res, 120));
-        }
-      }
+      const results = await Promise.allSettled(syncPromises);
+      const successCount = results.filter(r => r.status === 'fulfilled' && r.value).length;
 
       logAdminAction(
         'FORCE_SHEETS_SYNC',
-        `Initiated full sync to Google Sheets for ${sortedCandidates.length} candidate submissions`
+        `Initiated parallel sync to Google Sheets for ${sortedCandidates.length} candidate submissions`
       );
 
-      setSyncToastMessage(`Full Sheet Refresh Complete! Successfully synced ${successCount} of ${sortedCandidates.length} active Firebase candidate record(s) to Google Sheets.`);
-      setTimeout(() => setSyncToastMessage(null), 5000);
+      setSyncToastMessage(`Parallel sync completed! Transmitted ${successCount} active ID record(s) to Google Sheets.`);
+      setTimeout(() => setSyncToastMessage(null), 4500);
       setSheetsCooldown(60);
     } catch (err) {
       console.error("Error during force sync to Sheets:", err);
@@ -1128,7 +1161,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                         <div className="my-3 flex flex-col items-center justify-center relative z-10">
                           <div className="w-28 h-28 rounded-xl border border-white/10 bg-white p-1.5 shadow-[0_0_25px_rgba(168,85,247,0.25)]">
                             <img 
-                              src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&color=0-0-0&bgcolor=ffffff&data=${encodeURIComponent(`${typeof window !== 'undefined' ? window.location.origin : 'https://vrgc.club'}/card/${existingSubmission.registrationNumber || ''}`)}`} 
+                              src={getQrCodeImageUrl(existingSubmission.registrationNumber, existingSubmission.qrCodeUrl)} 
                               alt="Scan to Verify" 
                               className="w-full h-full object-contain"
                             />
@@ -1560,7 +1593,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                   <span>Candidate Dossier Submissions</span>
                   <span className="px-3 py-1 rounded-full bg-purple-500/20 border border-purple-500/40 text-purple-300 text-xs font-bold font-code-sm shadow-[0_0_15px_rgba(168,85,247,0.2)] flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                    {candidates.length} / 50 REGISTERED
+                    {candidates.length} /  REGISTERED
                   </span>
                 </h3>
                 <p className="text-xs text-on-surface-variant max-w-lg mt-0.5">
@@ -1682,6 +1715,20 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
             </div>
 
             <div className="glass-panel p-4 rounded-2xl relative space-y-4 pb-28 sm:pb-16">
+              <div className="flex flex-wrap items-center justify-between gap-2 px-1 pb-3 border-b border-white/5 text-xs text-on-surface-variant font-code-sm">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span className="text-white/80 font-bold">TOTAL REGISTERED:</span>
+                  <span className="text-primary font-black text-sm">{candidates.length}</span>
+                  <span className="text-white/40 font-bold">/ 48</span>
+                </div>
+                {filteredCandidates.length !== candidates.length && (
+                  <div className="text-purple-300/90 text-[11px] font-medium bg-purple-500/10 border border-purple-500/20 px-2.5 py-0.5 rounded-full">
+                    Showing {filteredCandidates.length} filtered candidate{filteredCandidates.length === 1 ? '' : 's'}
+                  </div>
+                )}
+              </div>
+
               <div className="space-y-4 relative z-10">
                 {loadingData ? (
                   <div className="py-12 text-center text-on-surface-variant font-code-sm animate-pulse">
@@ -1955,7 +2002,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                                   <div className="my-2 flex flex-col items-center justify-center relative z-10">
                                     <div className="w-24 h-24 rounded-xl border border-white/10 bg-white p-1.5 shadow-[0_0_20px_rgba(168,85,247,0.2)]">
                                       <img 
-                                        src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&color=0-0-0&bgcolor=ffffff&data=${encodeURIComponent(`${typeof window !== 'undefined' ? window.location.origin : 'https://vrgc.club'}/card/${c.registrationNumber || ''}`)}`} 
+                                        src={getQrCodeImageUrl(c.registrationNumber, c.qrCodeUrl)}
                                         alt="Scan to Verify" 
                                         className="w-full h-full object-contain"
                                       />
@@ -2540,7 +2587,7 @@ const IDCard: React.FC<IDCardProps> = ({ onRedirect }) => {
                         <div className="my-3 flex flex-col items-center justify-center relative z-10">
                           <div className="w-28 h-28 rounded-xl border border-white/10 bg-white p-1.5 shadow-[0_0_25px_rgba(168,85,247,0.25)]">
                             <img 
-                              src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&color=0-0-0&bgcolor=ffffff&data=${encodeURIComponent(`${typeof window !== 'undefined' ? window.location.origin : 'https://vrgc.club'}/card/${previewCandidate.registrationNumber || ''}`)}`} 
+                              src={getQrCodeImageUrl(previewCandidate.registrationNumber, previewCandidate.qrCodeUrl)}
                               alt="Scan to Verify" 
                               className="w-full h-full object-contain"
                             />
