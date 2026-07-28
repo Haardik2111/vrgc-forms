@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import Link from 'next/link';
 import { X, Code2, Sparkles, ShieldCheck, Terminal, Cpu, Heart, ExternalLink, Crown, Award, UserCheck, Star, Users } from 'lucide-react';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -251,15 +252,14 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
               <strong className="text-white font-bold">VRGC Technical Desk</strong>
             </div>
 
-            <a
-              href="https://vrgc.vitbhopal.ac.in"
-              target="_blank"
-              rel="noopener noreferrer"
+            <Link
+              href="/"
+              onClick={onClose}
               className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold text-[11px] flex items-center gap-1.5 shadow-[0_0_15px_rgba(168,85,247,0.3)] transition-all"
             >
-              <span>VRGC Portal</span>
+              <span>VRGC Forms Portal</span>
               <ExternalLink className="w-3 h-3" />
-            </a>
+            </Link>
           </div>
         </div>
       </div>

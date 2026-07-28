@@ -50,15 +50,6 @@ const Footer: React.FC = () => {
 
         {/* Right: Actions */}
         <div className="flex items-center gap-2">
-          <Link
-            href="/about"
-            className="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 transition-all flex items-center gap-1 text-[10px] sm:text-[11px] font-bold"
-            title="About VRGC Tech Team"
-          >
-            <Info className="w-3.5 h-3.5 text-purple-400" />
-            <span className="hidden sm:inline">About</span>
-          </Link>
-
           <button
             onClick={() => setIsModalOpen(true)}
             className="px-3 py-1.5 rounded-lg bg-purple-600/20 hover:bg-purple-600/40 text-purple-200 border border-purple-500/40 hover:border-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.2)] transition-all flex items-center gap-1.5 text-[10px] sm:text-[11px] font-bold shrink-0"
