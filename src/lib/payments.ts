@@ -16,7 +16,7 @@ import {
 import { PaymentItem, PaymentStatus } from '@/types/payment';
 
 // ─── Firestore Collection Names ───────────────────────────────────────────────
-export const PAYMENTS_COLLECTION = 'payments';
+export const PAYMENTS_COLLECTION = 'invoices';
 export const INVOICES_COLLECTION = 'invoices';
 
 // ─── Transaction / Invoice Log Type ──────────────────────────────────────────
@@ -84,7 +84,7 @@ export const SAMPLE_PAYMENTS: Omit<PaymentItem, 'id' | 'created_at'>[] = [
 // ─── Firestore Payments CRUD Operations ────────────────────────────────────────
 
 /**
- * Fetch payments from Firestore `payments` collection.
+ * Fetch payments from Firestore `invoices` collection.
  * Non-destructive: read-only query.
  */
 export async function fetchPaymentsFromFirestore(
@@ -92,7 +92,7 @@ export async function fetchPaymentsFromFirestore(
   isAdmin: boolean = false
 ): Promise<PaymentItem[]> {
   try {
-    const colRef = collection(db, PAYMENTS_COLLECTION);
+    const colRef = collection(db, INVOICES_COLLECTION);
     let q;
 
     if (!isAdmin && userEmail && userEmail.trim()) {
@@ -138,8 +138,7 @@ export async function fetchPaymentsFromFirestore(
 }
 
 /**
- * Create a new payment record in Firestore `payments` collection.
- * Also mirrors an initial record to Firestore `invoices` collection.
+ * Create a SINGLE payment invoice record in Firestore `invoices` collection.
  */
 export async function createPaymentInFirestore(
   paymentData: Omit<PaymentItem, 'id' | 'created_at'> & {
@@ -152,7 +151,9 @@ export async function createPaymentInFirestore(
   try {
     const now = new Date().toISOString();
     const cleanEmail = paymentData.user_email ? paymentData.user_email.toLowerCase() : '';
-    const docRef = await addDoc(collection(db, PAYMENTS_COLLECTION), {
+    
+    // Create EXACTLY 1 document in `invoices` collection
+    const docRef = await addDoc(collection(db, INVOICES_COLLECTION), {
       ...paymentData,
       user_email: cleanEmail,
       candidate_name: paymentData.candidate_name || '',
@@ -175,35 +176,26 @@ export async function createPaymentInFirestore(
       updated_at: now,
     };
 
-    // 1. Mirror invoice to `invoices` collection
-    await saveInvoiceToFirestore({
-      payment_id: docRef.id,
-      user_email: cleanEmail,
-      candidate_name: paymentData.candidate_name || '',
-      registration_number: paymentData.registration_number || '',
-      team: paymentData.team || '',
-      title: paymentData.title,
-      description: paymentData.description,
-      category: paymentData.category,
-      amount: paymentData.amount,
-      currency: paymentData.currency || 'INR',
-      status: paymentData.status as PaymentStatus,
-      due_date: paymentData.due_date,
-    });
-
-    // 2. Save initial creation attempt log
-    await saveTransactionToFirestore({
-      payment_id: docRef.id,
-      user_email: cleanEmail,
-      candidate_name: paymentData.candidate_name || '',
-      registration_number: paymentData.registration_number || '',
-      team: paymentData.team || '',
-      payment_title: paymentData.title,
-      amount: paymentData.amount,
-      currency: paymentData.currency || 'INR',
-      status: paymentData.status as any,
-      error_description: 'Payment invoice issued',
-    });
+    // Log initial creation attempt inside subcollection `invoices/{id}/attempts`
+    try {
+      const attemptsColRef = collection(db, INVOICES_COLLECTION, docRef.id, 'attempts');
+      await addDoc(attemptsColRef, {
+        payment_id: docRef.id,
+        user_email: cleanEmail,
+        candidate_name: paymentData.candidate_name || '',
+        registration_number: paymentData.registration_number || '',
+        team: paymentData.team || '',
+        payment_title: paymentData.title,
+        amount: paymentData.amount,
+        currency: paymentData.currency || 'INR',
+        status: paymentData.status,
+        error_description: 'Invoice issued',
+        timestamp: serverTimestamp(),
+        created_at: now,
+      });
+    } catch (e) {
+      console.warn('Subcollection attempt log warning:', e);
+    }
 
     return newPayment;
   } catch (err) {
@@ -213,14 +205,14 @@ export async function createPaymentInFirestore(
 }
 
 /**
- * Update payment status & details in Firestore `payments` collection.
+ * Update payment status & details in Firestore `invoices` collection.
  */
 export async function updatePaymentStatusInFirestore(
   paymentId: string,
   updates: Partial<PaymentItem>
 ): Promise<boolean> {
   try {
-    const docRef = doc(db, PAYMENTS_COLLECTION, paymentId);
+    const docRef = doc(db, INVOICES_COLLECTION, paymentId);
     await updateDoc(docRef, {
       ...updates,
       updated_at: serverTimestamp(),
@@ -233,11 +225,11 @@ export async function updatePaymentStatusInFirestore(
 }
 
 /**
- * Delete a payment record from Firestore `payments` collection.
+ * Delete a payment record from Firestore `invoices` collection.
  */
 export async function deletePaymentFromFirestore(paymentId: string): Promise<boolean> {
   try {
-    await deleteDoc(doc(db, PAYMENTS_COLLECTION, paymentId));
+    await deleteDoc(doc(db, INVOICES_COLLECTION, paymentId));
     return true;
   } catch (err) {
     console.error('Error deleting payment from Firestore:', err);
@@ -264,30 +256,7 @@ export async function saveInvoiceToFirestore(invoice: {
   status: PaymentStatus;
   due_date?: string;
 }): Promise<string | null> {
-  try {
-    const cleanEmail = invoice.user_email ? invoice.user_email.toLowerCase() : '';
-    const invoicesColRef = collection(db, INVOICES_COLLECTION);
-    const docRef = await addDoc(invoicesColRef, {
-      payment_id: invoice.payment_id || '',
-      user_email: cleanEmail,
-      candidate_name: invoice.candidate_name || '',
-      registration_number: invoice.registration_number || '',
-      team: invoice.team || '',
-      title: invoice.title,
-      description: invoice.description || '',
-      category: invoice.category,
-      amount: invoice.amount,
-      currency: invoice.currency || 'INR',
-      status: invoice.status,
-      due_date: invoice.due_date || '',
-      created_at: serverTimestamp(),
-      updated_at: serverTimestamp(),
-    });
-    return docRef.id;
-  } catch (err) {
-    console.error('Failed to create invoice document in Firestore:', err);
-    return invoice.payment_id || null;
-  }
+  return invoice.payment_id || null;
 }
 
 /**
@@ -314,7 +283,7 @@ export async function saveTransactionToFirestore(tx: {
   try {
     const cleanEmail = tx.user_email ? tx.user_email.toLowerCase() : '';
     if (tx.payment_id) {
-      // 1. Update primary payment status in main `payments` doc
+      // 1. Update primary payment status in main `invoices` doc
       await updatePaymentStatusInFirestore(tx.payment_id, {
         status: tx.status as PaymentStatus,
         razorpay_order_id: tx.razorpay_order_id || '',
@@ -324,8 +293,8 @@ export async function saveTransactionToFirestore(tx: {
         ...(tx.error_description ? { error_description: tx.error_description } : {}),
       });
 
-      // 2. Log payment attempt entry to subcollection `payments/{payment_id}/attempts`
-      const attemptsColRef = collection(db, PAYMENTS_COLLECTION, tx.payment_id, 'attempts');
+      // 2. Log payment attempt entry to subcollection `invoices/{payment_id}/attempts`
+      const attemptsColRef = collection(db, INVOICES_COLLECTION, tx.payment_id, 'attempts');
       await addDoc(attemptsColRef, {
         payment_id: tx.payment_id,
         user_email: cleanEmail,
@@ -342,15 +311,6 @@ export async function saveTransactionToFirestore(tx: {
         paid_at: tx.paid_at || '',
         timestamp: serverTimestamp(),
         created_at: new Date().toISOString(),
-      });
-
-      // 3. Update existing invoice record in global `invoices` collection (1 invoice doc per generated payment)
-      await updateInvoiceInFirestore(tx.payment_id, {
-        status: tx.status as PaymentStatus,
-        razorpay_order_id: tx.razorpay_order_id || '',
-        razorpay_payment_id: tx.razorpay_payment_id || '',
-        paid_at: tx.paid_at || '',
-        ...(tx.error_description ? { error_description: tx.error_description } : {}),
       });
 
       return tx.payment_id;
