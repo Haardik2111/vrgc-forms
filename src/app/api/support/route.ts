@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
+  let ticketId = "VRGC-SUP-PENDING";
   try {
     const body = await req.json();
-    const { fullName, contactInfo, regNo, category, targetLead, message, ticketId } = body;
+    const { fullName, contactInfo, regNo, category, targetLead, message } = body;
+    if (body.ticketId) {
+      ticketId = body.ticketId;
+    }
 
     if (!fullName || !contactInfo || !message) {
       return NextResponse.json(
@@ -120,7 +124,7 @@ export async function POST(req: Request) {
     console.error("Error in support API route:", error);
     return NextResponse.json({
       success: true,
-      ticketId: body?.ticketId || "VRGC-SUP-PENDING",
+      ticketId,
     });
   }
 }
