@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { db } from '@/lib/firebase';
-import { doc, updateDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 
 // Helper to log a transaction attempt record to Firestore `payments/{payment_id}/attempts` subcollection (non-blocking)
 async function logTransactionToFirestore(tx: {
@@ -68,6 +68,61 @@ export async function POST(request: Request) {
       );
     }
 
+    // Lookup payment doc in Firestore for Idempotency and Amount/Order verification
+    let paymentDocSnap: any = null;
+    let paymentDocRef: any = null;
+
+    if (paymentId) {
+      paymentDocRef = doc(db, 'payments', String(paymentId));
+      paymentDocSnap = await getDoc(paymentDocRef);
+
+      if (paymentDocSnap.exists()) {
+        const paymentData = paymentDocSnap.data();
+
+        // Finding 6: Idempotency Check
+        if (paymentData.status === 'Paid') {
+          return NextResponse.json({
+            success: true,
+            message: 'Payment already verified and processed.',
+            razorpay_payment_id: paymentData.razorpay_payment_id || razorpay_payment_id,
+            razorpay_order_id: paymentData.razorpay_order_id || razorpay_order_id,
+          });
+        }
+
+        // Finding 3: Razorpay Order ID Verification
+        if (paymentData.razorpay_order_id && paymentData.razorpay_order_id !== razorpay_order_id) {
+          return NextResponse.json(
+            { success: false, error: 'Razorpay order ID mismatch with invoice record.' },
+            { status: 400 }
+          );
+        }
+
+        // Finding 3: Razorpay Order Amount Verification via API
+        const keyId = process.env.RAZORPAY_KEY_ID || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+        if (keyId && keySecret) {
+          try {
+            // @ts-ignore
+            const mod = await import('razorpay').catch(() => null);
+            const RazorpayConstructor = mod?.default || mod;
+            if (RazorpayConstructor) {
+              const instance = new RazorpayConstructor({ key_id: keyId, key_secret: keySecret });
+              const fetchedOrder = await instance.orders.fetch(razorpay_order_id);
+              const expectedAmountInPaise = Math.round(Number(paymentData.amount) * 100);
+
+              if (fetchedOrder && fetchedOrder.amount && fetchedOrder.amount !== expectedAmountInPaise) {
+                return NextResponse.json(
+                  { success: false, error: 'Paid Razorpay order amount does not match invoice amount.' },
+                  { status: 400 }
+                );
+              }
+            }
+          } catch (orderFetchErr) {
+            console.warn('Could not verify Razorpay order amount via SDK:', orderFetchErr);
+          }
+        }
+      }
+    }
+
     // Generated Signature Verification using HMAC-SHA256
     const text = `${razorpay_order_id}|${razorpay_payment_id}`;
     const generatedSignature = crypto
@@ -81,10 +136,9 @@ export async function POST(request: Request) {
       console.warn(`Signature Mismatch! Expected: ${generatedSignature}, Received: ${razorpay_signature}`);
       
       // Update Firestore `payments` doc to Failed if paymentId is provided
-      if (paymentId) {
+      if (paymentDocRef) {
         try {
-          const docRef = doc(db, 'payments', paymentId);
-          await updateDoc(docRef, {
+          await updateDoc(paymentDocRef, {
             status: 'Failed',
             razorpay_order_id,
             razorpay_payment_id,
@@ -95,7 +149,7 @@ export async function POST(request: Request) {
         }
       }
 
-      // Log failed transaction to Firestore `invoices` collection
+      // Log failed transaction to Firestore attempts collection
       await logTransactionToFirestore({
         payment_id: paymentId,
         user_email: userEmail,
@@ -118,10 +172,9 @@ export async function POST(request: Request) {
     // Signature matches -> Update Firestore `payments` doc to Paid
     const timestamp = new Date().toISOString();
 
-    if (paymentId) {
+    if (paymentDocRef) {
       try {
-        const docRef = doc(db, 'payments', paymentId);
-        await updateDoc(docRef, {
+        await updateDoc(paymentDocRef, {
           status: 'Paid',
           razorpay_order_id,
           razorpay_payment_id,
@@ -135,7 +188,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // Log successful transaction to Firestore `invoices` collection
+    // Log successful transaction to Firestore attempts collection
     await logTransactionToFirestore({
       payment_id: paymentId,
       user_email: userEmail,
@@ -167,3 +220,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

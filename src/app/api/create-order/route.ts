@@ -1,16 +1,44 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { amount, currency = 'INR', receipt, paymentId, title, userEmail } = body;
+    const { currency = 'INR', receipt, paymentId, title, userEmail } = body;
 
-    const parsedAmount = Number(amount);
-    if (!parsedAmount || isNaN(parsedAmount) || parsedAmount < 1) {
+    if (!paymentId) {
       return NextResponse.json(
-        { success: false, error: 'Amount must be at least 1 INR (100 paise).' },
+        { success: false, error: 'paymentId is required to create a payment order.' },
+        { status: 400 }
+      );
+    }
+
+    // Fetch actual payment document from Firestore to prevent client amount tampering
+    const paymentDocRef = doc(db, 'payments', String(paymentId));
+    const paymentDocSnap = await getDoc(paymentDocRef);
+
+    if (!paymentDocSnap.exists()) {
+      return NextResponse.json(
+        { success: false, error: 'Invoice or payment record not found in database.' },
+        { status: 404 }
+      );
+    }
+
+    const paymentData = paymentDocSnap.data();
+
+    // Prevent duplicate order creation if already paid
+    if (paymentData.status === 'Paid') {
+      return NextResponse.json(
+        { success: false, error: 'This payment record has already been paid and verified.' },
+        { status: 400 }
+      );
+    }
+
+    const actualAmount = Number(paymentData.amount);
+    if (!actualAmount || isNaN(actualAmount) || actualAmount < 1) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid payment amount found in invoice record.' },
         { status: 400 }
       );
     }
@@ -47,34 +75,31 @@ export async function POST(request: Request) {
       key_secret: keySecret,
     });
 
-    const amountInPaise = Math.round(parsedAmount * 100);
-    const safeReceipt = (receipt || (paymentId ? `rcpt_${paymentId}` : `rcpt_${Date.now()}`)).slice(0, 36);
+    const amountInPaise = Math.round(actualAmount * 100);
+    const safeReceipt = (receipt || `rcpt_${paymentId}`).slice(0, 36);
 
     const options = {
       amount: amountInPaise,
-      currency: currency || 'INR',
+      currency: currency || paymentData.currency || 'INR',
       receipt: safeReceipt,
       notes: {
-        paymentId: paymentId ? String(paymentId) : '',
-        userEmail: userEmail ? String(userEmail) : '',
-        title: title ? String(title) : '',
+        paymentId: String(paymentId),
+        userEmail: userEmail ? String(userEmail) : (paymentData.user_email || ''),
+        title: title ? String(title) : (paymentData.title || ''),
       },
     };
 
     const order = await instance.orders.create(options);
 
     // Update payment status to 'Processing' in Firestore payments collection
-    if (paymentId) {
-      try {
-        const docRef = doc(db, 'payments', String(paymentId));
-        await updateDoc(docRef, {
-          razorpay_order_id: order.id,
-          status: 'Processing',
-          updated_at: serverTimestamp(),
-        });
-      } catch (dbErr) {
-        console.warn('Firestore status update warning during order creation:', dbErr);
-      }
+    try {
+      await updateDoc(paymentDocRef, {
+        razorpay_order_id: order.id,
+        status: 'Processing',
+        updated_at: serverTimestamp(),
+      });
+    } catch (dbErr) {
+      console.warn('Firestore status update warning during order creation:', dbErr);
     }
 
     return NextResponse.json({
@@ -95,3 +120,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

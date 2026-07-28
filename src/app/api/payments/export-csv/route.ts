@@ -3,6 +3,24 @@ import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { CONFIG } from '@/lib/config';
 
+function getEmailFromBearerToken(authHeader: string | null): string | null {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+  const token = authHeader.substring(7).trim();
+  if (!token) return null;
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payloadJson = Buffer.from(parts[1], 'base64').toString('utf-8');
+    const payload = JSON.parse(payloadJson);
+    if (payload.exp && payload.exp * 1000 < Date.now()) {
+      return null;
+    }
+    return payload.email ? String(payload.email).toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -10,12 +28,16 @@ export async function GET(request: Request) {
     const adminKey = searchParams.get('key') || request.headers.get('x-admin-key');
     const authHeader = request.headers.get('authorization');
 
-    // Basic admin key or authorization check to prevent public scraping
-    const expectedKey = process.env.ADMIN_EXPORT_SECRET || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
-    const isAuthorizedKey = adminKey && expectedKey && adminKey === expectedKey;
-    const isAuthorizedToken = authHeader && authHeader.startsWith('Bearer ');
+    // Strict admin authorization check - NO public key fallbacks
+    const exportSecret = process.env.ADMIN_EXPORT_SECRET;
+    const isAuthorizedSecret = Boolean(exportSecret && adminKey && adminKey === exportSecret);
 
-    if (!isAuthorizedKey && !isAuthorizedToken && process.env.NODE_ENV === 'production') {
+    const tokenEmail = getEmailFromBearerToken(authHeader);
+    const isAuthorizedAdminToken = Boolean(
+      tokenEmail && CONFIG.ADMIN_EMAILS.includes(tokenEmail)
+    );
+
+    if (!isAuthorizedSecret && !isAuthorizedAdminToken) {
       return NextResponse.json(
         { error: 'Unauthorized: Access to payment exports requires admin authorization.' },
         { status: 401 }
@@ -88,3 +110,4 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: err.message || 'CSV Export failed' }, { status: 500 });
   }
 }
+

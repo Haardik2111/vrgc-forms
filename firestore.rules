@@ -1,0 +1,27 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /payments/{paymentId} {
+      // Payer can read their own payment records, admins can read all
+      allow read: if request.auth != null && (
+        request.auth.token.email == resource.data.user_email ||
+        request.auth.token.email == 'vrgc@vitbhopal.ac.in'
+      );
+
+      // Disallow direct client creation/updating of payment status & financial fields
+      allow create: if request.auth != null && request.auth.token.email == 'vrgc@vitbhopal.ac.in';
+      
+      // Prevent client SDKs from updating status, amount, razorpay_order_id, razorpay_payment_id, etc.
+      allow update: if false; 
+      allow delete: if request.auth != null && request.auth.token.email == 'vrgc@vitbhopal.ac.in';
+
+      match /attempts/{attemptId} {
+        allow read: if request.auth != null && (
+          request.auth.token.email == resource.data.user_email ||
+          request.auth.token.email == 'vrgc@vitbhopal.ac.in'
+        );
+        allow write: if false;
+      }
+    }
+  }
+}
