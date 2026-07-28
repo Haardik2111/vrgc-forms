@@ -218,25 +218,12 @@ const IDCard: React.FC<IDCardProps> = ({
 
   useEffect(() => {
     if (isAdmin) {
-      fetch('/members.csv')
-        .then((res) => res.text())
-        .then((txt) => {
-          const lines = txt
-            .split('\n')
-            .map(l => l.trim().toLowerCase())
-            .filter(l => l.length > 0 && !l.startsWith('name,'));
-
-          const uniqueEmails = new Set();
-          lines.forEach(line => {
-            const parts = line.split(',');
-            if (parts.length >= 4) {
-              uniqueEmails.add(parts[3].trim());
-            }
-          });
-
-          setTotalMembers(uniqueEmails.size);
+      const colRef = collection(db, 'id_cards');
+      getDocs(colRef)
+        .then((snap) => {
+          setTotalMembers(snap.size);
         })
-        .catch((err) => console.error('Failed to load members.csv:', err));
+        .catch((err) => console.error('Failed to count members from Firestore:', err));
     }
   }, [isAdmin]);
 

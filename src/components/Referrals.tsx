@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { CONFIG } from '../lib/config';
 import { auth, googleProvider, db } from '../lib/firebase';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
-import { collection, addDoc, updateDoc, doc, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc, onSnapshot, query, orderBy, getDocs } from 'firebase/firestore';
 
 interface ReferralsProps {
   onRedirect: () => void;
@@ -151,29 +151,57 @@ const Referrals: React.FC<ReferralsProps> = ({
   const dailyCount = getDailySubmissionsCount();
 
   useEffect(() => {
-    const loadCSVData = async () => {
+    const loadFirestoreData = async () => {
       try {
-        const adminRes = await fetch('/admins.csv');
-        if (adminRes.ok) {
-          const adminText = await adminRes.text();
-          const parsedAdmins = adminText.split('\n')
-            .map(line => line.trim())
-            .filter(line => line && !line.startsWith('Email'))
-            .map(email => email.toLowerCase());
-          setAdminEmails(parsedAdmins);
+        // Fetch admins from Firestore 'admins' collection
+        try {
+          const adminCol = collection(db, 'admins');
+          const adminSnap = await getDocs(adminCol);
+          const parsedAdmins: string[] = [];
+          adminSnap.forEach((docSnap) => {
+            const data = docSnap.data();
+            const email = (data.email || docSnap.id || '').toLowerCase().trim();
+            if (email && email.includes('@')) {
+              parsedAdmins.push(email);
+            }
+          });
+          if (parsedAdmins.length > 0) {
+            setAdminEmails(parsedAdmins);
+          }
+        } catch (aErr) {
+          console.warn('Error fetching admins from Firestore:', aErr);
         }
 
-        const memberRes = await fetch('/members.csv');
-        if (memberRes.ok) {
-          const memberText = await memberRes.text();
-          const parsedMembers = parseCSV(memberText);
-          setMembers(parsedMembers);
+        // Fetch members from Firestore 'id_cards' collection
+        try {
+          const memberCol = collection(db, 'id_cards');
+          const memberSnap = await getDocs(memberCol);
+          const parsedMembers: MemberData[] = [];
+          memberSnap.forEach((docSnap) => {
+            const data = docSnap.data();
+            const email = (data.email || docSnap.id || '').toLowerCase().trim();
+            if (email && email.includes('@')) {
+              parsedMembers.push({
+                Name: data.fullName || data.name || 'Member',
+                'Registration Number': data.regNo || data.registrationNumber || '',
+                Email: email,
+                Phone: data.phone || '',
+                Team: data.team || data.domain || 'Member',
+                Position: data.position || 'Member',
+              });
+            }
+          });
+          if (parsedMembers.length > 0) {
+            setMembers(parsedMembers);
+          }
+        } catch (mErr) {
+          console.warn('Error fetching members from Firestore:', mErr);
         }
       } catch (err) {
-        console.error('Error loading dynamic CSV data:', err);
+        console.error('Error loading Firestore referral data:', err);
       }
     };
-    loadCSVData();
+    loadFirestoreData();
   }, []);
 
   useEffect(() => {

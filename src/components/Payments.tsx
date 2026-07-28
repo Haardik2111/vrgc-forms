@@ -18,7 +18,7 @@ import {
   INVOICES_COLLECTION,
 } from '@/lib/payments';
 import { authDb as db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDocs } from 'firebase/firestore';
 import { User } from 'firebase/auth';
 import {
   CreditCard,
@@ -192,30 +192,57 @@ const Payments: React.FC<PaymentsProps> = ({
   const [allDueDate, setAllDueDate] = useState<string>('');
   const [assigningAll, setAssigningAll] = useState<boolean>(false);
 
-  // Load registered crew members from members.csv
+  // Load registered crew members from Firestore ('members' and 'id_cards' collections)
   useEffect(() => {
     const loadMembers = async () => {
       try {
-        const res = await fetch('/members.csv');
-        if (res.ok) {
-          const text = await res.text();
-          const lines = text.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('Name,'));
-          const parsed: MemberOption[] = lines.map((line) => {
-            const parts = line.split(',');
-            return {
-              name: parts[0] || 'Member',
-              regNo: parts[1] || '',
-              email: parts[3] ? parts[3].toLowerCase() : '',
-              team: parts[4] || '',
-            };
-          }).filter((m) => m.email);
+        const fetchedMembersMap = new Map<string, MemberOption>();
 
-          const uniqueMembers = Array.from(new Map(parsed.map((m) => [m.email, m])).values());
-          setMembersList(uniqueMembers);
-          setMembersMap(new Map(uniqueMembers.map((m) => [m.email, m])));
+        // 1. Fetch from 'members' bucket collection
+        try {
+          const membersCol = collection(db, 'members');
+          const membersSnap = await getDocs(membersCol);
+          membersSnap.forEach((docSnap) => {
+            const data = docSnap.data();
+            const email = (data.email || data.Email || docSnap.id || '').toLowerCase().trim();
+            if (email && email.includes('@')) {
+              fetchedMembersMap.set(email, {
+                name: data.name || data.Name || data.fullName || 'Member',
+                regNo: data.registrationNumber || data['Registration Number'] || data.regNo || '',
+                email: email,
+                team: data.team || data.Team || data.domain || 'VRGC Crew',
+              });
+            }
+          });
+        } catch (mErr) {
+          console.warn('Firestore members collection fetch error:', mErr);
         }
+
+        // 2. Fetch from 'id_cards' bucket collection
+        try {
+          const idCardsCol = collection(db, 'id_cards');
+          const idCardsSnap = await getDocs(idCardsCol);
+          idCardsSnap.forEach((docSnap) => {
+            const data = docSnap.data();
+            const email = (data.email || data.Email || docSnap.id || '').toLowerCase().trim();
+            if (email && email.includes('@') && !fetchedMembersMap.has(email)) {
+              fetchedMembersMap.set(email, {
+                name: data.fullName || data.name || data.Name || 'Member',
+                regNo: data.regNo || data.registrationNumber || data['Registration Number'] || '',
+                email: email,
+                team: data.team || data.Team || data.domain || 'VRGC Crew',
+              });
+            }
+          });
+        } catch (idErr) {
+          console.warn('Firestore id_cards collection fetch error:', idErr);
+        }
+
+        const uniqueMembers = Array.from(fetchedMembersMap.values());
+        setMembersList(uniqueMembers);
+        setMembersMap(fetchedMembersMap);
       } catch (err) {
-        console.error('Error parsing members.csv:', err);
+        console.error('Error loading members list from Firestore:', err);
       }
     };
 
