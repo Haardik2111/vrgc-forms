@@ -39,7 +39,14 @@ ${message}
 Automated message sent via VRGC Forms Technical Support Desk
 `;
 
-    const formspreeUrl = process.env.NEXT_PUBLIC_FORMSPREE_URL || "https://formspree.io/f/xvzellen";
+    const formspreeUrl = process.env.NEXT_PUBLIC_FORMSPREE_URL;
+    if (!formspreeUrl) {
+      console.error("NEXT_PUBLIC_FORMSPREE_URL is missing in environment");
+      return NextResponse.json(
+        { error: "Support desk service configuration error" },
+        { status: 500 }
+      );
+    }
 
     // Send support complaint via Formspree
     const formspreeResponse = await fetch(formspreeUrl, {
