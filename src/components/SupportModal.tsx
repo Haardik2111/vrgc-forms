@@ -43,20 +43,22 @@ export const SupportModal: React.FC<SupportModalProps> = ({
     const generatedId = `VRGC-SUP-${Math.floor(100000 + Math.random() * 900000)}`;
 
     try {
+      console.log("Submitting support ticket to /api/support...", { fullName, contactInfo, generatedId });
       const res = await fetch("/api/support", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fullName,
-          contactInfo,
-          regNo,
+          fullName: fullName.trim(),
+          contactInfo: contactInfo.trim(),
+          regNo: regNo.trim(),
           category,
-          message,
+          message: message.trim(),
           ticketId: generatedId,
         }),
       });
 
       const data = await res.json();
+      console.log("Support API response:", data);
 
       if (!res.ok) {
         throw new Error(data.error || "Failed to send ticket");
