@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { db } from '@/lib/firebase';
 import { doc, updateDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 
-// Helper to log a transaction record to Firestore `invoices` collection (non-blocking)
+// Helper to log a transaction attempt record to Firestore `payments/{payment_id}/attempts` subcollection (non-blocking)
 async function logTransactionToFirestore(tx: {
   payment_id?: string;
   user_email?: string;
@@ -19,18 +19,21 @@ async function logTransactionToFirestore(tx: {
   paid_at?: string;
 }) {
   try {
-    await addDoc(collection(db, 'invoices'), {
-      ...tx,
-      user_email: (tx.user_email || 'unknown').toLowerCase(),
-      payment_title: tx.payment_title || 'Unknown Payment',
-      amount: tx.amount || 0,
-      currency: tx.currency || 'INR',
-      created_at: serverTimestamp(),
-      updated_at: serverTimestamp(),
-      source: 'vrgc-forms',
-    });
+    if (tx.payment_id) {
+      const attemptsCol = collection(db, 'payments', tx.payment_id, 'attempts');
+      await addDoc(attemptsCol, {
+        ...tx,
+        user_email: (tx.user_email || 'unknown').toLowerCase(),
+        payment_title: tx.payment_title || 'Unknown Payment',
+        amount: tx.amount || 0,
+        currency: tx.currency || 'INR',
+        created_at: serverTimestamp(),
+        updated_at: serverTimestamp(),
+        source: 'vrgc-forms',
+      });
+    }
   } catch (err) {
-    console.warn('Transaction log to Firestore invoices collection failed:', err);
+    console.warn('Transaction log to Firestore attempts collection failed:', err);
   }
 }
 
