@@ -17,6 +17,21 @@ const nextConfig = {
     minimumCacheTTL: 3600,
   },
 
+  async redirects() {
+    return [
+      {
+        source: '/members.csv',
+        destination: '/',
+        permanent: true,
+      },
+      {
+        source: '/admins.csv',
+        destination: '/',
+        permanent: true,
+      },
+    ];
+  },
+
   async headers() {
     return [
       {
