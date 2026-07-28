@@ -1,13 +1,28 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Phone, ShieldCheck, Code2, ChevronUp, ChevronDown, Headset, Sparkles, MessageCircle } from 'lucide-react';
+import { Phone, ShieldCheck, Code2, ChevronUp, ChevronDown, Headset, Sparkles, MessageSquare } from 'lucide-react';
+import { SupportModal } from './SupportModal';
 
 const Footer: React.FC = () => {
   const [showFullSupport, setShowFullSupport] = useState<boolean>(false);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [selectedLead, setSelectedLead] = useState<"rishav" | "abhinav" | "general">("rishav");
+
+  const openSupportModal = (lead: "rishav" | "abhinav" | "general") => {
+    setSelectedLead(lead);
+    setIsModalOpen(true);
+  };
 
   return (
     <footer className="w-full sticky bottom-[60px] md:bottom-0 z-40 bg-[#070212]/80 backdrop-blur-xl border-t border-purple-500/20 text-[#cbd5e1] shadow-[0_-10px_40px_rgba(107,33,168,0.1)] transition-all duration-300">
+
+      {/* Support Desk Modal */}
+      <SupportModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        defaultLead={selectedLead}
+      />
 
       {/* Expandable Support Details Panel */}
       <div
@@ -26,17 +41,16 @@ const Footer: React.FC = () => {
                   <span className="tracking-wider">TECHNICAL SUPPORT DESK</span>
                 </div>
                 <p className="text-xs sm:text-sm text-slate-300 font-medium max-w-md mx-auto md:mx-0 leading-relaxed">
-                  Facing payment issues or technical bugs? Our Technical Leads are available to assist you directly.
+                  Facing payment issues or technical bugs? Submit a support ticket directly to our Technical Leads.
                 </p>
               </div>
 
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3 md:gap-4 w-full md:w-auto">
                 {/* Rishav Mandal */}
-                <a
-                  href="https://wa.me/919830442043"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-purple-950/40 border border-purple-500/30 hover:bg-purple-900/50 hover:border-purple-400/50 hover:shadow-[0_0_20px_rgba(168,85,247,0.2)] transition-all flex items-center gap-3 group"
+                <button
+                  type="button"
+                  onClick={() => openSupportModal("rishav")}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-purple-950/40 border border-purple-500/30 hover:bg-purple-900/50 hover:border-purple-400/50 hover:shadow-[0_0_20px_rgba(168,85,247,0.2)] transition-all flex items-center gap-3 group text-left"
                 >
                   <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white text-xs font-black shrink-0 shadow-lg group-hover:scale-105 transition-transform">
                     RM
@@ -45,18 +59,17 @@ const Footer: React.FC = () => {
                     <div className="font-bold text-white group-hover:text-purple-300 transition-colors text-sm">
                       Rishav Mandal <span className="text-[10px] text-purple-400 font-normal ml-1 border border-purple-500/30 px-1.5 py-0.5 rounded-md bg-purple-900/30">(Tech Lead)</span>
                     </div>
-                    <div className="text-[11px] font-mono text-emerald-400 font-bold flex items-center gap-1.5 mt-0.5">
-                      <MessageCircle className="w-3 h-3" /> WhatsApp
+                    <div className="text-[11px] font-mono text-purple-300 font-bold flex items-center gap-1.5 mt-0.5">
+                      <MessageSquare className="w-3 h-3 text-purple-400" /> Contact Support
                     </div>
                   </div>
-                </a>
+                </button>
 
                 {/* Abhinav Mishra */}
-                <a
-                  href="https://wa.me/917007864924"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-indigo-950/40 border border-indigo-500/30 hover:bg-indigo-900/50 hover:border-indigo-400/50 hover:shadow-[0_0_20px_rgba(99,102,241,0.2)] transition-all flex items-center gap-3 group"
+                <button
+                  type="button"
+                  onClick={() => openSupportModal("abhinav")}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-indigo-950/40 border border-indigo-500/30 hover:bg-indigo-900/50 hover:border-indigo-400/50 hover:shadow-[0_0_20px_rgba(99,102,241,0.2)] transition-all flex items-center gap-3 group text-left"
                 >
                   <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white text-xs font-black shrink-0 shadow-lg group-hover:scale-105 transition-transform">
                     AM
@@ -65,11 +78,11 @@ const Footer: React.FC = () => {
                     <div className="font-bold text-white group-hover:text-indigo-300 transition-colors text-sm">
                       Abhinav Mishra <span className="text-[10px] text-indigo-400 font-normal ml-1 border border-indigo-500/30 px-1.5 py-0.5 rounded-md bg-indigo-900/30">(Co-Lead)</span>
                     </div>
-                    <div className="text-[11px] font-mono text-emerald-400 font-bold flex items-center gap-1.5 mt-0.5">
-                      <MessageCircle className="w-3 h-3" /> WhatsApp
+                    <div className="text-[11px] font-mono text-indigo-300 font-bold flex items-center gap-1.5 mt-0.5">
+                      <MessageSquare className="w-3 h-3 text-indigo-400" /> Contact Support
                     </div>
                   </div>
-                </a>
+                </button>
               </div>
             </div>
           </div>
@@ -95,21 +108,31 @@ const Footer: React.FC = () => {
           </span>
         </div>
 
-        {/* Right: Expand Toggle (Query) */}
-        <button
-          onClick={() => setShowFullSupport((v) => !v)}
-          className={`px-2.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 border text-[10px] sm:text-[11px] font-bold shrink-0
-            ${showFullSupport
-              ? 'bg-purple-500/20 text-purple-200 border-purple-500/40 shadow-[0_0_10px_rgba(168,85,247,0.3)]'
-              : 'bg-white/5 hover:bg-white/10 text-slate-300 border-white/10 hover:border-white/20'
-            }
-          `}
-          title="Toggle Technical Support Panel"
-        >
-          <Headset className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${showFullSupport ? 'text-purple-300' : 'text-purple-400'}`} />
-          <span>{showFullSupport ? 'Close' : 'Query'}</span>
-          <ChevronUp className={`w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-400 transition-transform duration-300 ${showFullSupport ? 'rotate-180' : ''}`} />
-        </button>
+        {/* Right: Direct Support / Query Button */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => openSupportModal("general")}
+            className="px-2.5 py-1.5 rounded-lg bg-purple-600/20 hover:bg-purple-600/40 text-purple-200 border border-purple-500/40 hover:border-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.2)] transition-all flex items-center gap-1.5 text-[10px] sm:text-[11px] font-bold shrink-0"
+            title="Open Technical Support Desk"
+          >
+            <Headset className="w-3.5 h-3.5 text-purple-300 animate-pulse" />
+            <span>Contact Support</span>
+          </button>
+
+          <button
+            onClick={() => setShowFullSupport((v) => !v)}
+            className={`px-2 py-1.5 rounded-lg transition-all flex items-center gap-1 border text-[10px] sm:text-[11px] font-bold shrink-0
+              ${showFullSupport
+                ? 'bg-purple-500/20 text-purple-200 border-purple-500/40 shadow-[0_0_10px_rgba(168,85,247,0.3)]'
+                : 'bg-white/5 hover:bg-white/10 text-slate-300 border-white/10 hover:border-white/20'
+              }
+            `}
+            title="Toggle Leads Panel"
+          >
+            <span>{showFullSupport ? 'Close' : 'Leads'}</span>
+            <ChevronUp className={`w-3 h-3 text-slate-400 transition-transform duration-300 ${showFullSupport ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
 
       </div>
     </footer>
