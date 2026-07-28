@@ -19,7 +19,7 @@ const googleProvider = new GoogleAuthProvider();
 
 // ─── Inner app that consumes the auth context ───────────────────────────────
 function AppContent() {
-  const { user, userEmail, isAdmin, isAuthorized, memberData, authLoading, authError, handleLogin, handleLogout } = useAuth();
+  const { user, userEmail, isAdmin, isPaymentAdmin, isAuthorized, memberData, authLoading, authError, handleLogin, handleLogout } = useAuth();
   const [activePage, setActivePage] = useState<string>('dashboard');
   const [toast, setToast] = useState<string | null>(null);
   const [toastKey, setToastKey] = useState<number>(0);
@@ -185,7 +185,7 @@ function AppContent() {
                 onRedirect={() => handlePageChange('dashboard')}
                 externalUser={user}
                 externalUserEmail={userEmail}
-                externalIsAdmin={isAdmin}
+                externalIsAdmin={isPaymentAdmin}
               />
             ) : renderRestrictedSignIn('Payments & Dues')
           )}
