@@ -116,7 +116,7 @@ const IDCard: React.FC<IDCardProps> = ({
   const [selectedTeam, setSelectedTeam] = useState<string>('All');
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [previewCandidate, setPreviewCandidate] = useState<CandidateSubmission | null>(null);
-  const [totalMembers, setTotalMembers] = useState<number>(0);
+  const [totalMembers, setTotalMembers] = useState<number>(50);
 
   // Admin Logs sub-tab state
   const [adminSectionTab, setAdminSectionTab] = useState<'dossiers' | 'logs'>('dossiers');
@@ -215,17 +215,6 @@ const IDCard: React.FC<IDCardProps> = ({
 
     return () => unsub();
   }, [currentUser, isAdmin]);
-
-  useEffect(() => {
-    if (isAdmin) {
-      const colRef = collection(db, 'id_cards');
-      getDocs(colRef)
-        .then((snap) => {
-          setTotalMembers(snap.size);
-        })
-        .catch((err) => console.error('Failed to count members from Firestore:', err));
-    }
-  }, [isAdmin]);
 
   // Real-time listener for admin activity logs
   useEffect(() => {

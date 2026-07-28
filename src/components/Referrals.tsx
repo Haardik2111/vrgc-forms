@@ -267,7 +267,7 @@ const Referrals: React.FC<ReferralsProps> = ({
   }, [members, adminEmails]);
 
   useEffect(() => {
-    if (currentUser && isAuthorized && members.length > 0) {
+    if (currentUser && isAuthorized) {
       const matched = members.find(
         m => m.Email && m.Email.toLowerCase() === (currentUser.email || '').toLowerCase()
       );
@@ -365,6 +365,7 @@ const Referrals: React.FC<ReferralsProps> = ({
       targetTeam: targetTeam,
       referrerName: referrerInfo?.Name || currentUser?.displayName || 'VRGC Member',
       referrerRegNo: referrerInfo?.['Registration Number'] || extractRegNo(currentUser?.email),
+      referrerEmail: currentUser?.email || '',
       referrerPhotoURL: currentUser?.photoURL || null,
       status: 'Pending'
     };
@@ -520,11 +521,56 @@ const Referrals: React.FC<ReferralsProps> = ({
   };
 
   const getMyReferrals = () => {
-    if (!referrerInfo) return [];
-    const myReg = referrerInfo['Registration Number'];
+    if (!currentUser) return [];
+
+    const myEmail = (currentUser.email || '').toLowerCase().trim();
+    const myReg = (referrerInfo ? referrerInfo['Registration Number'] : extractRegNo(currentUser.email)).toUpperCase().trim();
+    const myName = (referrerInfo?.Name || currentUser.displayName || '').toLowerCase().trim();
+
     return referrals.filter(ref => {
-      const reg = getRefVal(ref, 'Referrer Registration Number') || getRefVal(ref, 'referrerRegNo');
-      return reg && reg.toString().toUpperCase() === myReg.toUpperCase();
+      // 1. Match by Registration Number
+      const reg = (
+        getRefVal(ref, 'Referrer Registration Number') ||
+        getRefVal(ref, 'referrerRegNo') ||
+        getRefVal(ref, 'referrer_reg_no') ||
+        ref.referrerRegNo ||
+        ref['Referrer Registration Number'] ||
+        ''
+      ).toString().toUpperCase().trim();
+
+      if (myReg && myReg !== 'UNKNOWN' && reg && reg === myReg) {
+        return true;
+      }
+
+      // 2. Match by Email Address
+      const email = (
+        getRefVal(ref, 'Referrer Email') ||
+        getRefVal(ref, 'referrerEmail') ||
+        getRefVal(ref, 'user_email') ||
+        getRefVal(ref, 'email') ||
+        ref.referrerEmail ||
+        ref.user_email ||
+        ''
+      ).toString().toLowerCase().trim();
+
+      if (myEmail && email && email === myEmail) {
+        return true;
+      }
+
+      // 3. Match by Referrer Name
+      if (myName) {
+        const refName = (
+          getRefVal(ref, 'Referrer Name') ||
+          getRefVal(ref, 'referrerName') ||
+          ref.referrerName ||
+          ''
+        ).toString().toLowerCase().trim();
+        if (refName && refName === myName) {
+          return true;
+        }
+      }
+
+      return false;
     });
   };
 
