@@ -4,7 +4,7 @@ export async function POST(req: Request) {
   let ticketId = "VRGC-SUP-PENDING";
   try {
     const body = await req.json();
-    const { fullName, contactInfo, regNo, category, targetLead, message } = body;
+    const { fullName, contactInfo, regNo, category, message } = body;
     if (body.ticketId) {
       ticketId = body.ticketId;
     }
@@ -25,14 +25,7 @@ export async function POST(req: Request) {
       );
     }
 
-    let leadName: string;
-    if (targetLead === "rishav") {
-      leadName = "Rishav Mandal (Tech Lead)";
-    } else if (targetLead === "abhinav") {
-      leadName = "Abhinav Mishra (Co-Lead)";
-    } else {
-      leadName = "Technical Desk (Rishav & Abhinav)";
-    }
+    const leadName = "Technical Support Desk";
 
     // Format Message Body for Web3Forms
     const formattedText = `

@@ -1,20 +1,19 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { X, Send, ShieldCheck, CheckCircle2, User, Mail, FileText, Sparkles, MessageSquare, AlertCircle } from "lucide-react";
 
 interface SupportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  defaultLead?: "rishav" | "abhinav" | "general";
 }
 
 export const SupportModal: React.FC<SupportModalProps> = ({
   isOpen,
   onClose,
-  defaultLead = "rishav",
 }) => {
-  const [targetLead, setTargetLead] = useState<string>(defaultLead);
+  const [mounted, setMounted] = useState(false);
   const [fullName, setFullName] = useState<string>("");
   const [contactInfo, setContactInfo] = useState<string>("");
   const [regNo, setRegNo] = useState<string>("");
@@ -25,7 +24,11 @@ export const SupportModal: React.FC<SupportModalProps> = ({
   const [ticketId, setTicketId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!isOpen || !mounted) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,7 +51,6 @@ export const SupportModal: React.FC<SupportModalProps> = ({
           contactInfo,
           regNo,
           category,
-          targetLead,
           message,
           ticketId: generatedId,
         }),
@@ -80,13 +82,13 @@ export const SupportModal: React.FC<SupportModalProps> = ({
     onClose();
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-xl transition-all duration-300 animate-in fade-in"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 bg-black/40 backdrop-blur-md transition-all duration-300 animate-in fade-in"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-lg bg-[#0e0720]/90 border border-purple-500/30 rounded-2xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8),0_0_40px_rgba(168,85,247,0.25)] overflow-hidden text-slate-200 animate-in zoom-in-95 duration-200 ease-out"
+        className="relative w-full max-w-lg bg-[#0e0720]/95 border border-purple-500/30 rounded-2xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9),0_0_50px_rgba(168,85,247,0.3)] overflow-hidden text-slate-200 animate-in zoom-in-95 duration-200 ease-out"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Glow backdrop effect */}
@@ -135,13 +137,9 @@ export const SupportModal: React.FC<SupportModalProps> = ({
               <div className="space-y-1">
                 <h4 className="text-lg font-bold text-white">Support Ticket Submitted!</h4>
                 <p className="text-xs text-slate-300">
-                  Your request has been routed to{" "}
+                  Your request has been routed to the{" "}
                   <strong className="text-purple-300">
-                    {targetLead === "rishav"
-                      ? "Rishav Mandal (Tech Lead)"
-                      : targetLead === "abhinav"
-                      ? "Abhinav Mishra (Co-Lead)"
-                      : "Technical Desk"}
+                    VRGC Technical Support Desk
                   </strong>
                   .
                 </p>
@@ -172,37 +170,6 @@ export const SupportModal: React.FC<SupportModalProps> = ({
                   <span>{errorMsg}</span>
                 </div>
               )}
-
-              {/* Select Lead */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Target Tech Lead</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setTargetLead("rishav")}
-                    className={`p-2.5 rounded-xl border text-left transition-all ${
-                      targetLead === "rishav"
-                        ? "bg-purple-900/40 border-purple-400 text-white shadow-[0_0_15px_rgba(168,85,247,0.2)]"
-                        : "bg-white/5 border-white/10 text-slate-400 hover:bg-white/10"
-                    }`}
-                  >
-                    <div className="font-bold text-xs">Rishav Mandal</div>
-                    <div className="text-[10px] text-purple-300">Tech Lead</div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTargetLead("abhinav")}
-                    className={`p-2.5 rounded-xl border text-left transition-all ${
-                      targetLead === "abhinav"
-                        ? "bg-indigo-900/40 border-indigo-400 text-white shadow-[0_0_15px_rgba(99,102,241,0.2)]"
-                        : "bg-white/5 border-white/10 text-slate-400 hover:bg-white/10"
-                    }`}
-                  >
-                    <div className="font-bold text-xs">Abhinav Mishra</div>
-                    <div className="text-[10px] text-indigo-300">Co-Lead</div>
-                  </button>
-                </div>
-              </div>
 
               {/* Full Name & Reg No */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -309,6 +276,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

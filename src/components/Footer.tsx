@@ -6,12 +6,6 @@ import { SupportModal } from './SupportModal';
 
 const Footer: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-  const [selectedLead, setSelectedLead] = useState<"rishav" | "abhinav" | "general">("general");
-
-  const openSupportModal = (lead: "rishav" | "abhinav" | "general" = "general") => {
-    setSelectedLead(lead);
-    setIsModalOpen(true);
-  };
 
   return (
     <footer className="w-full sticky bottom-[60px] md:bottom-0 z-40 bg-[#070212]/80 backdrop-blur-xl border-t border-purple-500/20 text-[#cbd5e1] shadow-[0_-10px_40px_rgba(107,33,168,0.1)] transition-all duration-300">
@@ -20,7 +14,6 @@ const Footer: React.FC = () => {
       <SupportModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        defaultLead={selectedLead}
       />
 
       {/* Main Ultra-Sleek Docked Footer Bar */}
@@ -44,7 +37,7 @@ const Footer: React.FC = () => {
 
         {/* Right: Direct Support Button */}
         <button
-          onClick={() => openSupportModal("general")}
+          onClick={() => setIsModalOpen(true)}
           className="px-3 py-1.5 rounded-lg bg-purple-600/20 hover:bg-purple-600/40 text-purple-200 border border-purple-500/40 hover:border-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.2)] transition-all flex items-center gap-1.5 text-[10px] sm:text-[11px] font-bold shrink-0"
           title="Open Technical Support Desk"
         >
