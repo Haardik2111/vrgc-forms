@@ -1,11 +1,26 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import { CONFIG } from '@/lib/config';
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const titleFilter = searchParams.get('title');
+    const adminKey = searchParams.get('key') || request.headers.get('x-admin-key');
+    const authHeader = request.headers.get('authorization');
+
+    // Basic admin key or authorization check to prevent public scraping
+    const expectedKey = process.env.ADMIN_EXPORT_SECRET || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+    const isAuthorizedKey = adminKey && expectedKey && adminKey === expectedKey;
+    const isAuthorizedToken = authHeader && authHeader.startsWith('Bearer ');
+
+    if (!isAuthorizedKey && !isAuthorizedToken && process.env.NODE_ENV === 'production') {
+      return NextResponse.json(
+        { error: 'Unauthorized: Access to payment exports requires admin authorization.' },
+        { status: 401 }
+      );
+    }
 
     const colRef = collection(db, 'payments');
     let q;
@@ -23,7 +38,7 @@ export async function GET(request: Request) {
       payments.push({ id: docSnap.id, ...(docSnap.data() as object) });
     });
 
-    // Sort by paid_at descending (client-side since Firestore may not have composite index)
+    // Sort by paid_at descending
     payments.sort((a, b) => {
       const dateA = a.paid_at ? new Date(a.paid_at).getTime() : 0;
       const dateB = b.paid_at ? new Date(b.paid_at).getTime() : 0;
@@ -73,4 +88,3 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: err.message || 'CSV Export failed' }, { status: 500 });
   }
 }
-

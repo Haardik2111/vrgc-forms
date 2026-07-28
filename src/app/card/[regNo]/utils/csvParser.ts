@@ -1,3 +1,6 @@
+import { db } from '@/lib/firebase';
+import { collection, getDocs } from 'firebase/firestore';
+
 export interface CsvMember {
   name: string;
   registrationNumber: string;
@@ -9,12 +12,26 @@ export interface CsvMember {
 
 export async function fetchCsvMembers(): Promise<CsvMember[]> {
   try {
-    const res = await fetch('/members.csv');
-    if (!res.ok) return [];
-    const text = await res.text();
-    return parseMembersCsv(text);
+    const colRef = collection(db, 'members');
+    const snapshot = await getDocs(colRef);
+
+    if (snapshot.empty) {
+      return [];
+    }
+
+    return snapshot.docs.map((docSnap) => {
+      const data = docSnap.data();
+      return {
+        name: data.name || '',
+        registrationNumber: data.registrationNumber || data.registration_number || '',
+        phone: data.phone || '',
+        email: data.email || '',
+        team: data.team || '',
+        position: data.position || 'Member',
+      };
+    });
   } catch (err) {
-    console.error('Error loading members.csv:', err);
+    console.error('Error fetching members from Firestore:', err);
     return [];
   }
 }

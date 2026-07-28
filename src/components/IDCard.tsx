@@ -287,11 +287,9 @@ const IDCard: React.FC<IDCardProps> = ({
     }
   }, [currentUser]);
 
-  // Only abhinav can delete individual log entries
+  // Admins can delete individual log entries
   const handleDeleteLog = useCallback(async (logId?: string) => {
-    if (!logId || !db) return;
-    const userEmail = (currentUser?.email || '').toLowerCase();
-    if (userEmail !== 'abhinav.25bcy10254@vitbhopal.ac.in') return;
+    if (!logId || !db || !isAdmin) return;
     try {
       await deleteDoc(doc(db, 'admin_logs', logId));
       setAdminLogs(prev => prev.filter(l => l.id !== logId));
@@ -300,7 +298,7 @@ const IDCard: React.FC<IDCardProps> = ({
     } catch (err) {
       console.error('Failed to delete log entry:', err);
     }
-  }, [currentUser?.email]);
+  }, [isAdmin]);
 
   // Performance optimization: Pagination / Windowing states (Massive TBT & LCP boost)
   const [dossierPageLimit, setDossierPageLimit] = useState<number>(12);
@@ -315,8 +313,8 @@ const IDCard: React.FC<IDCardProps> = ({
   }, [logSearchQuery, logActionFilter]);
 
   const canDeleteLogs = useMemo(() => {
-    return (currentUser?.email || '').toLowerCase() === 'abhinav.25bcy10254@vitbhopal.ac.in';
-  }, [currentUser?.email]);
+    return isAdmin;
+  }, [isAdmin]);
 
   const filteredLogs = useMemo(() => {
     return adminLogs.filter(log => {
@@ -456,7 +454,7 @@ const IDCard: React.FC<IDCardProps> = ({
       const { error: photoUploadError } = await supabase.storage
         .from('id-cards')
         .upload(photoFilePath, photoFile, {
-          cacheControl: '3600',
+          cacheControl: '1296000',
           upsert: true
         });
 
@@ -497,7 +495,7 @@ const IDCard: React.FC<IDCardProps> = ({
           const { error: avatarUploadError } = await supabase.storage
             .from('avatar')
             .upload(avatarFilePath, uploadBlob, {
-              cacheControl: '3600',
+              cacheControl: '1296000',
               upsert: true,
               contentType: uploadBlob.type || 'image/gif'
             });
@@ -2874,7 +2872,7 @@ const IDCard: React.FC<IDCardProps> = ({
             </div>
 
             <div className="flex items-center justify-between pt-3 border-t border-white/10">
-              {(currentUser?.email || '').toLowerCase() === 'abhinav.25bcy10254@vitbhopal.ac.in' ? (
+              {canDeleteLogs ? (
                 <button
                   onClick={() => {
                     if (selectedLogForDetails.id && confirm('Are you sure you want to delete this activity log entry?')) {

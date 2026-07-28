@@ -9,23 +9,10 @@ export const CONFIG = {
   SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || "https://fopyejijjeoumimsdgiz.supabase.co",
   SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZvcHllamlqamVvdW1pbXNkZ2l6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ3Mjg4NDMsImV4cCI6MjEwMDMwNDg0M30.NQVEJKOzJnNoFGs8tgDTkbMrc4OgE_w9bhSpsZ4Cxm4",
 
-  // ID Card Form Whitelisted Admins
-  ADMIN_EMAILS: [
-    "vrgc@vitbhopal.ac.in",
-    "aayush.23mim10104@vitbhopal.ac.in",
-    "abhinav.25bcy10254@vitbhopal.ac.in",
-    "admin@vrgc.club",
-    "alex.dev@gmail.com",
-    "anmol.25bai10263@vitbhopal.ac.in",
-    "haardik.24bcg10051@vitbhopal.ac.in",
-    "jaiyansh.25bcy10268@vitbhopal.ac.in",
-    "lokesh.23bcg10015@vitbhopal.ac.in",
-    "mohit.25bcg10008@vitbhopal.ac.in",
-    "parardha.24bcg10003@vitbhopal.ac.in",
-    "rishav.24bsa10096@vitbhopal.ac.in",
-    "riya.24bcg10082@vitbhopal.ac.in",
-    "shivansh.23bce11158@vitbhopal.ac.in"
-  ],
+  // Whitelisted Admins (managed dynamically via Firestore / admins collection or env variable)
+  ADMIN_EMAILS: (process.env.NEXT_PUBLIC_ADMIN_EMAILS || 'vrgc@vitbhopal.ac.in')
+    .split(',')
+    .map((e) => e.trim().toLowerCase()),
 
   // Live Firebase Production Configuration
   FIREBASE_CONFIG: {
