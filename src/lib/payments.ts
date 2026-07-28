@@ -16,8 +16,8 @@ import {
 import { PaymentItem, PaymentStatus } from '@/types/payment';
 
 // ─── Firestore Collection Names ───────────────────────────────────────────────
-export const PAYMENTS_COLLECTION = 'invoices';
-export const INVOICES_COLLECTION = 'invoices';
+export const PAYMENTS_COLLECTION = 'payments';
+export const INVOICES_COLLECTION = 'payments';
 
 // ─── Transaction / Invoice Log Type ──────────────────────────────────────────
 export interface TransactionLog {
