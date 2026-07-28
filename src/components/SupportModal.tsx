@@ -50,7 +50,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({
         body: JSON.stringify({
           fullName: fullName.trim(),
           contactInfo: contactInfo.trim(),
-          regNo: regNo.trim(),
+          regNo: regNo.trim().toUpperCase(),
           category,
           message: message.trim(),
           ticketId: generatedId,
@@ -198,9 +198,9 @@ export const SupportModal: React.FC<SupportModalProps> = ({
                     <input
                       type="text"
                       value={regNo}
-                      onChange={(e) => setRegNo(e.target.value)}
+                      onChange={(e) => setRegNo(e.target.value.toUpperCase())}
                       placeholder="23BCE1000"
-                      className="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-white/5 border border-white/10 focus:border-purple-400 focus:outline-none text-white placeholder:text-slate-500"
+                      className="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-white/5 border border-white/10 focus:border-purple-400 focus:outline-none text-white placeholder:text-slate-500 uppercase"
                     />
                   </div>
                 </div>

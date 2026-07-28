@@ -16,29 +16,20 @@ export async function POST(req: Request) {
       );
     }
 
-    const resendApiKey = process.env.RESEND_API_KEY;
-    if (!resendApiKey) {
-      console.error("RESEND_API_KEY is missing in environment");
-      return NextResponse.json(
-        { error: "Server configuration error" },
-        { status: 500 }
-      );
-    }
+    const formattedRegNo = regNo ? String(regNo).trim().toUpperCase() : "Not provided";
 
-    const leadName = "Technical Support Desk";
-
-    // Format Message Body for Email & Resend Dashboard
+    // Format Message Body for Formspree
     const formattedText = `
 --------------------------------------------------
 🚨 VRGC TECHNICAL SUPPORT TICKET: [${ticketId}]
 --------------------------------------------------
 
-ASSIGNED TO: ${leadName}
+ASSIGNED TO: Technical Support Desk
 CATEGORY   : ${category.toUpperCase()}
 
 --- USER DETAILS ---
 FULL NAME : ${fullName}
-REG / ROLL: ${regNo || "Not provided"}
+REG / ROLL: ${formattedRegNo}
 CONTACT   : ${contactInfo}
 
 --- ISSUE DESCRIPTION ---
@@ -48,42 +39,39 @@ ${message}
 Automated message sent via VRGC Forms Technical Support Desk
 `;
 
-    // Send email via Resend REST API
-    const resendPayload: Record<string, any> = {
-      from: "VRGC Technical Desk <onboarding@resend.dev>",
-      to: ["delivered@resend.dev"],
-      subject: `[${ticketId}] Support Ticket: ${category.toUpperCase()} - ${fullName}`,
-      text: formattedText,
-    };
-
-    // If contactInfo is a valid email, set reply_to
-    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactInfo.trim())) {
-      resendPayload.reply_to = contactInfo.trim();
-    }
-
-    const resendResponse = await fetch("https://api.resend.com/emails", {
+    // Send support complaint via Formspree
+    const formspreeResponse = await fetch("https://formspree.io/f/xvzellen", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${resendApiKey}`,
+        Accept: "application/json",
       },
-      body: JSON.stringify(resendPayload),
+      body: JSON.stringify({
+        ticketId,
+        name: fullName,
+        email: contactInfo,
+        regNo: formattedRegNo,
+        category,
+        message: formattedText,
+        _replyto: contactInfo,
+        _subject: `[${ticketId}] Support Ticket: ${category.toUpperCase()} - ${fullName}`,
+      }),
     });
 
-    const result = await resendResponse.json();
+    const result = await formspreeResponse.json();
 
-    if (!resendResponse.ok) {
-      console.error("Resend API error:", result);
+    if (!formspreeResponse.ok) {
+      console.error("Formspree API error:", result);
       return NextResponse.json(
-        { error: result.message || "Failed to deliver support email via Resend" },
-        { status: resendResponse.status || 500 }
+        { error: result.error || "Failed to deliver support email via Formspree" },
+        { status: formspreeResponse.status || 500 }
       );
     }
 
     return NextResponse.json({
       success: true,
       ticketId,
-      message: "Ticket submitted and delivered successfully via Resend!",
+      message: "Ticket submitted and delivered successfully via Formspree!",
     });
   } catch (error: any) {
     console.error("Error in support API route:", error);

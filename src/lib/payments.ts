@@ -106,6 +106,26 @@ export async function fetchPaymentsFromFirestore(
 
     snapshot.forEach((docSnap) => {
       const data: any = docSnap.data();
+      const createdAtIso = data.created_at?.toDate ? data.created_at.toDate().toISOString() : data.created_at || new Date().toISOString();
+      const createdTimeMs = new Date(createdAtIso).getTime();
+      const nowMs = Date.now();
+      const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+
+      let status: PaymentStatus = (data.status as PaymentStatus) || 'Pending';
+      let errorDesc = data.error_description || '';
+
+      // Auto-expire Pending invoices if created more than 2 hours ago
+      if (status === 'Pending' && nowMs - createdTimeMs > TWO_HOURS_MS) {
+        status = 'Cancelled';
+        errorDesc = 'Invoice expired (2-Hour Expiration Time Exceeded)';
+        // Fire-and-forget update to Firestore document
+        updateDoc(doc(db, INVOICES_COLLECTION, docSnap.id), {
+          status: 'Cancelled',
+          error_description: errorDesc,
+          updated_at: serverTimestamp(),
+        }).catch((e) => console.warn('Auto-expire update warning:', e));
+      }
+
       items.push({
         id: docSnap.id,
         user_email: data.user_email || '',
@@ -117,14 +137,14 @@ export async function fetchPaymentsFromFirestore(
         category: data.category || 'Club Fee',
         amount: Number(data.amount) || 0,
         currency: data.currency || 'INR',
-        status: (data.status as PaymentStatus) || 'Pending',
-        due_date: data.due_date || '',
+        status,
+        due_date: data.due_date || new Date(createdTimeMs + TWO_HOURS_MS).toISOString(),
         razorpay_order_id: data.razorpay_order_id || '',
         razorpay_payment_id: data.razorpay_payment_id || '',
         razorpay_signature: data.razorpay_signature || '',
-        error_description: data.error_description || '',
+        error_description: errorDesc,
         paid_at: data.paid_at || '',
-        created_at: data.created_at?.toDate ? data.created_at.toDate().toISOString() : data.created_at || new Date().toISOString(),
+        created_at: createdAtIso,
         updated_at: data.updated_at?.toDate ? data.updated_at.toDate().toISOString() : data.updated_at || new Date().toISOString(),
       });
     });
@@ -149,12 +169,23 @@ export async function createPaymentInFirestore(
   }
 ): Promise<PaymentItem | null> {
   try {
-    const now = new Date().toISOString();
+    const nowMs = Date.now();
+    const twoHoursLaterMs = nowMs + 2 * 60 * 60 * 1000;
+    const nowIso = new Date(nowMs).toISOString();
+    const expiryIso = new Date(twoHoursLaterMs).toISOString();
     const cleanEmail = paymentData.user_email ? paymentData.user_email.toLowerCase() : '';
+
+    const defaultDueDate = paymentData.due_date ? paymentData.due_date : expiryIso;
+    const expirationNoticeMsg = `⚠️ IMPORTANT: This invoice was generated at ${new Date(nowMs).toLocaleTimeString('en-IN')} and will AUTOMATICALLY EXPIRE in 2 hours (${new Date(twoHoursLaterMs).toLocaleTimeString('en-IN')}). Please complete your payment before expiration.`;
+    const fullDescription = paymentData.description
+      ? `${paymentData.description}\n\n${expirationNoticeMsg}`
+      : expirationNoticeMsg;
     
     // Create EXACTLY 1 document in `invoices` collection
     const docRef = await addDoc(collection(db, INVOICES_COLLECTION), {
       ...paymentData,
+      description: fullDescription,
+      due_date: defaultDueDate,
       user_email: cleanEmail,
       candidate_name: paymentData.candidate_name || '',
       registration_number: paymentData.registration_number || '',
@@ -167,14 +198,55 @@ export async function createPaymentInFirestore(
     const newPayment: PaymentItem = {
       ...paymentData,
       id: docRef.id,
+      description: fullDescription,
+      due_date: defaultDueDate,
       user_email: cleanEmail,
       candidate_name: paymentData.candidate_name || '',
       registration_number: paymentData.registration_number || '',
       team: paymentData.team || '',
       category: paymentData.category as any,
-      created_at: paymentData.created_at || now,
-      updated_at: now,
+      created_at: paymentData.created_at || nowIso,
+      updated_at: nowIso,
     };
+
+    // Send email notification to user via Resend API
+    if (cleanEmail && cleanEmail.includes('@')) {
+      const resendApiKey = process.env.RESEND_API_KEY || "re_MykVr8Wy_epyeUd2H2ycpo8VBmtKpJau5";
+      const invoiceEmailText = `
+--------------------------------------------------
+VRGC PAYMENT INVOICE GENERATED
+--------------------------------------------------
+
+INVOICE ID : ${docRef.id}
+ITEM / TITLE: ${paymentData.title}
+AMOUNT DUE : ₹${paymentData.amount} INR
+CATEGORY   : ${paymentData.category}
+
+--------------------------------------------------
+⏰ EXPIRATION WARNING:
+This invoice has been issued and is VALID FOR 2 HOURS ONLY.
+It will automatically expire at: ${new Date(twoHoursLaterMs).toLocaleString('en-IN')}.
+
+Please log in to your VRGC Forms portal to complete your payment before expiration.
+--------------------------------------------------
+Automated message sent via VRGC Command Center
+`;
+
+      fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${resendApiKey}`,
+        },
+        body: JSON.stringify({
+          from: "VRGC Billing Desk <onboarding@resend.dev>",
+          to: ["vrgcdev@gmail.com"], // In Resend test mode sends to account email; with verified domain sends to cleanEmail
+          subject: `[ACTION REQUIRED] VRGC Invoice Generated: ₹${paymentData.amount} (Expires in 2 Hours)`,
+          text: invoiceEmailText,
+          reply_to: cleanEmail,
+        }),
+      }).catch((e) => console.warn('Invoice email dispatch warning:', e));
+    }
 
     // Log initial creation attempt inside subcollection `invoices/{id}/attempts`
     try {
@@ -189,9 +261,9 @@ export async function createPaymentInFirestore(
         amount: paymentData.amount,
         currency: paymentData.currency || 'INR',
         status: paymentData.status,
-        error_description: 'Invoice issued',
+        error_description: 'Invoice issued (Expires in 2 Hours)',
         timestamp: serverTimestamp(),
-        created_at: now,
+        created_at: nowIso,
       });
     } catch (e) {
       console.warn('Subcollection attempt log warning:', e);

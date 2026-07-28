@@ -10,9 +10,10 @@ export const CONFIG = {
   SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZvcHllamlqamVvdW1pbXNkZ2l6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ3Mjg4NDMsImV4cCI6MjEwMDMwNDg0M30.NQVEJKOzJnNoFGs8tgDTkbMrc4OgE_w9bhSpsZ4Cxm4",
 
   // Whitelisted Admins (managed dynamically via Firestore / admins collection or env variable)
-  ADMIN_EMAILS: (process.env.NEXT_PUBLIC_ADMIN_EMAILS || 'vrgc@vitbhopal.ac.in')
+  ADMIN_EMAILS: (process.env.NEXT_PUBLIC_ADMIN_EMAILS || '')
     .split(',')
-    .map((e) => e.trim().toLowerCase()),
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean),
 
   // Live Firebase Production Configuration
   FIREBASE_CONFIG: {

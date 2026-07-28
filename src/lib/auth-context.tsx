@@ -12,9 +12,13 @@ import {
 import { collection, query, where, getDocs, getDoc, doc } from 'firebase/firestore';
 import { CONFIG } from '@/lib/config';
 
-// Designated payment admin email
-export const PAYMENT_ADMIN_EMAIL = 'vrgc@vitbhopal.ac.in';
-export const ADMIN_EMAIL = 'vrgc@vitbhopal.ac.in';
+// Designated payment admin emails loaded from environment variables
+export const PAYMENT_ADMIN_EMAILS = (process.env.NEXT_PUBLIC_PAYMENT_ADMIN_EMAILS || 'vrgc@vitbhopal.ac.in,abhinav.25bcy10254@vitbhopal.ac.in')
+  .split(',')
+  .map((e) => e.trim().toLowerCase())
+  .filter(Boolean);
+export const PAYMENT_ADMIN_EMAIL = PAYMENT_ADMIN_EMAILS[0] || '';
+export const ADMIN_EMAIL = PAYMENT_ADMIN_EMAILS[0] || '';
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -103,8 +107,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.warn('Firestore admin check fallback:', adminErr);
       }
 
-      const admin = isDbAdmin || em === PAYMENT_ADMIN_EMAIL || configAdmins.includes(em);
-      const paymentAdmin = em === PAYMENT_ADMIN_EMAIL;
+      const isPaymentAdminEmail = PAYMENT_ADMIN_EMAILS.includes(em);
+      const admin = isDbAdmin || isPaymentAdminEmail || em === PAYMENT_ADMIN_EMAIL || configAdmins.includes(em);
+      const paymentAdmin = isPaymentAdminEmail;
       setIsAdmin(admin);
       setIsPaymentAdmin(paymentAdmin);
 
