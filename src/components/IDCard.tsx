@@ -170,9 +170,8 @@ const IDCard: React.FC<IDCardProps> = ({
       const lowerEmail = userToUse.email.toLowerCase();
       setCurrentUser(userToUse);
 
-      const isVrgc = lowerEmail === 'vrgc@vitbhopal.ac.in';
       const configAdmins = CONFIG.ADMIN_EMAILS.map(e => e.toLowerCase());
-      const adminStatus = isVrgc || configAdmins.includes(lowerEmail) || (externalIsAdmin ?? false);
+      const adminStatus = configAdmins.includes(lowerEmail) || (externalIsAdmin ?? false);
       setIsAdmin(adminStatus);
 
       if (externalIsAuthorized !== undefined) {

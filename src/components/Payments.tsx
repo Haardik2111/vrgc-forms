@@ -111,10 +111,9 @@ const Payments: React.FC<PaymentsProps> = ({
   const currentUser = externalUser ?? null;
   const userEmail = externalUserEmail;
 
-  // Master VRGC Admin (vrgc@vitbhopal.ac.in) — ONLY account with Payment Admin access & creation rights
-  const isVrgcMasterAdmin = (userEmail || currentUser?.email || '').toLowerCase() === 'vrgc@vitbhopal.ac.in';
-  const isAdminState = isVrgcMasterAdmin;
-  const canInitiatePayments = isVrgcMasterAdmin;
+  // Master VRGC Admin check passed via props/auth context
+  const isAdminState = externalIsAdmin || propIsAdmin || false;
+  const canInitiatePayments = isAdminState;
   const [adminViewAll, setAdminViewAll] = useState<boolean>(true);
 
   // Members list parsed from public/members.csv

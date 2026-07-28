@@ -13,7 +13,7 @@ import { collection, query, where, getDocs, getDoc, doc } from 'firebase/firesto
 import { CONFIG } from '@/lib/config';
 
 // Designated payment admin emails loaded from environment variables
-export const PAYMENT_ADMIN_EMAILS = (process.env.NEXT_PUBLIC_PAYMENT_ADMIN_EMAILS || 'vrgc@vitbhopal.ac.in,abhinav.25bcy10254@vitbhopal.ac.in')
+export const PAYMENT_ADMIN_EMAILS = (process.env.NEXT_PUBLIC_PAYMENT_ADMIN_EMAILS || '')
   .split(',')
   .map((e) => e.trim().toLowerCase())
   .filter(Boolean);

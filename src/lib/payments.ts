@@ -211,7 +211,7 @@ export async function createPaymentInFirestore(
 
     // Send email notification to user via Resend API
     if (cleanEmail && cleanEmail.includes('@')) {
-      const resendApiKey = process.env.RESEND_API_KEY || "re_MykVr8Wy_epyeUd2H2ycpo8VBmtKpJau5";
+      const resendApiKey = process.env.RESEND_API_KEY || process.env.NEXT_PUBLIC_RESEND_API_KEY;
       const invoiceEmailText = `
 --------------------------------------------------
 VRGC PAYMENT INVOICE GENERATED
