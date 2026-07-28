@@ -1,6 +1,7 @@
 "use client";
 
 import React from 'react';
+import Link from 'next/link';
 
 interface NavbarProps {
   pageTitle?: string;
@@ -26,14 +27,14 @@ const Navbar: React.FC<NavbarProps> = ({ pageTitle = 'Dashboard', userEmail, isA
 
       <div className="flex items-center gap-3 sm:gap-6 relative z-10 min-w-0">
         {/* Brand Group */}
-        <div className="flex items-center gap-2 sm:gap-3 group cursor-pointer shrink-0">
+        <Link href="/" className="flex items-center gap-2 sm:gap-3 group cursor-pointer shrink-0">
           <div className="relative">
             <span className="font-display-lg text-xs sm:text-base md:text-lg font-black tracking-wider sm:tracking-widest bg-gradient-to-r from-white via-white to-[#a855f7] bg-clip-text text-transparent group-hover:opacity-90 transition-opacity">
               VRGC | Forms Portal
             </span>
             <div className="absolute -bottom-1 left-0 w-full h-[2px] bg-gradient-to-r from-[#a855f7] to-[#cf5cff] scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left"></div>
           </div>
-        </div>
+        </Link>
 
         {/* Current Active Console Tab Badge */}
         <div className="hidden md:flex items-center gap-2 pl-4 border-l border-white/10">

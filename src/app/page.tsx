@@ -30,6 +30,21 @@ function AppContent() {
     setTimeout(() => setToast(null), 3000);
   };
 
+  // Parse initial tab from clean URL path (e.g. /referrals, /idcard, /payments)
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname.replace(/^\//, '');
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      
+      if (path && ['referrals', 'idcard', 'payments', 'dashboard', 'batch24', 'batch25'].includes(path)) {
+        setActivePage(path);
+      } else if (tabParam && ['dashboard', 'referrals', 'idcard', 'payments', 'batch24', 'batch25'].includes(tabParam)) {
+        setActivePage(tabParam);
+      }
+    }
+  }, []);
+
   const handlePageChange = (pageId: string) => {
     if (pageId === 'tickets') {
       showToast('This section is locked and will be available in a future update.');
@@ -37,6 +52,8 @@ function AppContent() {
     }
     setActivePage(pageId);
     if (typeof window !== 'undefined') {
+      const newPath = pageId === 'dashboard' ? '/' : `/${pageId}`;
+      window.history.pushState({ path: newPath }, '', newPath);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
