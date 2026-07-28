@@ -16,109 +16,77 @@ export async function POST(req: Request) {
       );
     }
 
-    const apiKey = process.env.RESEND_API_KEY;
-
-    if (!apiKey) {
-      console.error("RESEND_API_KEY is missing");
-      return NextResponse.json({ success: true, ticketId, note: "API key missing" });
+    const accessKey = process.env.WEB3FORMS_ACCESS_KEY;
+    if (!accessKey) {
+      console.error("WEB3FORMS_ACCESS_KEY is missing in environment");
+      return NextResponse.json(
+        { error: "Server configuration error" },
+        { status: 500 }
+      );
     }
 
-    const RISHAV_EMAIL = "rishav.24bsa10096@vitbhopal.ac.in";
-    const ABHINAV_EMAIL = "abhinav.25bcy10254@vitbhopal.ac.in";
-
-    let recipientEmails: string[];
     let leadName: string;
-
     if (targetLead === "rishav") {
-      recipientEmails = [RISHAV_EMAIL];
       leadName = "Rishav Mandal (Tech Lead)";
     } else if (targetLead === "abhinav") {
-      recipientEmails = [ABHINAV_EMAIL];
       leadName = "Abhinav Mishra (Co-Lead)";
     } else {
-      recipientEmails = [RISHAV_EMAIL, ABHINAV_EMAIL];
       leadName = "Technical Desk (Rishav & Abhinav)";
     }
 
-    // Format HTML Email Content
-    const htmlContent = `
-      <div style="font-family: Arial, sans-serif; background-color: #0b0518; color: #e2e8f0; padding: 24px; border-radius: 12px; max-width: 600px;">
-        <h2 style="color: #c084fc; margin-top: 0;">🚨 New Technical Support Ticket</h2>
-        <div style="background-color: #1a0b36; padding: 16px; border-radius: 8px; border: 1px solid #7e22ce; margin-bottom: 20px;">
-          <p style="margin: 4px 0; font-size: 14px;"><strong>Ticket Reference:</strong> <span style="color: #a855f7; font-family: monospace;">${ticketId}</span></p>
-          <p style="margin: 4px 0; font-size: 14px;"><strong>Assigned To:</strong> ${leadName}</p>
-          <p style="margin: 4px 0; font-size: 14px;"><strong>Issue Category:</strong> ${category}</p>
-        </div>
+    // Format Message Body for Web3Forms
+    const formattedText = `
+--------------------------------------------------
+🚨 VRGC TECHNICAL SUPPORT TICKET: [${ticketId}]
+--------------------------------------------------
 
-        <h3 style="color: #93c5fd; margin-bottom: 8px;">User Information</h3>
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
-          <tr>
-            <td style="padding: 6px 0; color: #94a3b8; width: 140px;">Full Name:</td>
-            <td style="padding: 6px 0; color: #ffffff; font-weight: bold;">${fullName}</td>
-          </tr>
-          <tr>
-            <td style="padding: 6px 0; color: #94a3b8;">Registration No:</td>
-            <td style="padding: 6px 0; color: #ffffff;">${regNo || "Not provided"}</td>
-          </tr>
-          <tr>
-            <td style="padding: 6px 0; color: #94a3b8;">Contact Info:</td>
-            <td style="padding: 6px 0; color: #38bdf8;">${contactInfo}</td>
-          </tr>
-        </table>
+ASSIGNED TO: ${leadName}
+CATEGORY   : ${category}
 
-        <h3 style="color: #93c5fd; margin-bottom: 8px;">Issue Description</h3>
-        <div style="background-color: #150d2a; padding: 14px; border-radius: 8px; border-left: 4px solid #a855f7; font-size: 14px; line-height: 1.6; color: #f1f5f9;">
-          ${message.replace(/\n/g, "<br/>")}
-        </div>
+--- USER DETAILS ---
+FULL NAME : ${fullName}
+REG / ROLL: ${regNo || "Not provided"}
+CONTACT   : ${contactInfo}
 
-        <hr style="border: none; border-top: 1px solid #334155; margin: 24px 0 12px 0;" />
-        <p style="font-size: 11px; color: #64748b; text-align: center;">VRGC Technical Support Desk Automated Alert</p>
-      </div>
-    `;
+--- ISSUE DESCRIPTION ---
+${message}
 
-    const senderEmail = process.env.RESEND_FROM_EMAIL || "VRGC Support <onboarding@resend.dev>";
+--------------------------------------------------
+Automated message sent via VRGC Forms Technical Support Desk
+`;
 
-    // Attempt sending to lead email addresses
-    let resendResponse = await fetch("https://api.resend.com/emails", {
+    // Send email via Web3Forms API (100% Free, No Domain Needed)
+    const web3Response = await fetch("https://api.web3forms.com/submit", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
+        Accept: "application/json",
       },
       body: JSON.stringify({
-        from: senderEmail,
-        to: recipientEmails,
-        reply_to: contactInfo,
-        subject: `[${ticketId}] Technical Support: ${category} - ${fullName}`,
-        html: htmlContent,
+        access_key: accessKey,
+        name: fullName,
+        email: contactInfo,
+        replyto: contactInfo,
+        subject: `[${ticketId}] Support Issue: ${category} - ${fullName}`,
+        message: formattedText,
+        from_name: "VRGC Technical Support Desk",
       }),
     });
 
-    let resendData = await resendResponse.json();
+    const result = await web3Response.json();
 
-    // Fallback if domain is not verified yet (sends to Resend account owner email)
-    if (!resendResponse.ok && resendData.message?.includes("validation_error")) {
-      console.warn("Unverified domain fallback: Sending ticket to onboarding@resend.dev");
-      resendResponse = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: "VRGC Support <onboarding@resend.dev>",
-          to: ["onboarding@resend.dev"],
-          subject: `[${ticketId}] Technical Support: ${category} - ${fullName}`,
-          html: htmlContent,
-        }),
-      });
-      resendData = await resendResponse.json();
+    if (!web3Response.ok || !result.success) {
+      console.error("Web3Forms API error:", result);
+      return NextResponse.json(
+        { error: result.message || "Failed to deliver support email" },
+        { status: web3Response.status || 500 }
+      );
     }
 
     return NextResponse.json({
       success: true,
       ticketId,
-      emailId: resendData.id || null,
+      message: "Ticket submitted and email delivered successfully!",
     });
   } catch (error: any) {
     console.error("Error in support API route:", error);
