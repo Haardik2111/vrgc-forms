@@ -344,23 +344,13 @@ export async function saveTransactionToFirestore(tx: {
         created_at: new Date().toISOString(),
       });
 
-      // 3. Mirror into global `invoices` collection for unified tracking
-      const invoicesColRef = collection(db, INVOICES_COLLECTION);
-      await addDoc(invoicesColRef, {
-        payment_id: tx.payment_id,
-        user_email: cleanEmail,
-        candidate_name: tx.candidate_name || '',
-        registration_number: tx.registration_number || '',
-        team: tx.team || '',
-        payment_title: tx.payment_title,
-        amount: tx.amount,
-        currency: tx.currency || 'INR',
-        status: tx.status,
+      // 3. Update existing invoice record in global `invoices` collection (1 invoice doc per generated payment)
+      await updateInvoiceInFirestore(tx.payment_id, {
+        status: tx.status as PaymentStatus,
         razorpay_order_id: tx.razorpay_order_id || '',
         razorpay_payment_id: tx.razorpay_payment_id || '',
-        error_description: tx.error_description || '',
         paid_at: tx.paid_at || '',
-        created_at: serverTimestamp(),
+        ...(tx.error_description ? { error_description: tx.error_description } : {}),
       });
 
       return tx.payment_id;
@@ -369,6 +359,66 @@ export async function saveTransactionToFirestore(tx: {
   } catch (err) {
     console.warn('Firestore transaction update failed:', err);
     return null;
+  }
+}
+
+/**
+ * Update existing invoice document in `invoices` collection by payment_id.
+ */
+export async function updateInvoiceInFirestore(
+  paymentId: string,
+  updates: Partial<{
+    status: PaymentStatus;
+    razorpay_order_id: string;
+    razorpay_payment_id: string;
+    paid_at: string;
+    error_description: string;
+  }>
+): Promise<boolean> {
+  try {
+    const colRef = collection(db, INVOICES_COLLECTION);
+    const q = query(colRef, where('payment_id', '==', paymentId));
+    const snap = await getDocs(q);
+
+    if (snap.empty) {
+      // If invoice doc doesn't exist yet, get primary payment doc to create it
+      const payDocRef = doc(db, PAYMENTS_COLLECTION, paymentId);
+      const paySnap = await getDoc(payDocRef);
+      if (paySnap.exists()) {
+        const pData: any = paySnap.data();
+        await addDoc(colRef, {
+          payment_id: paymentId,
+          user_email: (pData.user_email || '').toLowerCase(),
+          candidate_name: pData.candidate_name || '',
+          registration_number: pData.registration_number || '',
+          team: pData.team || '',
+          title: pData.title || '',
+          description: pData.description || '',
+          category: pData.category || 'Club Fee',
+          amount: Number(pData.amount) || 0,
+          currency: pData.currency || 'INR',
+          status: updates.status || pData.status || 'Pending',
+          due_date: pData.due_date || '',
+          razorpay_order_id: updates.razorpay_order_id || '',
+          razorpay_payment_id: updates.razorpay_payment_id || '',
+          error_description: updates.error_description || '',
+          paid_at: updates.paid_at || '',
+          created_at: serverTimestamp(),
+          updated_at: serverTimestamp(),
+        });
+      }
+    } else {
+      for (const docSnap of snap.docs) {
+        await updateDoc(docSnap.ref, {
+          ...updates,
+          updated_at: serverTimestamp(),
+        });
+      }
+    }
+    return true;
+  } catch (err) {
+    console.error('Failed to update invoice in Firestore:', err);
+    return false;
   }
 }
 
