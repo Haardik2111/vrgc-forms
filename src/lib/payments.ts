@@ -175,8 +175,24 @@ export async function createPaymentInFirestore(
       updated_at: now,
     };
 
-    // Save initial creation attempt log in subcollection & invoices
-    saveTransactionToFirestore({
+    // 1. Mirror invoice to `invoices` collection
+    await saveInvoiceToFirestore({
+      payment_id: docRef.id,
+      user_email: cleanEmail,
+      candidate_name: paymentData.candidate_name || '',
+      registration_number: paymentData.registration_number || '',
+      team: paymentData.team || '',
+      title: paymentData.title,
+      description: paymentData.description,
+      category: paymentData.category,
+      amount: paymentData.amount,
+      currency: paymentData.currency || 'INR',
+      status: paymentData.status as PaymentStatus,
+      due_date: paymentData.due_date,
+    });
+
+    // 2. Save initial creation attempt log
+    await saveTransactionToFirestore({
       payment_id: docRef.id,
       user_email: cleanEmail,
       candidate_name: paymentData.candidate_name || '',
@@ -248,7 +264,30 @@ export async function saveInvoiceToFirestore(invoice: {
   status: PaymentStatus;
   due_date?: string;
 }): Promise<string | null> {
-  return invoice.payment_id || null;
+  try {
+    const cleanEmail = invoice.user_email ? invoice.user_email.toLowerCase() : '';
+    const invoicesColRef = collection(db, INVOICES_COLLECTION);
+    const docRef = await addDoc(invoicesColRef, {
+      payment_id: invoice.payment_id || '',
+      user_email: cleanEmail,
+      candidate_name: invoice.candidate_name || '',
+      registration_number: invoice.registration_number || '',
+      team: invoice.team || '',
+      title: invoice.title,
+      description: invoice.description || '',
+      category: invoice.category,
+      amount: invoice.amount,
+      currency: invoice.currency || 'INR',
+      status: invoice.status,
+      due_date: invoice.due_date || '',
+      created_at: serverTimestamp(),
+      updated_at: serverTimestamp(),
+    });
+    return docRef.id;
+  } catch (err) {
+    console.error('Failed to create invoice document in Firestore:', err);
+    return invoice.payment_id || null;
+  }
 }
 
 /**

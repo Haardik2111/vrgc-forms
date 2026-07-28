@@ -6,6 +6,7 @@ import { PaymentItem, PaymentStatus } from '@/types/payment';
 import {
   fetchPaymentsFromFirestore,
   createPaymentInFirestore,
+  updatePaymentStatusInFirestore,
   deletePaymentFromFirestore,
   saveInvoiceToFirestore,
   saveTransactionToFirestore,
@@ -630,6 +631,12 @@ const Payments: React.FC<PaymentsProps> = ({
         prev.map((item) => (item.id === payment.id ? { ...item, status: 'Processing' } : item))
       );
 
+      // Persist Processing status directly into Firestore
+      await updatePaymentStatusInFirestore(payment.id, {
+        status: 'Processing',
+        razorpay_order_id: orderData.order_id,
+      });
+
       let razorpayKey = orderData.key_id;
       if (!razorpayKey) {
         try {
@@ -664,13 +671,13 @@ const Payments: React.FC<PaymentsProps> = ({
           color: '#a855f7',
         },
         modal: {
-          ondismiss: () => {
+          ondismiss: async () => {
             setProcessingId(null);
             setPayments((prev) =>
               prev.map((item) => (item.id === payment.id ? { ...item, status: 'Failed' } : item))
             );
             // Log payment cancellation to Firestore as a Failed attempt with reattempt opportunity
-            saveTransactionToFirestore({
+            await saveTransactionToFirestore({
               payment_id: payment.id,
               user_email: userEmail || payment.user_email || '',
               candidate_name: candidateName,
@@ -725,7 +732,7 @@ const Payments: React.FC<PaymentsProps> = ({
               );
 
               // Save transaction log & update payment status in Firestore
-              saveTransactionToFirestore({
+              await saveTransactionToFirestore({
                 payment_id: payment.id,
                 user_email: payment.user_email || userEmail,
                 candidate_name: candidateName,
@@ -748,7 +755,7 @@ const Payments: React.FC<PaymentsProps> = ({
                 prev.map((item) => (item.id === payment.id ? { ...item, status: 'Failed' } : item))
               );
               // Log failed transaction to Firestore
-              saveTransactionToFirestore({
+              await saveTransactionToFirestore({
                 payment_id: payment.id,
                 user_email: userEmail || payment.user_email || '',
                 candidate_name: candidateName,
@@ -767,7 +774,7 @@ const Payments: React.FC<PaymentsProps> = ({
             setPayments((prev) =>
               prev.map((item) => (item.id === payment.id ? { ...item, status: 'Failed' } : item))
             );
-            saveTransactionToFirestore({
+            await saveTransactionToFirestore({
               payment_id: payment.id,
               user_email: userEmail || payment.user_email || '',
               candidate_name: candidateName,
@@ -787,14 +794,14 @@ const Payments: React.FC<PaymentsProps> = ({
       };
 
       const razorpayInstance = new (window as any).Razorpay(options);
-      razorpayInstance.on('payment.failed', (resp: any) => {
+      razorpayInstance.on('payment.failed', async (resp: any) => {
         console.error('Razorpay payment failed:', resp.error);
         setProcessingId(null);
         setPayments((prev) =>
           prev.map((item) => (item.id === payment.id ? { ...item, status: 'Failed' } : item))
         );
         // Log failed transaction to Firestore
-        saveTransactionToFirestore({
+        await saveTransactionToFirestore({
           payment_id: payment.id,
           user_email: userEmail || payment.user_email || '',
           candidate_name: candidateName,
