@@ -65,8 +65,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({
       setTicketId(generatedId);
     } catch (err: any) {
       console.error("Support submission error:", err);
-      // Even if API route reports issue, still display generated ticket ID to user with notification
-      setTicketId(generatedId);
+      setErrorMsg(err.message || "Failed to submit support ticket. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

@@ -16,9 +16,9 @@ export async function POST(req: Request) {
       );
     }
 
-    const accessKey = process.env.WEB3FORMS_ACCESS_KEY;
-    if (!accessKey) {
-      console.error("WEB3FORMS_ACCESS_KEY is missing in environment");
+    const resendApiKey = process.env.RESEND_API_KEY;
+    if (!resendApiKey) {
+      console.error("RESEND_API_KEY is missing in environment");
       return NextResponse.json(
         { error: "Server configuration error" },
         { status: 500 }
@@ -27,14 +27,14 @@ export async function POST(req: Request) {
 
     const leadName = "Technical Support Desk";
 
-    // Format Message Body for Web3Forms
+    // Format Message Body for Email & Resend Dashboard
     const formattedText = `
 --------------------------------------------------
 🚨 VRGC TECHNICAL SUPPORT TICKET: [${ticketId}]
 --------------------------------------------------
 
 ASSIGNED TO: ${leadName}
-CATEGORY   : ${category}
+CATEGORY   : ${category.toUpperCase()}
 
 --- USER DETAILS ---
 FULL NAME : ${fullName}
@@ -48,44 +48,48 @@ ${message}
 Automated message sent via VRGC Forms Technical Support Desk
 `;
 
-    // Send email via Web3Forms API (100% Free, No Domain Needed)
-    const web3Response = await fetch("https://api.web3forms.com/submit", {
+    // Send email via Resend REST API
+    const resendPayload: Record<string, any> = {
+      from: "VRGC Technical Desk <onboarding@resend.dev>",
+      to: ["delivered@resend.dev"],
+      subject: `[${ticketId}] Support Ticket: ${category.toUpperCase()} - ${fullName}`,
+      text: formattedText,
+    };
+
+    // If contactInfo is a valid email, set reply_to
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactInfo.trim())) {
+      resendPayload.reply_to = contactInfo.trim();
+    }
+
+    const resendResponse = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Accept: "application/json",
+        Authorization: `Bearer ${resendApiKey}`,
       },
-      body: JSON.stringify({
-        access_key: accessKey,
-        name: fullName,
-        email: contactInfo,
-        replyto: contactInfo,
-        subject: `[${ticketId}] Support Issue: ${category} - ${fullName}`,
-        message: formattedText,
-        from_name: "VRGC Technical Support Desk",
-      }),
+      body: JSON.stringify(resendPayload),
     });
 
-    const result = await web3Response.json();
+    const result = await resendResponse.json();
 
-    if (!web3Response.ok || !result.success) {
-      console.error("Web3Forms API error:", result);
+    if (!resendResponse.ok) {
+      console.error("Resend API error:", result);
       return NextResponse.json(
-        { error: result.message || "Failed to deliver support email" },
-        { status: web3Response.status || 500 }
+        { error: result.message || "Failed to deliver support email via Resend" },
+        { status: resendResponse.status || 500 }
       );
     }
 
     return NextResponse.json({
       success: true,
       ticketId,
-      message: "Ticket submitted and email delivered successfully!",
+      message: "Ticket submitted and delivered successfully via Resend!",
     });
   } catch (error: any) {
     console.error("Error in support API route:", error);
-    return NextResponse.json({
-      success: true,
-      ticketId,
-    });
+    return NextResponse.json(
+      { error: error.message || "Failed to process support request" },
+      { status: 500 }
+    );
   }
 }
