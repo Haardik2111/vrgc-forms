@@ -39,8 +39,10 @@ ${message}
 Automated message sent via VRGC Forms Technical Support Desk
 `;
 
+    const formspreeUrl = process.env.NEXT_PUBLIC_FORMSPREE_URL || "https://formspree.io/f/xvzellen";
+
     // Send support complaint via Formspree
-    const formspreeResponse = await fetch("https://formspree.io/f/xvzellen", {
+    const formspreeResponse = await fetch(formspreeUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
