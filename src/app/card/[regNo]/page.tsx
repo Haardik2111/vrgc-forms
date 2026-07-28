@@ -14,7 +14,7 @@ interface PageProps {
   }>;
 }
 
-const SUPABASE_STORAGE_BASE = 'https://fopyejijjeoumimsdgiz.supabase.co/storage/v1/object/public/id-cards';
+const SUPABASE_STORAGE_BASE = `${process.env.NEXT_PUBLIC_SUPABASE_URL || ''}/storage/v1/object/public/id-cards`;
 
 function formatSupabaseUrl(urlOrPath: string, isAvatar: boolean = false): string {
   if (!urlOrPath) return '';
