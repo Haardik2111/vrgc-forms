@@ -422,16 +422,13 @@ const Payments: React.FC<PaymentsProps> = ({
 
   // Auto-sync non-Paid payments with Razorpay API on load to fix any erroneous status in Firestore
   useEffect(() => {
-    if (payments.length === 0) return;
-    const itemsToSync = payments.filter((p) => p.status !== 'Paid' && p.razorpay_order_id);
-    if (itemsToSync.length > 0) {
-      itemsToSync.forEach((item) => {
-        syncPaymentStatusWithRazorpay(item.id, item.razorpay_order_id).catch((err) =>
-          console.warn('Auto-sync Razorpay check warning:', err)
-        );
-      });
+    const hasUnpaid = payments.some((p) => p.status !== 'Paid');
+    if (hasUnpaid) {
+      syncPaymentStatusWithRazorpay(undefined, undefined, true).catch((err) =>
+        console.warn('Auto-sync Razorpay scanner check warning:', err)
+      );
     }
-  }, [payments]);
+  }, [payments.length]);
 
   // Load transaction logs from Firestore invoices collection
   const loadTransactionLogs = useCallback(async () => {
@@ -1050,6 +1047,12 @@ const Payments: React.FC<PaymentsProps> = ({
       // Filter by category or search query if applicable
       const matchesCategory =
         selectedCategory === 'All' || category.toLowerCase() === selectedCategory.toLowerCase();
+      const matchesStatus =
+        selectedStatus === 'All' ||
+        (selectedStatus === 'Paid' && items.some((i) => i.status === 'Paid')) ||
+        (selectedStatus === 'Pending' && items.some((i) => i.status === 'Pending')) ||
+        (selectedStatus === 'Processing' && items.some((i) => i.status === 'Processing')) ||
+        (selectedStatus === 'Failed' && items.some((i) => i.status === 'Failed'));
       const matchesSearch =
         !searchQuery.trim() ||
         title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -1057,7 +1060,7 @@ const Payments: React.FC<PaymentsProps> = ({
           (i) => i.user_email && i.user_email.toLowerCase().includes(searchQuery.toLowerCase())
         );
 
-      if (matchesCategory && matchesSearch) {
+      if (matchesCategory && matchesStatus && matchesSearch) {
         groups.push({
           key,
           title,
@@ -1078,7 +1081,7 @@ const Payments: React.FC<PaymentsProps> = ({
     });
 
     return groups.sort((a, b) => b.totalAssigned - a.totalAssigned);
-  }, [payments, isAdminState, adminViewAll, selectedCategory, searchQuery]);
+  }, [payments, isAdminState, adminViewAll, selectedCategory, selectedStatus, searchQuery]);
 
   // Statistics calculation
   const stats = useMemo(() => {
@@ -1419,6 +1422,32 @@ const Payments: React.FC<PaymentsProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-between lg:justify-end">
+          {/* Status Pills */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
+            <span className="text-xs text-slate-400 font-semibold pr-1">Status:</span>
+            {['All', 'Paid', 'Pending', 'Processing', 'Failed'].map((st) => (
+              <button
+                key={st}
+                onClick={() => setSelectedStatus(st)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                  selectedStatus === st
+                    ? st === 'Failed'
+                      ? 'bg-rose-600 text-white shadow-[0_0_15px_rgba(225,29,72,0.4)]'
+                      : st === 'Paid'
+                      ? 'bg-emerald-600 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]'
+                      : st === 'Processing'
+                      ? 'bg-blue-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.4)]'
+                      : st === 'Pending'
+                      ? 'bg-amber-600 text-white shadow-[0_0_15px_rgba(217,119,6,0.4)]'
+                      : 'bg-purple-600 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]'
+                    : 'bg-white/5 hover:bg-white/10 text-slate-400 border border-white/5'
+                }`}
+              >
+                {st}
+              </button>
+            ))}
+          </div>
+
           {/* Category Pills */}
           <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
             <span className="text-xs text-slate-400 font-semibold pr-1">Category:</span>
@@ -1814,13 +1843,24 @@ const Payments: React.FC<PaymentsProps> = ({
               </div>
 
               <div className="flex items-center gap-3 w-full sm:w-auto justify-between">
-                <div className="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/10 text-xs">
-                  {['All', 'Paid', 'Pending'].map((st) => (
+                <div className="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/10 text-xs overflow-x-auto custom-scrollbar">
+                  {['All', 'Paid', 'Pending', 'Processing', 'Failed'].map((st) => (
                     <button
                       key={st}
                       onClick={() => setRosterStatusFilter(st)}
-                      className={`px-3 py-1 rounded-lg font-bold transition-all ${rosterStatusFilter === st ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'
-                        }`}
+                      className={`px-3 py-1 rounded-lg font-bold transition-all whitespace-nowrap ${
+                        rosterStatusFilter === st
+                          ? st === 'Failed'
+                            ? 'bg-rose-600 text-white shadow-[0_0_15px_rgba(225,29,72,0.4)]'
+                            : st === 'Paid'
+                            ? 'bg-emerald-600 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]'
+                            : st === 'Processing'
+                            ? 'bg-blue-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.4)]'
+                            : st === 'Pending'
+                            ? 'bg-amber-600 text-white shadow-[0_0_15px_rgba(217,119,6,0.4)]'
+                            : 'bg-purple-600 text-white'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
                     >
                       {st}
                     </button>
@@ -1829,7 +1869,7 @@ const Payments: React.FC<PaymentsProps> = ({
 
                 <button
                   onClick={() => handleExportCSV(activeRosterCampaign.title, true)}
-                  className="px-3 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-all flex items-center gap-1.5"
+                  className="px-3 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-all flex items-center gap-1.5 shrink-0"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Download Paid CSV</span>
@@ -1867,7 +1907,9 @@ const Payments: React.FC<PaymentsProps> = ({
                       const matchesStatus =
                         rosterStatusFilter === 'All' ||
                         (rosterStatusFilter === 'Paid' && item.status === 'Paid') ||
-                        (rosterStatusFilter === 'Pending' && (item.status === 'Pending' || item.status === 'Processing'));
+                        (rosterStatusFilter === 'Pending' && item.status === 'Pending') ||
+                        (rosterStatusFilter === 'Processing' && item.status === 'Processing') ||
+                        (rosterStatusFilter === 'Failed' && item.status === 'Failed');
 
                       return matchesSearch && matchesStatus;
                     })

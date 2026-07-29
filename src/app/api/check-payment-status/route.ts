@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
+import Razorpay from 'razorpay';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp, getDocs, query, where } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp, getDocs } from 'firebase/firestore';
 
 async function logTransactionToFirestore(tx: {
   payment_id?: string;
@@ -16,6 +17,10 @@ async function logTransactionToFirestore(tx: {
   razorpay_payment_id?: string;
   razorpay_signature?: string;
   payment_method?: string;
+  razorpay_vpa?: string;
+  razorpay_bank?: string;
+  razorpay_wallet?: string;
+  razorpay_contact?: string;
   error_description?: string;
   paid_at?: string;
 }) {
@@ -30,8 +35,7 @@ async function logTransactionToFirestore(tx: {
         if (
           dData.status === tx.status &&
           ((tx.razorpay_payment_id && dData.razorpay_payment_id === tx.razorpay_payment_id) ||
-            (tx.razorpay_order_id && dData.razorpay_order_id === tx.razorpay_order_id) ||
-            (dData.error_description === tx.error_description))
+            (tx.razorpay_order_id && dData.razorpay_order_id === tx.razorpay_order_id))
         ) {
           duplicateDocRef = dSnap.ref;
         }
@@ -60,195 +64,198 @@ async function logTransactionToFirestore(tx: {
   }
 }
 
-export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    const { paymentId, razorpay_order_id: providedOrderId, syncAll = false } = body;
+export async function processRazorpaySync(targetPaymentId?: string) {
+  const keyId = (process.env.RAZORPAY_KEY_ID || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || '').trim();
+  const keySecret = (process.env.RAZORPAY_KEY_SECRET || '').trim();
 
-    const keyId = process.env.RAZORPAY_KEY_ID || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
-    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  if (!keyId || !keySecret) {
+    return { success: false, error: 'Razorpay API credentials not configured in environment variables.' };
+  }
 
-    if (!keyId || !keySecret) {
-      return NextResponse.json(
-        { success: false, error: 'Razorpay credentials not configured on server.' },
-        { status: 500 }
-      );
+  const razorpay = new Razorpay({
+    key_id: keyId,
+    key_secret: keySecret,
+  });
+
+  let correctedCount = 0;
+  const repairedDocs: string[] = [];
+
+  // FETCH RECENT CAPTURED PAYMENTS DIRECTLY FROM RAZORPAY API (Count: 100)
+  const allPaymentsRes = await razorpay.payments.all({ count: 100 });
+  const capturedPayments = (allPaymentsRes?.items || []).filter(
+    (p: any) => p.status === 'captured' || p.status === 'authorized'
+  );
+
+  // Fetch all payment documents from Firestore
+  const paymentsCol = collection(db, 'payments');
+  const allDocsSnap = await getDocs(paymentsCol);
+
+  for (const pDoc of allDocsSnap.docs) {
+    const pData = pDoc.data();
+    const docId = pDoc.id;
+
+    // Skip if targetPaymentId is specified and doesn't match
+    if (targetPaymentId && docId !== targetPaymentId) {
+      continue;
     }
 
-    let RazorpayConstructor: any;
-    try {
-      // @ts-ignore
-      const mod = await import('razorpay').catch(() => null);
-      RazorpayConstructor = mod?.default || mod;
-    } catch {
-      RazorpayConstructor = null;
+    if (pData.status === 'Paid') {
+      continue; // Already verified & paid, skip
     }
 
-    if (!RazorpayConstructor) {
-      return NextResponse.json(
-        { success: false, error: 'Razorpay SDK unavailable.' },
-        { status: 500 }
-      );
-    }
+    const docEmail = (pData.user_email || '').toLowerCase().trim();
+    const docCandidateName = (pData.candidate_name || '').toLowerCase().trim();
+    const docAmountPaise = Math.round((Number(pData.amount) || 0) * 100);
+    const docOrderId = (pData.razorpay_order_id || '').trim();
 
-    const instance = new RazorpayConstructor({
-      key_id: keyId,
-      key_secret: keySecret,
+    // Multimodal Matching: Check captured payments against Firestore document
+    const matchingTx = capturedPayments.find((tx: any) => {
+      // 1. Direct Document ID Match in Notes
+      if (tx.notes?.paymentId && String(tx.notes.paymentId).trim() === docId) {
+        return true;
+      }
+      // 2. Order ID Match
+      if (docOrderId && tx.order_id && String(tx.order_id).trim() === docOrderId) {
+        return true;
+      }
+      // 3. Member Email and Amount Match
+      if (
+        docEmail &&
+        tx.email &&
+        String(tx.email).toLowerCase().trim() === docEmail &&
+        Number(tx.amount) === docAmountPaise
+      ) {
+        return true;
+      }
+      // 4. Notes userEmail and Amount Match
+      if (
+        docEmail &&
+        tx.notes?.userEmail &&
+        String(tx.notes.userEmail).toLowerCase().trim() === docEmail &&
+        Number(tx.amount) === docAmountPaise
+      ) {
+        return true;
+      }
+      // 5. Candidate Name and Amount Match
+      if (
+        docCandidateName &&
+        tx.notes?.candidateName &&
+        String(tx.notes.candidateName).toLowerCase().trim() === docCandidateName &&
+        Number(tx.amount) === docAmountPaise
+      ) {
+        return true;
+      }
+      return false;
     });
 
-    // Helper function to check & sync a single payment document with Razorpay
-    const syncSingleDoc = async (pDocRef: any, pDocData: any) => {
-      const pId = pDocRef.id;
+    let activeTx = matchingTx;
 
-      // If already Paid, no need to touch
-      if (pDocData.status === 'Paid') {
-        return { paymentId: pId, status: 'Paid', updated: false };
-      }
-
-      const orderId = providedOrderId || pDocData.razorpay_order_id;
-      if (!orderId) {
-        return { paymentId: pId, status: pDocData.status, updated: false, reason: 'No order_id' };
-      }
-
+    // Fallback: If not in recent 100 list, query Razorpay order directly by order_id if present
+    if (!activeTx && docOrderId) {
       try {
-        // Fetch order and payments list directly from Razorpay API
-        const order = await instance.orders.fetch(orderId);
-        const paymentsRes = await instance.orders.fetchPayments(orderId);
-        const paymentsList = paymentsRes?.items || [];
-
-        // Check if any payment attempt was successful (captured or authorized)
-        const successfulPayment = paymentsList.find(
+        const orderPayments = await razorpay.orders.fetchPayments(docOrderId);
+        const orderCaptured = (orderPayments?.items || []).find(
           (p: any) => p.status === 'captured' || p.status === 'authorized'
         );
-
-        if (order.status === 'paid' || successfulPayment) {
-          const paidTx = successfulPayment || paymentsList[0] || {};
-          const paidPaymentId = paidTx.id || pDocData.razorpay_payment_id || `pay_${orderId}`;
-          const paidMethod = paidTx.method ? `Razorpay (${paidTx.method})` : 'Razorpay Online';
-          const paidAtTime = paidTx.created_at
-            ? new Date(paidTx.created_at * 1000).toISOString()
-            : new Date().toISOString();
-
-          // UPDATE FIRESTORE TO PAID
-          await updateDoc(pDocRef, {
-            status: 'Paid',
-            razorpay_order_id: orderId,
-            razorpay_payment_id: paidPaymentId,
-            payment_method: paidMethod,
-            paid_at: paidAtTime,
-            updated_at: serverTimestamp(),
-            error_description: '',
-          });
-
-          await logTransactionToFirestore({
-            payment_id: pId,
-            user_email: pDocData.user_email,
-            candidate_name: pDocData.candidate_name,
-            registration_number: pDocData.registration_number,
-            team: pDocData.team,
-            payment_title: pDocData.title,
-            amount: Number(pDocData.amount) || 0,
-            currency: pDocData.currency || 'INR',
-            status: 'Paid',
-            razorpay_order_id: orderId,
-            razorpay_payment_id: paidPaymentId,
-            payment_method: paidMethod,
-            paid_at: paidAtTime,
-          });
-
-          return { paymentId: pId, status: 'Paid', updated: true, razorpay_payment_id: paidPaymentId };
-        } else {
-          // Razorpay confirms payment was NOT captured
-          const lastUpdated = pDocData.updated_at?.toDate
-            ? pDocData.updated_at.toDate().getTime()
-            : pDocData.created_at?.toDate
-            ? pDocData.created_at.toDate().getTime()
-            : new Date(pDocData.updated_at || pDocData.created_at || Date.now()).getTime();
-
-          const elapsedMs = Date.now() - lastUpdated;
-          const TWELVE_MINUTES_MS = 12 * 60 * 1000;
-
-          if (pDocData.status === 'Processing' && elapsedMs >= TWELVE_MINUTES_MS) {
-            const failReason = 'Payment session timed out (12 minute limit exceeded and no captured payment found on Razorpay).';
-            await updateDoc(pDocRef, {
-              status: 'Failed',
-              updated_at: serverTimestamp(),
-              error_description: failReason,
-            });
-
-            await logTransactionToFirestore({
-              payment_id: pId,
-              user_email: pDocData.user_email,
-              candidate_name: pDocData.candidate_name,
-              registration_number: pDocData.registration_number,
-              team: pDocData.team,
-              payment_title: pDocData.title,
-              amount: Number(pDocData.amount) || 0,
-              currency: pDocData.currency || 'INR',
-              status: 'Failed',
-              razorpay_order_id: orderId,
-              error_description: failReason,
-            });
-
-            return { paymentId: pId, status: 'Failed', updated: true };
-          }
-
-          return { paymentId: pId, status: pDocData.status, updated: false };
+        if (orderCaptured) {
+          activeTx = orderCaptured;
         }
-      } catch (rzpErr: any) {
-        console.warn(`Razorpay order fetch failed for ${orderId}:`, rzpErr);
-        return { paymentId: pId, status: pDocData.status, updated: false, error: rzpErr.message };
+      } catch (e) {
+        // Silently skip if order lookup fails
       }
-    };
+    }
 
-    // Case 1: Batch Sync all non-Paid payments with razorpay_order_id
-    if (syncAll) {
-      const colRef = collection(db, 'payments');
-      const q = query(colRef, where('status', 'in', ['Processing', 'Failed', 'Pending']));
-      const snapshot = await getDocs(q);
+    if (activeTx) {
+      const paidPaymentId = activeTx.id || `pay_${docId}`;
+      const paidOrderId = activeTx.order_id || docOrderId || '';
+      const rawMethod = String(activeTx.method || 'online').toUpperCase();
+      const vpa = String(activeTx.vpa || activeTx.acquirer_data?.upi_transaction_id || '');
+      const bank = String(activeTx.bank || '');
+      const wallet = String(activeTx.wallet || '');
+      const contact = String(activeTx.contact || '');
 
-      const results: any[] = [];
-      for (const docSnap of snapshot.docs) {
-        const data = docSnap.data();
-        if (data.razorpay_order_id) {
-          const res = await syncSingleDoc(docSnap.ref, data);
-          results.push(res);
-        }
-      }
+      const methodDetail = vpa
+        ? `Razorpay (UPI: ${vpa})`
+        : bank
+        ? `Razorpay (${rawMethod}: ${bank})`
+        : wallet
+        ? `Razorpay (WALLET: ${wallet})`
+        : `Razorpay (${rawMethod})`;
 
-      return NextResponse.json({
-        success: true,
-        syncedCount: results.filter((r) => r.updated).length,
-        results,
+      const paidAtTime = matchingTx.created_at
+        ? new Date(matchingTx.created_at * 1000).toISOString()
+        : new Date().toISOString();
+
+      // UPDATE FIRESTORE DOCUMENT WITH EXACT ACCURATE RAZORPAY DETAILS
+      await updateDoc(pDoc.ref, {
+        status: 'Paid',
+        razorpay_order_id: paidOrderId,
+        razorpay_payment_id: paidPaymentId,
+        payment_method: methodDetail,
+        razorpay_vpa: vpa,
+        razorpay_bank: bank,
+        razorpay_wallet: wallet,
+        razorpay_contact: contact,
+        paid_at: paidAtTime,
+        updated_at: serverTimestamp(),
+        error_description: '',
       });
+
+      // Log attempt subdocument
+      await logTransactionToFirestore({
+        payment_id: docId,
+        user_email: docEmail,
+        candidate_name: pData.candidate_name || '',
+        registration_number: pData.registration_number || '',
+        team: pData.team || '',
+        payment_title: pData.title || '',
+        amount: Number(pData.amount) || 0,
+        currency: pData.currency || 'INR',
+        status: 'Paid',
+        razorpay_order_id: paidOrderId,
+        razorpay_payment_id: paidPaymentId,
+        payment_method: methodDetail,
+        razorpay_vpa: vpa,
+        razorpay_bank: bank,
+        razorpay_wallet: wallet,
+        razorpay_contact: contact,
+        paid_at: paidAtTime,
+      });
+
+      correctedCount++;
+      repairedDocs.push(docId);
     }
+  }
 
-    // Case 2: Sync single payment doc by paymentId
-    if (!paymentId) {
-      return NextResponse.json(
-        { success: false, error: 'paymentId or syncAll is required.' },
-        { status: 400 }
-      );
-    }
+  return {
+    success: true,
+    correctedCount,
+    repairedDocs,
+    message: `Scanned Razorpay captured payments and corrected ${correctedCount} Firestore record(s) with exact Razorpay details.`,
+  };
+}
 
-    const pDocRef = doc(db, 'payments', String(paymentId));
-    const pDocSnap = await getDoc(pDocRef);
-
-    if (!pDocSnap.exists()) {
-      return NextResponse.json(
-        { success: false, error: 'Payment record not found.' },
-        { status: 404 }
-      );
-    }
-
-    const result = await syncSingleDoc(pDocRef, pDocSnap.data());
-
-    return NextResponse.json({
-      success: true,
-      ...result,
-    });
+export async function POST(request: Request) {
+  try {
+    const body = await request.json().catch(() => ({}));
+    const { paymentId } = body;
+    const result = await processRazorpaySync(paymentId);
+    return NextResponse.json(result);
   } catch (error: any) {
-    console.error('Error checking Razorpay payment status:', error);
+    console.error('Error in POST check-payment-status API:', error);
+    return NextResponse.json(
+      { success: false, error: error?.message || 'Failed to check Razorpay payment status' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function GET() {
+  try {
+    const result = await processRazorpaySync();
+    return NextResponse.json(result);
+  } catch (error: any) {
+    console.error('Error in GET check-payment-status API:', error);
     return NextResponse.json(
       { success: false, error: error?.message || 'Failed to check Razorpay payment status' },
       { status: 500 }

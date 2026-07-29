@@ -20,6 +20,10 @@ export interface PaymentItem {
   razorpay_payment_id?: string;
   razorpay_signature?: string;
   payment_method?: string;
+  razorpay_vpa?: string;
+  razorpay_bank?: string;
+  razorpay_wallet?: string;
+  razorpay_contact?: string;
   error_description?: string;
   paid_at?: string;
   created_at: string;
