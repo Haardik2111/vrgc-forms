@@ -35,6 +35,17 @@ export async function POST(request: Request) {
       );
     }
 
+    // Prevent Razorpay order creation for expired invoices
+    if (paymentData.due_date && paymentData.status !== 'Paid') {
+      const dueMs = new Date(paymentData.due_date).getTime();
+      if (!isNaN(dueMs) && Date.now() > dueMs) {
+        return NextResponse.json(
+          { success: false, error: 'This invoice has expired (payment deadline has passed) and can no longer be paid.' },
+          { status: 400 }
+        );
+      }
+    }
+
     const actualAmount = Number(paymentData.amount);
     if (!actualAmount || isNaN(actualAmount) || actualAmount < 1) {
       return NextResponse.json(

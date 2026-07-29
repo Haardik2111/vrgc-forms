@@ -1,4 +1,4 @@
-export type PaymentStatus = 'Pending' | 'Paid' | 'Failed' | 'Cancelled' | 'Processing';
+export type PaymentStatus = 'Pending' | 'Paid' | 'Failed' | 'Cancelled' | 'Processing' | 'Expired';
 
 export type PaymentCategory = 'Club Fee' | 'Event Registration' | 'Merchandise' | 'Fine' | 'Other';
 

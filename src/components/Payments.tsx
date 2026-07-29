@@ -15,6 +15,7 @@ import {
   seedDemoPayments,
   checkProcessingTimeout,
   syncPaymentStatusWithRazorpay,
+  isInvoiceExpired,
   TransactionLog,
   PAYMENTS_COLLECTION,
   INVOICES_COLLECTION,
@@ -135,6 +136,19 @@ export function getPresetDateStr(daysAhead: number): string {
   const d = new Date();
   d.setDate(d.getDate() + daysAhead);
   return d.toISOString().split('T')[0];
+}
+
+export function formatDueDateToEodIst(dateStr?: string): string {
+  if (!dateStr || !dateStr.trim()) {
+    return new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  }
+  if (dateStr.includes('T') || dateStr.includes(':')) {
+    return new Date(dateStr).toISOString();
+  }
+  const eodDate = new Date(`${dateStr.trim()}T23:59:59+05:30`);
+  return !isNaN(eodDate.getTime())
+    ? eodDate.toISOString()
+    : new Date(dateStr).toISOString();
 }
 
 export function renderDescriptionBox(description: string) {
@@ -531,7 +545,7 @@ const Payments: React.FC<PaymentsProps> = ({
         amount: Number(newAmount),
         currency: 'INR',
         status: 'Pending' as PaymentStatus,
-        due_date: newDueDate ? new Date(newDueDate).toISOString() : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        due_date: formatDueDateToEodIst(newDueDate),
       });
 
       if (created) {
@@ -594,7 +608,7 @@ const Payments: React.FC<PaymentsProps> = ({
           amount: Number(allAmount),
           currency: 'INR',
           status: 'Pending' as PaymentStatus,
-          due_date: allDueDate ? new Date(allDueDate).toISOString() : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          due_date: formatDueDateToEodIst(allDueDate),
         });
         if (created) createdCount++;
       }
@@ -649,7 +663,7 @@ const Payments: React.FC<PaymentsProps> = ({
           amount: Number(multiAmount),
           currency: 'INR',
           status: 'Pending' as PaymentStatus,
-          due_date: multiDueDate ? new Date(multiDueDate).toISOString() : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          due_date: formatDueDateToEodIst(multiDueDate),
         });
         if (created) createdCount++;
       }
@@ -772,6 +786,12 @@ const Payments: React.FC<PaymentsProps> = ({
 
   // Razorpay Checkout Handler
   const handlePayNow = async (payment: PaymentItem) => {
+    if (isInvoiceExpired(payment)) {
+      showToast('This invoice has expired (payment deadline has passed) and can no longer be paid.', 'error');
+      setProcessingId(null);
+      return;
+    }
+
     setProcessingId(payment.id);
 
     try {
@@ -1131,6 +1151,13 @@ const Payments: React.FC<PaymentsProps> = ({
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-500/10 text-slate-400 border border-slate-500/30">
             ⚪ Cancelled
+          </span>
+        );
+      case 'Expired':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/30">
+            <AlertCircle className="w-3.5 h-3.5" />
+            🔴 Expired
           </span>
         );
       default:
@@ -1666,9 +1693,11 @@ const Payments: React.FC<PaymentsProps> = ({
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {payments.map((payment) => {
-              const isProcessing = (processingId === payment.id || payment.status === 'Processing') && payment.status !== 'Failed' && payment.status !== 'Paid';
+              const isExpired = isInvoiceExpired(payment);
+              const isProcessing = (processingId === payment.id || payment.status === 'Processing') && payment.status !== 'Failed' && payment.status !== 'Paid' && !isExpired;
               const isPaid = payment.status === 'Paid';
-              const isFailed = payment.status === 'Failed';
+              const isFailed = payment.status === 'Failed' && !isExpired;
+              const effectiveStatus: PaymentStatus = isExpired ? 'Expired' : payment.status;
               const timeDetails = getInvoiceTimeDetails(payment);
 
               return (
@@ -1683,20 +1712,20 @@ const Payments: React.FC<PaymentsProps> = ({
                   {/* Ambient glow under the card */}
                   <div className={`absolute -inset-px rounded-2xl opacity-0 hover:opacity-100 transition-opacity duration-500 ${isPaid ? 'bg-gradient-to-br from-emerald-500/30 to-teal-500/0'
                       : isProcessing ? 'bg-gradient-to-br from-blue-500/30 to-cyan-500/0'
-                        : isFailed ? 'bg-gradient-to-br from-rose-500/30 to-rose-500/0'
+                        : isExpired || isFailed ? 'bg-gradient-to-br from-rose-500/30 to-rose-500/0'
                           : 'bg-gradient-to-br from-purple-500/30 to-fuchsia-500/0'
                     }`} />
 
                   <div className={`relative h-full bg-gradient-to-b from-[#0f0520] to-[#080211] border rounded-2xl flex flex-col overflow-hidden shadow-2xl ${isPaid ? 'border-emerald-500/25'
                       : isProcessing ? 'border-blue-500/30'
-                        : isFailed ? 'border-rose-500/25'
+                        : isExpired || isFailed ? 'border-rose-500/25'
                           : 'border-purple-500/15 hover:border-purple-500/35'
                     } transition-colors duration-300`}>
 
                     {/* Card top accent bar */}
                     <div className={`h-0.5 w-full ${isPaid ? 'bg-gradient-to-r from-emerald-500 via-teal-400 to-transparent'
                         : isProcessing ? 'bg-gradient-to-r from-blue-500 via-cyan-400 to-transparent'
-                          : isFailed ? 'bg-gradient-to-r from-rose-500 via-rose-400 to-transparent'
+                          : isExpired || isFailed ? 'bg-gradient-to-r from-rose-500 via-rose-400 to-transparent'
                             : 'bg-gradient-to-r from-purple-600 via-fuchsia-500 to-transparent'
                       }`} />
 
@@ -1707,14 +1736,15 @@ const Payments: React.FC<PaymentsProps> = ({
                         <div className="flex-1 min-w-0">
                           <span className={`inline-block text-[9px] font-extrabold tracking-widest uppercase px-2 py-0.5 rounded mb-2 ${isPaid ? 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20'
                               : isProcessing ? 'text-blue-400 bg-blue-500/10 border border-blue-500/20'
-                                : 'text-purple-400 bg-purple-500/10 border border-purple-500/20'
+                                : isExpired ? 'text-rose-400 bg-rose-500/10 border border-rose-500/20'
+                                  : 'text-purple-400 bg-purple-500/10 border border-purple-500/20'
                             }`}>
                             {payment.category}
                           </span>
                           <h3 className="text-base font-extrabold text-white leading-tight">{payment.title}</h3>
                           {renderDescriptionBox(payment.description)}
                         </div>
-                        {renderStatusBadge(payment.status)}
+                        {renderStatusBadge(effectiveStatus)}
                       </div>
 
                       {/* Amount & Date block */}
@@ -1756,6 +1786,14 @@ const Payments: React.FC<PaymentsProps> = ({
                             <Receipt className="w-3.5 h-3.5" />
                             View Receipt
                           </motion.button>
+                        ) : isExpired ? (
+                          <button
+                            disabled
+                            className="px-4 py-2.5 rounded-xl font-bold text-xs bg-rose-500/10 border border-rose-500/30 text-rose-300 cursor-not-allowed opacity-80 flex items-center gap-1.5"
+                          >
+                            <AlertCircle className="w-4 h-4 text-rose-400" />
+                            <span>Expired (Deadline Passed)</span>
+                          </button>
                         ) : (
                           <motion.button
                             whileHover={!isProcessing ? { scale: 1.03 } : {}}
@@ -1834,13 +1872,13 @@ const Payments: React.FC<PaymentsProps> = ({
 
               <div className="flex items-center gap-3 w-full sm:w-auto justify-between">
                 <div className="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/10 text-xs overflow-x-auto custom-scrollbar">
-                  {['All', 'Paid', 'Pending', 'Processing', 'Failed'].map((st) => (
+                  {['All', 'Paid', 'Pending', 'Processing', 'Failed', 'Expired'].map((st) => (
                     <button
                       key={st}
                       onClick={() => setRosterStatusFilter(st)}
-                      className={`px-3 py-1 rounded-lg font-bold transition-all whitespace-nowrap ${
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
                         rosterStatusFilter === st
-                          ? st === 'Failed'
+                          ? st === 'Failed' || st === 'Expired'
                             ? 'bg-rose-600 text-white shadow-[0_0_15px_rgba(225,29,72,0.4)]'
                             : st === 'Paid'
                             ? 'bg-emerald-600 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]'
@@ -1894,12 +1932,14 @@ const Payments: React.FC<PaymentsProps> = ({
                         regNo.toLowerCase().includes(rosterSearch.toLowerCase()) ||
                         email.includes(rosterSearch.toLowerCase());
 
+                      const isExp = isInvoiceExpired(item);
                       const matchesStatus =
                         rosterStatusFilter === 'All' ||
                         (rosterStatusFilter === 'Paid' && item.status === 'Paid') ||
-                        (rosterStatusFilter === 'Pending' && item.status === 'Pending') ||
-                        (rosterStatusFilter === 'Processing' && item.status === 'Processing') ||
-                        (rosterStatusFilter === 'Failed' && item.status === 'Failed');
+                        (rosterStatusFilter === 'Expired' && isExp) ||
+                        (rosterStatusFilter === 'Pending' && item.status === 'Pending' && !isExp) ||
+                        (rosterStatusFilter === 'Processing' && item.status === 'Processing' && !isExp) ||
+                        (rosterStatusFilter === 'Failed' && item.status === 'Failed' && !isExp);
 
                       return matchesSearch && matchesStatus;
                     })
@@ -1914,7 +1954,9 @@ const Payments: React.FC<PaymentsProps> = ({
                           <td className="p-3.5 font-sans font-bold text-white">{name}</td>
                           <td className="p-3.5 text-purple-300 font-semibold">{regNo}</td>
                           <td className="p-3.5 text-slate-400">{email}</td>
-                          <td className="p-3.5 font-sans">{renderStatusBadge(paymentStatusToString(item.status))}</td>
+                          <td className="p-3.5 font-sans">
+                            {renderStatusBadge(isInvoiceExpired(item) ? 'Expired' : paymentStatusToString(item.status))}
+                          </td>
                           <td className="p-3.5 text-right">
                             {item.status === 'Paid' && item.paid_at ? (
                               <div className="text-[11px] text-emerald-400 font-mono">

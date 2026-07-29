@@ -112,6 +112,18 @@ export async function syncPaymentStatusWithRazorpay(
 }
 
 /**
+ * Derived/Computed state helper: Checks if an unpaid invoice has passed its due date.
+ * Does NOT alter the underlying database status.
+ */
+export function isInvoiceExpired(item: { status?: string; due_date?: string } | null | undefined): boolean {
+  if (!item || !item.due_date || item.status === 'Paid') {
+    return false;
+  }
+  const dueMs = new Date(item.due_date).getTime();
+  return !isNaN(dueMs) && Date.now() > dueMs;
+}
+
+/**
  * Security-checked helper to auto-expire processing payment sessions that exceed 12 minutes.
  * CRITICAL SECURITY GUARANTEE:
  * 1. Never touch or alter any payment with status === 'Paid'.
