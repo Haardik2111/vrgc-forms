@@ -81,6 +81,54 @@ export const SAMPLE_PAYMENTS: Omit<PaymentItem, 'id' | 'created_at'>[] = [
   }
 ];
 
+export const PROCESSING_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
+/**
+ * Security-checked helper to auto-expire processing payment sessions that exceed 10 minutes.
+ * CRITICAL SECURITY GUARANTEE: Never touch or alter any payment with status === 'Paid'.
+ */
+export function checkProcessingTimeout(item: PaymentItem): PaymentItem {
+  if (!item || item.status !== 'Processing') {
+    return item;
+  }
+
+  const lastUpdatedIso = item.updated_at || item.created_at;
+  const lastUpdatedMs = lastUpdatedIso ? new Date(lastUpdatedIso).getTime() : 0;
+  const nowMs = Date.now();
+
+  if (lastUpdatedMs > 0 && nowMs - lastUpdatedMs >= PROCESSING_TIMEOUT_MS) {
+    const expiredDesc = 'Payment session timed out (10 minute limit exceeded). Please re-attempt payment.';
+
+    // Asynchronously sync Firestore document and attempt history without blocking caller
+    updatePaymentStatusInFirestore(item.id, {
+      status: 'Failed',
+      error_description: expiredDesc,
+    }).catch((err) => console.warn('Failed to sync expired processing status in Firestore:', err));
+
+    saveTransactionToFirestore({
+      payment_id: item.id,
+      user_email: item.user_email,
+      candidate_name: item.candidate_name,
+      registration_number: item.registration_number,
+      team: item.team,
+      payment_title: item.title,
+      amount: item.amount,
+      currency: item.currency || 'INR',
+      status: 'Failed',
+      razorpay_order_id: item.razorpay_order_id,
+      error_description: expiredDesc,
+    }).catch((err) => console.warn('Failed to log expired transaction attempt in Firestore:', err));
+
+    return {
+      ...item,
+      status: 'Failed',
+      error_description: expiredDesc,
+    };
+  }
+
+  return item;
+}
+
 // ─── Firestore Payments CRUD Operations ────────────────────────────────────────
 
 /**
@@ -107,10 +155,11 @@ export async function fetchPaymentsFromFirestore(
     snapshot.forEach((docSnap) => {
       const data: any = docSnap.data();
       const createdAtIso = data.created_at?.toDate ? data.created_at.toDate().toISOString() : data.created_at || new Date().toISOString();
+      const updatedAtIso = data.updated_at?.toDate ? data.updated_at.toDate().toISOString() : data.updated_at || new Date().toISOString();
       const status: PaymentStatus = (data.status as PaymentStatus) || 'Pending';
       const errorDesc = data.error_description || '';
 
-      items.push({
+      const rawItem: PaymentItem = {
         id: docSnap.id,
         user_email: data.user_email || '',
         candidate_name: data.candidate_name || data.user_name || '',
@@ -129,8 +178,10 @@ export async function fetchPaymentsFromFirestore(
         error_description: errorDesc,
         paid_at: data.paid_at || '',
         created_at: createdAtIso,
-        updated_at: data.updated_at?.toDate ? data.updated_at.toDate().toISOString() : data.updated_at || new Date().toISOString(),
-      });
+        updated_at: updatedAtIso,
+      };
+
+      items.push(checkProcessingTimeout(rawItem));
     });
 
     // Client-side sort by created_at descending

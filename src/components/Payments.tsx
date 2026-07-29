@@ -13,6 +13,7 @@ import {
   fetchInvoicesFromFirestore,
   fetchPaymentAttemptsFromFirestore,
   seedDemoPayments,
+  checkProcessingTimeout,
   TransactionLog,
   PAYMENTS_COLLECTION,
   INVOICES_COLLECTION,
@@ -367,7 +368,7 @@ const Payments: React.FC<PaymentsProps> = ({
       const items: PaymentItem[] = [];
       snapshot.forEach((docSnap) => {
         const data = docSnap.data();
-        items.push({
+        const rawItem: PaymentItem = {
           id: docSnap.id,
           user_email: data.user_email || '',
           title: data.title || '',
@@ -383,7 +384,8 @@ const Payments: React.FC<PaymentsProps> = ({
           paid_at: data.paid_at || '',
           created_at: data.created_at?.toDate ? data.created_at.toDate().toISOString() : data.created_at || new Date().toISOString(),
           updated_at: data.updated_at?.toDate ? data.updated_at.toDate().toISOString() : data.updated_at || new Date().toISOString(),
-        });
+        };
+        items.push(checkProcessingTimeout(rawItem));
       });
       items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       setPayments(items);
@@ -394,6 +396,28 @@ const Payments: React.FC<PaymentsProps> = ({
 
     return () => unsubscribe();
   }, [userEmail, isAdminState, adminViewAll]);
+
+  // Periodically check and auto-expire stale "Processing" sessions (> 10 minutes)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setPayments((prevPayments) => {
+        let hasChanges = false;
+        const updated = prevPayments.map((p) => {
+          if (p.status === 'Processing') {
+            const checked = checkProcessingTimeout(p);
+            if (checked.status !== p.status) {
+              hasChanges = true;
+            }
+            return checked;
+          }
+          return p;
+        });
+        return hasChanges ? updated : prevPayments;
+      });
+    }, 30000); // Run check every 30 seconds
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Load transaction logs from Firestore invoices collection
   const loadTransactionLogs = useCallback(async () => {
@@ -765,8 +789,9 @@ const Payments: React.FC<PaymentsProps> = ({
         throw new Error(orderData.error || 'Failed to create Razorpay order.');
       }
 
+      const nowIso = new Date().toISOString();
       setPayments((prev) =>
-        prev.map((item) => (item.id === payment.id ? { ...item, status: 'Processing' } : item))
+        prev.map((item) => (item.id === payment.id ? { ...item, status: 'Processing', updated_at: nowIso } : item))
       );
 
       // Persist Processing status directly into Firestore
@@ -1608,7 +1633,7 @@ const Payments: React.FC<PaymentsProps> = ({
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {payments.map((payment) => {
-              const isProcessing = processingId === payment.id || payment.status === 'Processing';
+              const isProcessing = (processingId === payment.id || payment.status === 'Processing') && payment.status !== 'Failed' && payment.status !== 'Paid';
               const isPaid = payment.status === 'Paid';
               const isFailed = payment.status === 'Failed';
               const timeDetails = getInvoiceTimeDetails(payment);
