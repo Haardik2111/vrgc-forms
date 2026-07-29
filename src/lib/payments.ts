@@ -177,10 +177,17 @@ export async function createPaymentInFirestore(
       year: 'numeric',
     });
 
-    const invoiceNoticeMsg = `⚠️ IMPORTANT: Invoice generated at ${genTimeStr}. Please pay within due date (${dueTimeStr}).`;
+    const genTimeOnlyStr = createdDate.toLocaleTimeString('en-IN', {
+      hour: 'numeric',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
+    }).toLowerCase();
+
+    const invoiceNoticeMsg = `⚠️ IMPORTANT: This invoice was generated at ${genTimeOnlyStr} and will AUTOMATICALLY EXPIRE after the due date. Please complete your payment before expiration.`;
     const userDescription = paymentData.description ? paymentData.description.trim() : '';
     const fullDescription = userDescription
-      ? (userDescription.toLowerCase().includes('invoice generated') || userDescription.includes('IMPORTANT:')
+      ? (userDescription.includes('AUTOMATICALLY EXPIRE') || userDescription.includes('IMPORTANT:')
           ? userDescription
           : `${userDescription}\n\n${invoiceNoticeMsg}`)
       : invoiceNoticeMsg;

@@ -142,11 +142,17 @@ export function renderDescriptionBox(description: string) {
     description.includes('⚠️') ||
     description.includes('generated at') ||
     description.includes('Invoice Generated:') ||
+    description.includes('AUTOMATICALLY EXPIRE') ||
     description.includes('pay within due date') ||
     description.includes('expire after due date');
 
   if (isNotice) {
-    const cleanText = description.replace(/^⚠️\s*/, '').trim();
+    let cleanText = description
+      .replace(/^⚠️\s*/, '')
+      .replace(/in 2 hours\s*\([^)]*\)/gi, 'after the due date')
+      .replace(/in 2 hours/gi, 'after the due date')
+      .replace(/after due date(?!\.)/gi, 'after the due date')
+      .trim();
 
     return (
       <div className="mt-2.5 p-3 rounded-xl bg-gradient-to-r from-amber-500/15 via-purple-900/25 to-amber-500/10 border border-amber-500/35 shadow-[0_0_20px_rgba(245,158,11,0.12)] relative overflow-hidden group">
