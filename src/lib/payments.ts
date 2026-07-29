@@ -519,8 +519,12 @@ export async function fetchInvoicesFromFirestore(
     const snapshot = await getDocs(q);
     const logs: TransactionLog[] = [];
 
-    snapshot.forEach((docSnap) => {
+    for (const docSnap of snapshot.docs) {
       const data: any = docSnap.data();
+      const createdAtIso = data.created_at?.toDate
+        ? data.created_at.toDate().toISOString()
+        : data.created_at || new Date().toISOString();
+
       logs.push({
         id: docSnap.id,
         payment_id: docSnap.id,
@@ -536,9 +540,43 @@ export async function fetchInvoicesFromFirestore(
         razorpay_order_id: data.razorpay_order_id || '',
         error_description: data.error_description || '',
         paid_at: data.paid_at || '',
-        created_at: data.created_at?.toDate ? data.created_at.toDate().toISOString() : data.created_at || new Date().toISOString(),
+        created_at: createdAtIso,
       });
-    });
+
+      // Fetch subcollection attempts for processed / failed / attempt logs
+      try {
+        const attemptsColRef = collection(db, PAYMENTS_COLLECTION, docSnap.id, 'attempts');
+        const attemptsSnap = await getDocs(attemptsColRef);
+        attemptsSnap.forEach((attDoc) => {
+          const aData: any = attDoc.data();
+          const attCreated = aData.timestamp?.toDate
+            ? aData.timestamp.toDate().toISOString()
+            : aData.created_at || createdAtIso;
+
+          if (attDoc.id !== docSnap.id) {
+            logs.push({
+              id: `${docSnap.id}_${attDoc.id}`,
+              payment_id: docSnap.id,
+              user_email: aData.user_email || data.user_email || '',
+              candidate_name: aData.candidate_name || data.candidate_name || '',
+              registration_number: aData.registration_number || data.registration_number || '',
+              team: aData.team || data.team || '',
+              payment_title: aData.payment_title || data.title || '',
+              amount: Number(aData.amount) || Number(data.amount) || 0,
+              currency: aData.currency || 'INR',
+              status: (aData.status as any) || 'Processing',
+              razorpay_payment_id: aData.razorpay_payment_id || data.razorpay_payment_id || '',
+              razorpay_order_id: aData.razorpay_order_id || data.razorpay_order_id || '',
+              error_description: aData.error_description || '',
+              paid_at: aData.paid_at || data.paid_at || '',
+              created_at: attCreated,
+            });
+          }
+        });
+      } catch (attErr) {
+        // Silently skip if subcollection query fails
+      }
+    }
 
     return logs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   } catch (err) {
