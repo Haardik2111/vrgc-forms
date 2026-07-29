@@ -488,15 +488,33 @@ export async function fetchPaymentAttemptsFromFirestore(paymentId: string): Prom
         razorpay_order_id: data.razorpay_order_id || '',
         error_description: data.error_description || '',
         paid_at: data.paid_at || '',
-        created_at: data.timestamp?.toDate ? data.timestamp.toDate().toISOString() : data.created_at || new Date().toISOString(),
+        created_at: parseTimestampMs(data.timestamp || data.created_at) > 0
+          ? new Date(parseTimestampMs(data.timestamp || data.created_at)).toISOString()
+          : new Date().toISOString(),
       });
     });
 
-    return logs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    return logs.sort((a, b) => parseTimestampMs(b.created_at) - parseTimestampMs(a.created_at));
   } catch (err) {
     console.error('Failed to fetch payment attempt logs:', err);
     return [];
   }
+}
+
+/**
+ * Fetch invoice / transaction logs from Firestore `invoices` collection.
+ */
+export function parseTimestampMs(ts: any): number {
+  if (!ts) return 0;
+  if (typeof ts === 'number') return ts;
+  if (typeof ts === 'object' && typeof ts.toDate === 'function') {
+    return ts.toDate().getTime();
+  }
+  if (typeof ts === 'object' && typeof ts.seconds === 'number') {
+    return ts.seconds * 1000;
+  }
+  const parsed = new Date(ts).getTime();
+  return isNaN(parsed) ? 0 : parsed;
 }
 
 /**
@@ -521,9 +539,8 @@ export async function fetchInvoicesFromFirestore(
 
     for (const docSnap of snapshot.docs) {
       const data: any = docSnap.data();
-      const createdAtIso = data.created_at?.toDate
-        ? data.created_at.toDate().toISOString()
-        : data.created_at || new Date().toISOString();
+      const createdAtMs = parseTimestampMs(data.created_at || data.timestamp);
+      const createdAtIso = createdAtMs > 0 ? new Date(createdAtMs).toISOString() : new Date().toISOString();
 
       logs.push({
         id: docSnap.id,
@@ -549,9 +566,8 @@ export async function fetchInvoicesFromFirestore(
         const attemptsSnap = await getDocs(attemptsColRef);
         attemptsSnap.forEach((attDoc) => {
           const aData: any = attDoc.data();
-          const attCreated = aData.timestamp?.toDate
-            ? aData.timestamp.toDate().toISOString()
-            : aData.created_at || createdAtIso;
+          const attCreatedMs = parseTimestampMs(aData.timestamp || aData.created_at);
+          const attCreatedIso = attCreatedMs > 0 ? new Date(attCreatedMs).toISOString() : createdAtIso;
 
           if (attDoc.id !== docSnap.id) {
             logs.push({
@@ -569,7 +585,7 @@ export async function fetchInvoicesFromFirestore(
               razorpay_order_id: aData.razorpay_order_id || data.razorpay_order_id || '',
               error_description: aData.error_description || '',
               paid_at: aData.paid_at || data.paid_at || '',
-              created_at: attCreated,
+              created_at: attCreatedIso,
             });
           }
         });
@@ -578,7 +594,7 @@ export async function fetchInvoicesFromFirestore(
       }
     }
 
-    return logs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    return logs.sort((a, b) => parseTimestampMs(b.created_at) - parseTimestampMs(a.created_at));
   } catch (err) {
     console.error('Failed to fetch transaction logs from Firestore:', err);
     return [];
