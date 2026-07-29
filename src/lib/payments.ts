@@ -90,7 +90,7 @@ export async function syncPaymentStatusWithRazorpay(
   paymentId?: string,
   razorpayOrderId?: string,
   syncAll: boolean = false
-): Promise<{ success: boolean; status?: string; updated?: boolean; syncedCount?: number }> {
+): Promise<{ success: boolean; status?: string; updated?: boolean; syncedCount?: number; correctedCount?: number }> {
   try {
     const res = await fetch('/api/check-payment-status', {
       method: 'POST',

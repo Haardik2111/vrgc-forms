@@ -1225,6 +1225,22 @@ const Payments: React.FC<PaymentsProps> = ({
                   <FileSpreadsheet className="w-3.5 h-3.5" />
                   Export CSV
                 </button>
+                <button
+                  onClick={async () => {
+                    showToast('Syncing all payment records with Razorpay API...', 'info');
+                    const res = await syncPaymentStatusWithRazorpay(undefined, undefined, true);
+                    if (res.success && res.correctedCount && res.correctedCount > 0) {
+                      showToast(`Razorpay Sync Complete! Updated ${res.correctedCount} record(s) to Paid. 🎉`, 'success');
+                    } else {
+                      showToast('Razorpay Sync complete. All records are up to date.', 'info');
+                    }
+                  }}
+                  className="px-3 py-2 rounded-lg bg-purple-600/20 hover:bg-purple-600/35 text-purple-300 border border-purple-500/40 text-xs font-bold transition-all flex items-center gap-1.5 shadow-[0_0_15px_rgba(168,85,247,0.2)]"
+                  title="Sync and verify all payment statuses with Razorpay API"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Sync Razorpay</span>
+                </button>
                 {/* Initiate Payment Controls — STRICTLY FOR vrgc@vitbhopal.ac.in */}
                 {canInitiatePayments && (
                   <>
