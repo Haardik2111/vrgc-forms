@@ -3,9 +3,21 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
-import { X, Code2, Sparkles, ShieldCheck, Terminal, Cpu, Heart, ExternalLink, Crown, Award, UserCheck, Star, Users } from 'lucide-react';
+import { X, Code2, Sparkles, ShieldCheck, Terminal, Cpu, Heart, ExternalLink, Crown, Award, UserCheck, Star, Users, Globe } from 'lucide-react';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+
+const GithubIcon: React.FC<{ className?: string }> = ({ className = "w-3.5 h-3.5" }) => (
+  <svg className={className} fill="currentColor" viewBox="0 0 24 24">
+    <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+  </svg>
+);
+
+const LinkedinIcon: React.FC<{ className?: string }> = ({ className = "w-3.5 h-3.5" }) => (
+  <svg className={className} fill="currentColor" viewBox="0 0 24 24">
+    <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 10.9v8.37H9.25V10.9H6.46M7.86 6.75a1.45 1.45 0 1 0 1.45 1.45A1.46 1.46 0 0 0 7.86 6.75Z" />
+  </svg>
+);
 
 interface AboutModalProps {
   isOpen: boolean;
@@ -22,6 +34,9 @@ interface TeamMember {
   position?: string;
   team?: string;
   avatarUrl?: string;
+  githubUrl?: string;
+  linkedinUrl?: string;
+  portfolioUrl?: string;
 }
 
 const TECH_TEAM_LIST: TeamMember[] = [
@@ -30,27 +45,37 @@ const TECH_TEAM_LIST: TeamMember[] = [
     role: "Technical Lead",
     rank: 1,
     regNo: "24BSA10096",
+    githubUrl: "https://github.com/",
+    linkedinUrl: "https://linkedin.com/",
   },
   {
     name: "Abhinav Mishra",
     role: "Technical Co-Lead",
     rank: 2,
     regNo: "25BCY10254",
+    githubUrl: "https://github.com/NotSoAbhinav",
+    linkedinUrl: "https://linkedin.com/in/NotSoAbhinav",
   },
   {
     name: "Jaiyansh Dhaulakhandi",
     role: "Core Technical Member",
     rank: 3,
+    githubUrl: "https://github.com/",
+    linkedinUrl: "https://linkedin.com/",
   },
   {
     name: "Anmol Shrivastava",
     role: "Core Technical Member",
     rank: 4,
+    githubUrl: "https://github.com/",
+    linkedinUrl: "https://linkedin.com/",
   },
   {
     name: "Mohit Borekar",
     role: "Core Technical Member",
     rank: 5,
+    githubUrl: "https://github.com/",
+    linkedinUrl: "https://linkedin.com/",
   },
 ];
 
@@ -102,6 +127,9 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
               position: m.role,
               team: firestoreData?.team || 'Technical Team',
               avatarUrl: firestoreData?.photoUrl || firestoreData?.avatarUrl || `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(m.name)}`,
+              githubUrl: firestoreData?.githubUrl || firestoreData?.github || m.githubUrl || '',
+              linkedinUrl: firestoreData?.linkedinUrl || firestoreData?.linkedin || m.linkedinUrl || '',
+              portfolioUrl: firestoreData?.portfolioUrl || firestoreData?.website || m.portfolioUrl || '',
             };
           })
         );
@@ -121,7 +149,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
-      <div 
+      <div
         className="relative w-full max-w-2xl bg-[#0c061a] border border-purple-500/30 rounded-3xl p-5 sm:p-7 text-white shadow-[0_0_50px_rgba(168,85,247,0.25)] overflow-hidden transition-all max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
@@ -166,34 +194,35 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
               const isCoreAdmin = member.rank === 2 || member.rank === 3;
 
               return (
-                <div 
+                <div
                   key={member.name}
-                  className={`p-3.5 rounded-2xl border transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
-                    isTopRank 
-                      ? 'bg-gradient-to-r from-amber-500/10 via-purple-500/10 to-pink-500/10 border-amber-500/40 shadow-[0_0_20px_rgba(245,158,11,0.15)]'
+                  className={`group relative p-4 rounded-xl transition-all duration-300 hover:-translate-y-0.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 overflow-hidden ${isTopRank
+                      ? 'bg-gradient-to-br from-amber-500/15 via-white/[0.04] to-pink-950/20 backdrop-blur-xl border border-amber-500/40 shadow-[inset_0_1px_1px_rgba(255,255,255,0.3),0_0_20px_rgba(245,158,11,0.12)]'
                       : isCoreAdmin
-                      ? 'bg-purple-950/30 border-purple-500/30 hover:border-purple-400/50'
-                      : 'bg-white/5 border-white/10 hover:border-white/20'
-                  }`}
+                        ? 'bg-gradient-to-br from-purple-950/50 via-white/[0.04] to-pink-950/30 backdrop-blur-xl border border-purple-500/40 shadow-[inset_0_1px_1px_rgba(255,255,255,0.25),0_0_15px_rgba(168,85,247,0.1)]'
+                        : 'bg-gradient-to-b from-white/[0.07] via-white/[0.03] to-white/[0.01] backdrop-blur-xl border border-white/[0.12] shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)] hover:border-purple-500/40'
+                    }`}
                 >
+                  {/* Liquid Specular Light Sheen Reflection */}
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.08] to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out" />
+
                   {/* Left: Rank Badge + Avatar + Details */}
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 relative z-10">
                     {/* Rank Badge */}
-                    <div className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 font-extrabold text-xs shadow-sm ${
-                      isTopRank 
-                        ? 'bg-gradient-to-br from-amber-400 to-amber-600 text-black shadow-amber-500/50' 
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-black text-[11px] shrink-0 ${isTopRank
+                        ? 'bg-gradient-to-br from-amber-400 to-amber-600 text-black shadow-md'
                         : isCoreAdmin
-                        ? 'bg-gradient-to-br from-purple-500 to-pink-500 text-white'
-                        : 'bg-white/10 text-slate-300'
-                    }`}>
-                      {isTopRank ? <Crown className="w-4 h-4 fill-black" /> : `#${member.rank}`}
+                          ? 'bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-md'
+                          : 'bg-white/10 text-slate-300 border border-white/10'
+                      }`}>
+                      {isTopRank ? <Crown className="w-3.5 h-3.5 fill-black" /> : `#${member.rank}`}
                     </div>
 
                     {/* Member Avatar */}
-                    <img 
+                    <img
                       src={member.avatarUrl || `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(member.name)}`}
                       alt={member.name}
-                      className="w-10 h-10 rounded-xl bg-purple-900/40 border border-purple-500/30 object-cover"
+                      className="w-10 h-10 rounded-xl bg-purple-900/40 border border-white/20 object-cover shrink-0"
                     />
 
                     {/* Name & Role */}
@@ -211,15 +240,50 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
                     </div>
                   </div>
 
-                  {/* Right: Role Status Pill */}
-                  <div className="shrink-0 flex items-center gap-1.5 self-end sm:self-center">
-                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border flex items-center gap-1 ${
-                      isTopRank 
+                  {/* Right: Social Links & Role Status Pill */}
+                  <div className="shrink-0 flex items-center gap-2 self-end sm:self-center relative z-10">
+                    <div className="flex items-center gap-1">
+                      {member.githubUrl && (
+                        <a
+                          href={member.githubUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={`${member.name}'s GitHub`}
+                          className="p-1 rounded-lg bg-white/5 hover:bg-purple-500/20 text-slate-300 hover:text-white transition-all border border-white/10 hover:border-purple-400/40 shadow-sm"
+                        >
+                          <GithubIcon className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                      {member.linkedinUrl && (
+                        <a
+                          href={member.linkedinUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={`${member.name}'s LinkedIn`}
+                          className="p-1 rounded-lg bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 hover:text-blue-300 transition-all border border-blue-500/20 shadow-sm"
+                        >
+                          <LinkedinIcon className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                      {member.portfolioUrl && (
+                        <a
+                          href={member.portfolioUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={`${member.name}'s Portfolio`}
+                          className="p-1 rounded-lg bg-purple-600/10 hover:bg-purple-600/20 text-purple-300 hover:text-purple-200 transition-all border border-purple-500/20 shadow-sm"
+                        >
+                          <Globe className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                    </div>
+
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border flex items-center gap-1 backdrop-blur-md ${isTopRank
                         ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                         : isCoreAdmin
-                        ? 'bg-purple-500/20 text-purple-200 border-purple-500/40'
-                        : 'bg-slate-800/80 text-slate-300 border-slate-700'
-                    }`}>
+                          ? 'bg-purple-500/20 text-purple-200 border-purple-500/40'
+                          : 'bg-slate-800/80 text-slate-300 border-slate-700'
+                      }`}>
                       {isTopRank ? <Award className="w-3 h-3 text-amber-400" /> : <UserCheck className="w-3 h-3 text-purple-400" />}
                       <span>{isTopRank ? 'Technical Lead' : member.rank === 2 ? 'Technical Co-Lead' : 'Core Member'}</span>
                     </span>

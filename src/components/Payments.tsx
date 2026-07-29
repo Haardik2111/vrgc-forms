@@ -117,10 +117,10 @@ export function getInvoiceTimeDetails(payment: PaymentItem) {
 
   const dueDateFormatted = payment.due_date
     ? new Date(payment.due_date).toLocaleDateString('en-IN', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-      })
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    })
     : 'No Due Date';
 
   return {
@@ -1101,13 +1101,12 @@ const Payments: React.FC<PaymentsProps> = ({
       {/* Toast Notification */}
       {toastMessage && (
         <div
-          className={`fixed top-20 right-4 md:right-8 z-[100] px-6 py-4 rounded-xl backdrop-blur-xl border shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-5 duration-200 ${
-            toastMessage.type === 'success'
+          className={`fixed top-20 right-4 md:right-8 z-[100] px-6 py-4 rounded-xl backdrop-blur-xl border shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-5 duration-200 ${toastMessage.type === 'success'
               ? 'bg-emerald-950/90 border-emerald-500/50 text-emerald-200 shadow-[0_0_30px_rgba(16,185,129,0.3)]'
               : toastMessage.type === 'error'
-              ? 'bg-rose-950/90 border-rose-500/50 text-rose-200 shadow-[0_0_30px_rgba(244,63,94,0.3)]'
-              : 'bg-purple-950/90 border-purple-500/50 text-purple-200 shadow-[0_0_30px_rgba(168,85,247,0.3)]'
-          }`}
+                ? 'bg-rose-950/90 border-rose-500/50 text-rose-200 shadow-[0_0_30px_rgba(244,63,94,0.3)]'
+                : 'bg-purple-950/90 border-purple-500/50 text-purple-200 shadow-[0_0_30px_rgba(168,85,247,0.3)]'
+            }`}
         >
           {toastMessage.type === 'success' ? (
             <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
@@ -1158,11 +1157,10 @@ const Payments: React.FC<PaymentsProps> = ({
               <>
                 <button
                   onClick={() => setAdminViewAll((prev) => !prev)}
-                  className={`px-3 py-2 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 ${
-                    !adminViewAll
+                  className={`px-3 py-2 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 ${!adminViewAll
                       ? 'bg-purple-600 border-purple-400 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]'
                       : 'bg-purple-600/15 hover:bg-purple-600/25 text-purple-300 border border-purple-500/30'
-                  }`}
+                    }`}
                   title="Toggle between Campaign Management & My Personal Dues"
                 >
                   <CreditCard className="w-3.5 h-3.5" />
@@ -1170,11 +1168,10 @@ const Payments: React.FC<PaymentsProps> = ({
                 </button>
                 <button
                   onClick={() => setShowLogsPanel((v) => !v)}
-                  className={`px-3 py-2 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 ${
-                    showLogsPanel
+                  className={`px-3 py-2 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 ${showLogsPanel
                       ? 'bg-blue-600/30 border-blue-500/50 text-blue-200'
                       : 'bg-blue-600/10 hover:bg-blue-600/20 text-blue-300 border border-blue-500/30'
-                  }`}
+                    }`}
                 >
                   <Receipt className="w-3.5 h-3.5" />
                   Tx Logs
@@ -1390,11 +1387,10 @@ const Payments: React.FC<PaymentsProps> = ({
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                  selectedCategory === cat
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${selectedCategory === cat
                     ? 'bg-purple-600 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]'
                     : 'bg-white/5 hover:bg-white/10 text-slate-400 border border-white/5'
-                }`}
+                  }`}
               >
                 {cat}
               </button>
@@ -1502,11 +1498,10 @@ const Payments: React.FC<PaymentsProps> = ({
                   className="relative rounded-2xl overflow-hidden group cursor-default"
                 >
                   {/* Glow border effect */}
-                  <div className={`absolute inset-0 rounded-2xl bg-gradient-to-br opacity-0 group-hover:opacity-100 transition-opacity duration-300 ${
-                    group.percentage >= 80 ? 'from-emerald-500/20 to-teal-500/10'
-                    : group.percentage >= 40 ? 'from-purple-500/20 to-fuchsia-500/10'
-                    : 'from-amber-500/20 to-orange-500/10'
-                  }`} />
+                  <div className={`absolute inset-0 rounded-2xl bg-gradient-to-br opacity-0 group-hover:opacity-100 transition-opacity duration-300 ${group.percentage >= 80 ? 'from-emerald-500/20 to-teal-500/10'
+                      : group.percentage >= 40 ? 'from-purple-500/20 to-fuchsia-500/10'
+                        : 'from-amber-500/20 to-orange-500/10'
+                    }`} />
                   <div className="relative bg-[#0a0318] border border-white/[0.07] rounded-2xl p-5 flex flex-col gap-4 shadow-xl">
 
                     {/* Card Header */}
@@ -1541,17 +1536,15 @@ const Payments: React.FC<PaymentsProps> = ({
                     <div className="space-y-2">
                       <div className="flex justify-between items-center">
                         <span className="text-[11px] font-semibold text-slate-400">₹{group.totalCollected.toLocaleString('en-IN')} / ₹{group.totalTarget.toLocaleString('en-IN')}</span>
-                        <span className={`text-[11px] font-extrabold tabular-nums ${
-                          group.percentage >= 80 ? 'text-emerald-400' : group.percentage >= 40 ? 'text-purple-300' : 'text-amber-400'
-                        }`}>{group.percentage}%</span>
+                        <span className={`text-[11px] font-extrabold tabular-nums ${group.percentage >= 80 ? 'text-emerald-400' : group.percentage >= 40 ? 'text-purple-300' : 'text-amber-400'
+                          }`}>{group.percentage}%</span>
                       </div>
                       <div className="w-full h-1.5 rounded-full bg-white/5 overflow-hidden">
                         <div
-                          className={`h-full rounded-full transition-all duration-700 ${
-                            group.percentage >= 80 ? 'bg-gradient-to-r from-emerald-400 to-teal-400'
-                            : group.percentage >= 40 ? 'bg-gradient-to-r from-purple-500 to-fuchsia-400'
-                            : 'bg-gradient-to-r from-amber-400 to-orange-400'
-                          }`}
+                          className={`h-full rounded-full transition-all duration-700 ${group.percentage >= 80 ? 'bg-gradient-to-r from-emerald-400 to-teal-400'
+                              : group.percentage >= 40 ? 'bg-gradient-to-r from-purple-500 to-fuchsia-400'
+                                : 'bg-gradient-to-r from-amber-400 to-orange-400'
+                            }`}
                           style={{ width: `${Math.min(group.percentage, 100)}%` }}
                         />
                       </div>
@@ -1630,38 +1623,34 @@ const Payments: React.FC<PaymentsProps> = ({
                   className="relative rounded-2xl overflow-hidden"
                 >
                   {/* Ambient glow under the card */}
-                  <div className={`absolute -inset-px rounded-2xl opacity-0 hover:opacity-100 transition-opacity duration-500 ${
-                    isPaid ? 'bg-gradient-to-br from-emerald-500/30 to-teal-500/0'
-                    : isProcessing ? 'bg-gradient-to-br from-blue-500/30 to-cyan-500/0'
-                    : isFailed ? 'bg-gradient-to-br from-rose-500/30 to-rose-500/0'
-                    : 'bg-gradient-to-br from-purple-500/30 to-fuchsia-500/0'
-                  }`} />
+                  <div className={`absolute -inset-px rounded-2xl opacity-0 hover:opacity-100 transition-opacity duration-500 ${isPaid ? 'bg-gradient-to-br from-emerald-500/30 to-teal-500/0'
+                      : isProcessing ? 'bg-gradient-to-br from-blue-500/30 to-cyan-500/0'
+                        : isFailed ? 'bg-gradient-to-br from-rose-500/30 to-rose-500/0'
+                          : 'bg-gradient-to-br from-purple-500/30 to-fuchsia-500/0'
+                    }`} />
 
-                  <div className={`relative h-full bg-gradient-to-b from-[#0f0520] to-[#080211] border rounded-2xl flex flex-col overflow-hidden shadow-2xl ${
-                    isPaid ? 'border-emerald-500/25'
-                    : isProcessing ? 'border-blue-500/30'
-                    : isFailed ? 'border-rose-500/25'
-                    : 'border-purple-500/15 hover:border-purple-500/35'
-                  } transition-colors duration-300`}>
+                  <div className={`relative h-full bg-gradient-to-b from-[#0f0520] to-[#080211] border rounded-2xl flex flex-col overflow-hidden shadow-2xl ${isPaid ? 'border-emerald-500/25'
+                      : isProcessing ? 'border-blue-500/30'
+                        : isFailed ? 'border-rose-500/25'
+                          : 'border-purple-500/15 hover:border-purple-500/35'
+                    } transition-colors duration-300`}>
 
                     {/* Card top accent bar */}
-                    <div className={`h-0.5 w-full ${
-                      isPaid ? 'bg-gradient-to-r from-emerald-500 via-teal-400 to-transparent'
-                      : isProcessing ? 'bg-gradient-to-r from-blue-500 via-cyan-400 to-transparent'
-                      : isFailed ? 'bg-gradient-to-r from-rose-500 via-rose-400 to-transparent'
-                      : 'bg-gradient-to-r from-purple-600 via-fuchsia-500 to-transparent'
-                    }`} />
+                    <div className={`h-0.5 w-full ${isPaid ? 'bg-gradient-to-r from-emerald-500 via-teal-400 to-transparent'
+                        : isProcessing ? 'bg-gradient-to-r from-blue-500 via-cyan-400 to-transparent'
+                          : isFailed ? 'bg-gradient-to-r from-rose-500 via-rose-400 to-transparent'
+                            : 'bg-gradient-to-r from-purple-600 via-fuchsia-500 to-transparent'
+                      }`} />
 
                     <div className="p-5 flex flex-col gap-4 flex-1">
 
                       {/* Header */}
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
-                          <span className={`inline-block text-[9px] font-extrabold tracking-widest uppercase px-2 py-0.5 rounded mb-2 ${
-                            isPaid ? 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20'
-                            : isProcessing ? 'text-blue-400 bg-blue-500/10 border border-blue-500/20'
-                            : 'text-purple-400 bg-purple-500/10 border border-purple-500/20'
-                          }`}>
+                          <span className={`inline-block text-[9px] font-extrabold tracking-widest uppercase px-2 py-0.5 rounded mb-2 ${isPaid ? 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20'
+                              : isProcessing ? 'text-blue-400 bg-blue-500/10 border border-blue-500/20'
+                                : 'text-purple-400 bg-purple-500/10 border border-purple-500/20'
+                            }`}>
                             {payment.category}
                           </span>
                           <h3 className="text-base font-extrabold text-white leading-tight">{payment.title}</h3>
@@ -1675,9 +1664,8 @@ const Payments: React.FC<PaymentsProps> = ({
                         <div className="flex items-center justify-between gap-3">
                           <div>
                             <p className="text-[9px] font-bold tracking-widest text-slate-500 uppercase mb-0.5">{isPaid ? 'Amount Paid' : 'Amount Due'}</p>
-                            <p className={`text-2xl font-black tracking-tight ${
-                              isPaid ? 'text-emerald-400' : 'text-white'
-                            }`}>
+                            <p className={`text-2xl font-black tracking-tight ${isPaid ? 'text-emerald-400' : 'text-white'
+                              }`}>
                               ₹{Number(payment.amount).toLocaleString('en-IN')}
                               <span className="text-xs font-normal text-slate-500 ml-1">INR</span>
                             </p>
@@ -1716,11 +1704,10 @@ const Payments: React.FC<PaymentsProps> = ({
                             whileTap={!isProcessing ? { scale: 0.97 } : {}}
                             disabled={isProcessing}
                             onClick={() => handlePayNow(payment)}
-                            className={`px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 transition-all ${
-                              isProcessing
+                            className={`px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 transition-all ${isProcessing
                                 ? 'bg-blue-600/40 text-blue-200 cursor-wait border border-blue-500/20'
                                 : 'bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 text-white shadow-[0_0_25px_rgba(168,85,247,0.35)]'
-                            }`}
+                              }`}
                           >
                             {isProcessing ? (
                               <>
@@ -1793,9 +1780,8 @@ const Payments: React.FC<PaymentsProps> = ({
                     <button
                       key={st}
                       onClick={() => setRosterStatusFilter(st)}
-                      className={`px-3 py-1 rounded-lg font-bold transition-all ${
-                        rosterStatusFilter === st ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'
-                      }`}
+                      className={`px-3 py-1 rounded-lg font-bold transition-all ${rosterStatusFilter === st ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'
+                        }`}
                     >
                       {st}
                     </button>
@@ -1951,7 +1937,7 @@ const Payments: React.FC<PaymentsProps> = ({
                     ></motion.div>
                     <CheckCircle2 className="w-10 h-10 relative z-10" />
                   </motion.div>
-                  
+
                   <div>
                     <h3 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-200">
                       Payment Successful
@@ -1966,11 +1952,11 @@ const Payments: React.FC<PaymentsProps> = ({
                 <div className="relative">
                   {/* Dashed line separator mimicking a ticket */}
                   <div className="absolute -top-4 -left-8 -right-8 border-t-2 border-dashed border-white/10"></div>
-                  
+
                   <div className="space-y-4 bg-black/40 border border-white/5 rounded-2xl p-5 text-sm mt-4 relative overflow-hidden">
                     {/* Subtle watermark */}
                     <div className="absolute -bottom-8 -right-8 opacity-5 rotate-12 pointer-events-none">
-                       <CheckCircle2 className="w-48 h-48 text-white" />
+                      <CheckCircle2 className="w-48 h-48 text-white" />
                     </div>
 
                     <div className="flex flex-col gap-1 pb-3 border-b border-white/5">
@@ -2007,8 +1993,8 @@ const Payments: React.FC<PaymentsProps> = ({
                         <span className="text-slate-300 text-xs font-mono">
                           {receiptModalPayment.created_at
                             ? new Date(receiptModalPayment.created_at).toLocaleString('en-IN', {
-                                day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true
-                              })
+                              day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true
+                            })
                             : 'N/A'}
                         </span>
                       </div>
@@ -2017,8 +2003,8 @@ const Payments: React.FC<PaymentsProps> = ({
                         <span className="text-purple-200 text-xs font-mono">
                           {receiptModalPayment.due_date
                             ? new Date(receiptModalPayment.due_date).toLocaleDateString('en-IN', {
-                                day: 'numeric', month: 'short', year: 'numeric'
-                              })
+                              day: 'numeric', month: 'short', year: 'numeric'
+                            })
                             : 'No Due Date'}
                         </span>
                       </div>
@@ -2027,8 +2013,8 @@ const Payments: React.FC<PaymentsProps> = ({
                         <span className="text-emerald-300 text-xs font-mono font-medium">
                           {receiptModalPayment.paid_at
                             ? new Date(receiptModalPayment.paid_at).toLocaleString('en-IN', {
-                                day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true
-                              })
+                              day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true
+                            })
                             : 'N/A'}
                         </span>
                       </div>
@@ -2088,7 +2074,7 @@ const Payments: React.FC<PaymentsProps> = ({
             <div className="space-y-4 text-xs">
               <div>
                 <label className="block text-slate-300 font-semibold mb-1">Search & Select Member *</label>
-                
+
                 {/* Search Input */}
                 <div className="relative">
                   <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-400/80 pointer-events-none" />
@@ -2127,11 +2113,10 @@ const Payments: React.FC<PaymentsProps> = ({
                         setSingleMemberSearch('Custom Email');
                         setShowSingleDropdown(false);
                       }}
-                      className={`w-full text-left p-2 rounded-lg font-semibold transition-all flex items-center justify-between ${
-                        selectedMemberEmail === 'custom'
+                      className={`w-full text-left p-2 rounded-lg font-semibold transition-all flex items-center justify-between ${selectedMemberEmail === 'custom'
                           ? 'bg-amber-500/25 text-amber-200 border border-amber-500/40'
                           : 'text-amber-300 hover:bg-white/5'
-                      }`}
+                        }`}
                     >
                       <span>+ Type Custom Email Address</span>
                       <span className="text-[10px] text-amber-400/80 font-mono">Custom Email</span>
@@ -2160,11 +2145,10 @@ const Payments: React.FC<PaymentsProps> = ({
                               setSingleMemberSearch(`${m.name} (${m.regNo})`);
                               setShowSingleDropdown(false);
                             }}
-                            className={`w-full text-left p-2 rounded-lg transition-all flex items-center justify-between gap-2 ${
-                              isSelected
+                            className={`w-full text-left p-2 rounded-lg transition-all flex items-center justify-between gap-2 ${isSelected
                                 ? 'bg-amber-500/25 text-white border border-amber-500/40 shadow-sm'
                                 : 'text-slate-300 hover:bg-white/5 hover:text-white'
-                            }`}
+                              }`}
                           >
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
@@ -2196,10 +2180,10 @@ const Payments: React.FC<PaymentsProps> = ({
                         m.team.toLowerCase().includes(q)
                       );
                     }).length === 0 && (
-                      <div className="p-3 text-center text-slate-400 text-xs">
-                        No matching members found.
-                      </div>
-                    )}
+                        <div className="p-3 text-center text-slate-400 text-xs">
+                          No matching members found.
+                        </div>
+                      )}
                   </div>
                 )}
 
@@ -2659,17 +2643,16 @@ const Payments: React.FC<PaymentsProps> = ({
                               setSelectedMultiMemberEmails((prev) => [...prev, m.email]);
                             }
                           }}
-                          className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-all ${
-                            isSelected
+                          className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-all ${isSelected
                               ? 'bg-indigo-600/20 border border-indigo-500/40 text-white'
                               : 'hover:bg-white/5 border border-transparent text-slate-300'
-                          }`}
+                            }`}
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
                             <input
                               type="checkbox"
                               checked={isSelected}
-                              onChange={() => {}}
+                              onChange={() => { }}
                               className="w-4 h-4 rounded accent-indigo-500 cursor-pointer"
                             />
                             <div className="min-w-0 text-left">
@@ -2791,11 +2774,10 @@ const Payments: React.FC<PaymentsProps> = ({
                       className="p-3 rounded-xl bg-black/40 border border-white/10 text-xs space-y-1.5"
                     >
                       <div className="flex items-center justify-between">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          attempt.status === 'Paid' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                          : attempt.status === 'Failed' || attempt.status === 'Cancelled' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                          : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                        }`}>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${attempt.status === 'Paid' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            : attempt.status === 'Failed' || attempt.status === 'Cancelled' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                              : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                          }`}>
                           {attempt.status}
                         </span>
                         <span className="text-[10px] text-slate-400 font-mono">
