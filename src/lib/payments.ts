@@ -509,19 +509,25 @@ export async function fetchInvoicesFromFirestore(
   try {
     const colRef = collection(db, PAYMENTS_COLLECTION);
     
-    const q = isAdmin
-      ? query(colRef, orderBy('created_at', 'desc'))
-      : query(colRef, where('user_email', '==', email.toLowerCase()), orderBy('created_at', 'desc'));
+    let q;
+    if (!isAdmin && email && email.trim()) {
+      q = query(colRef, where('user_email', '==', email.toLowerCase()));
+    } else {
+      q = query(colRef);
+    }
 
     const snapshot = await getDocs(q);
     const logs: TransactionLog[] = [];
 
     snapshot.forEach((docSnap) => {
-      const data = docSnap.data();
+      const data: any = docSnap.data();
       logs.push({
         id: docSnap.id,
         payment_id: docSnap.id,
         user_email: data.user_email || '',
+        candidate_name: data.candidate_name || '',
+        registration_number: data.registration_number || '',
+        team: data.team || '',
         payment_title: data.title || '',
         amount: Number(data.amount) || 0,
         currency: data.currency || 'INR',
@@ -529,11 +535,12 @@ export async function fetchInvoicesFromFirestore(
         razorpay_payment_id: data.razorpay_payment_id || '',
         razorpay_order_id: data.razorpay_order_id || '',
         error_description: data.error_description || '',
+        paid_at: data.paid_at || '',
         created_at: data.created_at?.toDate ? data.created_at.toDate().toISOString() : data.created_at || new Date().toISOString(),
       });
     });
 
-    return logs;
+    return logs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   } catch (err) {
     console.error('Failed to fetch transaction logs from Firestore:', err);
     return [];
