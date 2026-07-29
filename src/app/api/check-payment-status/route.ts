@@ -224,6 +224,59 @@ async function processRazorpaySync(targetPaymentId?: string) {
 
       correctedCount++;
       repairedDocs.push(docId);
+    } else if (pData.status === 'Processing') {
+      // Security Check: No captured/authorized payment was found on Razorpay.
+      // Evaluate if all order payment attempts failed or if the 12-minute processing session timed out.
+      const lastUpdatedIso = pData.updated_at?.toDate ? pData.updated_at.toDate().toISOString() : pData.updated_at || pData.created_at || '';
+      const lastUpdatedMs = lastUpdatedIso ? new Date(lastUpdatedIso).getTime() : 0;
+      const nowMs = Date.now();
+      const isStaleTimeout = lastUpdatedMs > 0 && (nowMs - lastUpdatedMs >= 12 * 60 * 1000);
+
+      let allAttemptsFailed = false;
+      let failureReason = 'Payment session timed out (exceeded 12 minute checkout window). Please re-attempt.';
+
+      if (docOrderId) {
+        try {
+          const orderPayments = await razorpay.orders.fetchPayments(docOrderId);
+          const items = orderPayments?.items || [];
+          if (items.length > 0) {
+            const hasSuccess = items.some((p: any) => p.status === 'captured' || p.status === 'authorized');
+            if (!hasSuccess) {
+              allAttemptsFailed = true;
+              const lastFail = items[0];
+              failureReason = lastFail?.error_description || 'Payment attempt failed or was cancelled by candidate (click Re-attempt to try again)';
+            }
+          }
+        } catch (err) {
+          console.warn(`Failed to fetch Razorpay order payments for ${docOrderId}:`, err);
+        }
+      }
+
+      // Transition to Failed ONLY if backend confirms all attempts failed or session is stale
+      if (allAttemptsFailed || isStaleTimeout) {
+        await updateDoc(pDoc.ref, {
+          status: 'Failed',
+          error_description: failureReason,
+          updated_at: serverTimestamp(),
+        });
+
+        await logTransactionToFirestore({
+          payment_id: docId,
+          user_email: docEmail,
+          candidate_name: pData.candidate_name || '',
+          registration_number: pData.registration_number || '',
+          team: pData.team || '',
+          payment_title: pData.title || '',
+          amount: Number(pData.amount) || 0,
+          currency: pData.currency || 'INR',
+          status: 'Failed',
+          razorpay_order_id: docOrderId,
+          error_description: failureReason,
+        });
+
+        correctedCount++;
+        repairedDocs.push(docId);
+      }
     }
   }
 
