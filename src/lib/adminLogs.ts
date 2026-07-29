@@ -3,7 +3,11 @@ import { db } from './firebase';
 
 export type AdminActionType =
   | 'VERIFY'
+  | 'PAYMENT_PAID'
   | 'SET_PENDING'
+  | 'CREATE_DUE'
+  | 'ASSIGN_ALL'
+  | 'ASSIGN_MULTI'
   | 'DELETE'
   | 'SYNC_SHEETS'
   | 'DOWNLOAD';

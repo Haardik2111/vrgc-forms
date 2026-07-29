@@ -203,6 +203,20 @@ export async function POST(request: Request) {
       paid_at: timestamp,
     });
 
+    // Log successful transaction to admin_logs for live Tx Logs panel updates
+    try {
+      await addDoc(collection(db, 'admin_logs'), {
+        adminEmail: (userEmail || 'system').toLowerCase(),
+        action: 'VERIFY',
+        targetEmail: (userEmail || '').toLowerCase(),
+        targetName: paymentTitle || 'Payment Verified',
+        details: `Paid ₹${amount || 0} INR via ${paymentMethod || 'Razorpay Online'} (Tx: ${razorpay_payment_id})`,
+        timestamp: serverTimestamp(),
+      });
+    } catch (logErr) {
+      console.warn('Failed to write to admin_logs on payment verification:', logErr);
+    }
+
     return NextResponse.json({
       success: true,
       message: 'Payment verified and status updated to Paid successfully in Firestore 🎉',

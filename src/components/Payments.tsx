@@ -17,6 +17,7 @@ import {
   PAYMENTS_COLLECTION,
   INVOICES_COLLECTION,
 } from '@/lib/payments';
+import { logAdminAction } from '@/lib/adminLogs';
 import { authDb as db } from '@/lib/firebase';
 import { collection, query, where, onSnapshot, getDocs } from 'firebase/firestore';
 import { User } from 'firebase/auth';
@@ -500,6 +501,13 @@ const Payments: React.FC<PaymentsProps> = ({
 
       if (created) {
         setPayments((prev) => [created, ...prev]);
+        logAdminAction({
+          adminEmail: userEmail || 'admin',
+          action: 'CREATE_DUE',
+          targetEmail: finalTargetEmail,
+          targetName: targetMember?.name || 'Member',
+          details: `Assigned due ₹${newAmount} for "${newTitle}"`,
+        });
         showToast(`Payment due of ₹${newAmount} assigned to ${finalTargetEmail}! ✨`, 'success');
       } else {
         showToast('Failed to create payment due in Firestore', 'error');
@@ -556,6 +564,13 @@ const Payments: React.FC<PaymentsProps> = ({
         if (created) createdCount++;
       }
 
+      logAdminAction({
+        adminEmail: userEmail || 'admin',
+        action: 'ASSIGN_ALL',
+        targetEmail: 'All Members',
+        details: `Assigned due ₹${allAmount} for "${allTitle}" to ${createdCount} members`,
+      });
+
       showToast(`Successfully assigned ₹${allAmount} due to ${createdCount} crew members in Firestore! 🎉`, 'success');
       setShowAssignAllModal(false);
       setAllTitle('');
@@ -604,6 +619,13 @@ const Payments: React.FC<PaymentsProps> = ({
         if (created) createdCount++;
       }
 
+      logAdminAction({
+        adminEmail: userEmail || 'admin',
+        action: 'ASSIGN_MULTI',
+        targetEmail: `${createdCount} members`,
+        details: `Assigned due ₹${multiAmount} for "${multiTitle}"`,
+      });
+
       showToast(`Successfully assigned ₹${multiAmount} due to ${createdCount} selected member(s)! 🎉`, 'success');
       setShowMultiMemberModal(false);
       setMultiTitle('');
@@ -625,6 +647,11 @@ const Payments: React.FC<PaymentsProps> = ({
     if (!confirm('Are you sure you want to delete this payment record?')) return;
 
     const ok = await deletePaymentFromFirestore(paymentId);
+    logAdminAction({
+      adminEmail: userEmail || 'admin',
+      action: 'DELETE',
+      details: `Deleted payment due record #${paymentId.slice(0, 8)}`,
+    });
     if (ok) {
       setPayments((prev) => prev.filter((p) => p.id !== paymentId));
       if (activeRosterCampaign) {
@@ -1844,20 +1871,7 @@ const Payments: React.FC<PaymentsProps> = ({
                             )}
                           </td>
                           <td className="p-3.5 text-center">
-                            <div className="flex items-center justify-center gap-1.5">
-                              {item.status !== 'Paid' && (
-                                <button
-                                  onClick={() => {
-                                    setActiveRosterCampaign(null);
-                                    handlePayNow(item);
-                                  }}
-                                  title="Pay Now"
-                                  className="px-2.5 py-1 text-[10px] font-bold bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 text-white rounded-lg transition-all flex items-center gap-1 shadow-sm"
-                                >
-                                  <CreditCard className="w-3 h-3" />
-                                  <span>Pay (₹{item.amount})</span>
-                                </button>
-                              )}
+                            <div className="flex items-center justify-center gap-1">
                               <button
                                 onClick={() => handleOpenAuditModal(item)}
                                 title="View Audit & Attempt Logs"

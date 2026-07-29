@@ -25,7 +25,11 @@ interface AdminLogsPanelProps {
 
 const ACTION_META: Record<string, { label: string; color: string; icon: string }> = {
   VERIFY: { label: 'VERIFIED', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30', icon: 'verified' },
+  PAYMENT_PAID: { label: 'PAID', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30', icon: 'payments' },
   SET_PENDING: { label: 'PENDING', color: 'text-amber-400   bg-amber-500/10   border-amber-500/30', icon: 'pending' },
+  CREATE_DUE: { label: 'DUE CREATED', color: 'text-purple-400 bg-purple-500/10 border-purple-500/30', icon: 'add_card' },
+  ASSIGN_ALL: { label: 'ASSIGN ALL', color: 'text-amber-400 bg-amber-500/10 border-amber-500/30', icon: 'campaign' },
+  ASSIGN_MULTI: { label: 'ASSIGN MULTI', color: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/30', icon: 'groups' },
   DELETE: { label: 'DELETED', color: 'text-red-400     bg-red-500/10     border-red-500/30', icon: 'delete_forever' },
   SYNC_SHEETS: { label: 'SYNCED', color: 'text-cyan-400    bg-cyan-500/10    border-cyan-500/30', icon: 'cloud_upload' },
   DOWNLOAD: { label: 'DOWNLOADED', color: 'text-purple-400  bg-purple-500/10  border-purple-500/30', icon: 'download' },
@@ -62,7 +66,7 @@ function maskEmail(email: string | null | undefined): string {
 
 // ─── Side Panel Component ────────────────────────────────────────────────────
 
-const FILTER_OPTIONS = ['ALL', 'VERIFY', 'SET_PENDING', 'DELETE', 'SYNC_SHEETS'];
+const FILTER_OPTIONS = ['ALL', 'VERIFY', 'PAYMENT_PAID', 'CREATE_DUE', 'ASSIGN_ALL', 'ASSIGN_MULTI', 'DELETE', 'SYNC_SHEETS'];
 
 const AdminLogsPanel: React.FC<AdminLogsPanelProps> = ({ isOpen, onClose }) => {
   const [logs, setLogs] = useState<AdminLog[]>([]);
