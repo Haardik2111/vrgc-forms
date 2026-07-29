@@ -67,15 +67,15 @@ const TECH_TEAM_LIST: TeamMember[] = [
     name: "Anmol Shrivastava",
     role: "Core Technical Member",
     rank: 4,
-    githubUrl: "https://github.com/",
-    linkedinUrl: "https://linkedin.com/",
+    githubUrl: "https://github.com/anmolshri30",
+    linkedinUrl: "https://www.linkedin.com/in/anmol-shrivastava-30-abcd",
   },
   {
     name: "Mohit Borekar",
     role: "Core Technical Member",
     rank: 5,
-    githubUrl: "https://github.com/",
-    linkedinUrl: "https://linkedin.com/",
+    githubUrl: "https://github.com/Mohit-Borekar",
+    linkedinUrl: "https://www.linkedin.com/in/mohit-borekar-522879396/",
   },
 ];
 
