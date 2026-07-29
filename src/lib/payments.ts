@@ -50,7 +50,7 @@ export const SAMPLE_PAYMENTS: Omit<PaymentItem, 'id' | 'created_at'>[] = [
     amount: 500,
     currency: "INR",
     status: "Pending",
-    due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    due_date: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
   },
   {
     title: "Cyberpunk Game Jam '26 Pass",
@@ -59,7 +59,7 @@ export const SAMPLE_PAYMENTS: Omit<PaymentItem, 'id' | 'created_at'>[] = [
     amount: 150,
     currency: "INR",
     status: "Pending",
-    due_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+    due_date: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
   },
   {
     title: "VRGC Cyber Hoodie (Limited Ed.)",
@@ -68,7 +68,7 @@ export const SAMPLE_PAYMENTS: Omit<PaymentItem, 'id' | 'created_at'>[] = [
     amount: 899,
     currency: "INR",
     status: "Pending",
-    due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+    due_date: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
   },
   {
     title: "VR Lab Equipment Late Fee",
@@ -77,7 +77,7 @@ export const SAMPLE_PAYMENTS: Omit<PaymentItem, 'id' | 'created_at'>[] = [
     amount: 50,
     currency: "INR",
     status: "Pending",
-    due_date: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+    due_date: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
   }
 ];
 
@@ -107,24 +107,8 @@ export async function fetchPaymentsFromFirestore(
     snapshot.forEach((docSnap) => {
       const data: any = docSnap.data();
       const createdAtIso = data.created_at?.toDate ? data.created_at.toDate().toISOString() : data.created_at || new Date().toISOString();
-      const createdTimeMs = new Date(createdAtIso).getTime();
-      const nowMs = Date.now();
-      const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
-
-      let status: PaymentStatus = (data.status as PaymentStatus) || 'Pending';
-      let errorDesc = data.error_description || '';
-
-      // Auto-expire Pending invoices if created more than 2 hours ago
-      if (status === 'Pending' && nowMs - createdTimeMs > TWO_HOURS_MS) {
-        status = 'Cancelled';
-        errorDesc = 'Invoice expired (2-Hour Expiration Time Exceeded)';
-        // Fire-and-forget update to Firestore document
-        updateDoc(doc(db, INVOICES_COLLECTION, docSnap.id), {
-          status: 'Cancelled',
-          error_description: errorDesc,
-          updated_at: serverTimestamp(),
-        }).catch((e) => console.warn('Auto-expire update warning:', e));
-      }
+      const status: PaymentStatus = (data.status as PaymentStatus) || 'Pending';
+      const errorDesc = data.error_description || '';
 
       items.push({
         id: docSnap.id,
@@ -138,7 +122,7 @@ export async function fetchPaymentsFromFirestore(
         amount: Number(data.amount) || 0,
         currency: data.currency || 'INR',
         status,
-        due_date: data.due_date || new Date(createdTimeMs + TWO_HOURS_MS).toISOString(),
+        due_date: data.due_date || '',
         razorpay_order_id: data.razorpay_order_id || '',
         razorpay_payment_id: data.razorpay_payment_id || '',
         razorpay_signature: data.razorpay_signature || '',
@@ -170,16 +154,36 @@ export async function createPaymentInFirestore(
 ): Promise<PaymentItem | null> {
   try {
     const nowMs = Date.now();
-    const twoHoursLaterMs = nowMs + 2 * 60 * 60 * 1000;
-    const nowIso = new Date(nowMs).toISOString();
-    const expiryIso = new Date(twoHoursLaterMs).toISOString();
+    const createdDate = paymentData.created_at ? new Date(paymentData.created_at) : new Date(nowMs);
+    const nowIso = createdDate.toISOString();
     const cleanEmail = paymentData.user_email ? paymentData.user_email.toLowerCase() : '';
 
-    const defaultDueDate = paymentData.due_date ? paymentData.due_date : expiryIso;
-    const expirationNoticeMsg = `⚠️ IMPORTANT: This invoice was generated at ${new Date(nowMs).toLocaleTimeString('en-IN')} and will AUTOMATICALLY EXPIRE in 2 hours (${new Date(twoHoursLaterMs).toLocaleTimeString('en-IN')}). Please complete your payment before expiration.`;
-    const fullDescription = paymentData.description
-      ? `${paymentData.description}\n\n${expirationNoticeMsg}`
-      : expirationNoticeMsg;
+    const genTimeStr = createdDate.toLocaleString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+
+    const defaultDueDate = paymentData.due_date
+      ? paymentData.due_date
+      : new Date(nowMs + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const dueTimeStr = new Date(defaultDueDate).toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+
+    const invoiceNoticeMsg = `⚠️ IMPORTANT: Invoice generated at ${genTimeStr} and will expire after due date (${dueTimeStr}). Please complete your payment before expiration.`;
+    const userDescription = paymentData.description ? paymentData.description.trim() : '';
+    const fullDescription = userDescription
+      ? (userDescription.toLowerCase().includes('invoice generated') || userDescription.includes('IMPORTANT:')
+          ? userDescription
+          : `${userDescription}\n\n${invoiceNoticeMsg}`)
+      : invoiceNoticeMsg;
     
     // Create EXACTLY 1 document in `invoices` collection
     const docRef = await addDoc(collection(db, INVOICES_COLLECTION), {
@@ -217,21 +221,18 @@ export async function createPaymentInFirestore(
 VRGC PAYMENT INVOICE GENERATED
 --------------------------------------------------
 
-INVOICE ID : ${docRef.id}
-ITEM / TITLE: ${paymentData.title}
-AMOUNT DUE : ₹${paymentData.amount} INR
-CATEGORY   : ${paymentData.category}
+INVOICE ID        : ${docRef.id}
+ITEM / TITLE      : ${paymentData.title}
+AMOUNT DUE        : ₹${paymentData.amount} INR
+CATEGORY          : ${paymentData.category}
+INVOICE GENERATED : ${genTimeStr}
+DUE DATE          : ${dueTimeStr}
 
 --------------------------------------------------
-⏰ EXPIRATION WARNING:
-This invoice has been issued and is VALID FOR 2 HOURS ONLY.
-It will automatically expire at: ${new Date(twoHoursLaterMs).toLocaleString('en-IN')}.
-
-Please log in to your VRGC Forms portal to complete your payment before expiration.
+Please log in to your VRGC Forms portal to complete your payment before the due date.
 --------------------------------------------------
 Automated message sent via VRGC Command Center
 `;
-
       fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
@@ -241,7 +242,7 @@ Automated message sent via VRGC Command Center
         body: JSON.stringify({
           from: "VRGC Billing Desk <onboarding@resend.dev>",
           to: ["vrgcdev@gmail.com"], // In Resend test mode sends to account email; with verified domain sends to cleanEmail
-          subject: `[ACTION REQUIRED] VRGC Invoice Generated: ₹${paymentData.amount} (Expires in 2 Hours)`,
+          subject: `VRGC Invoice Issued: ₹${paymentData.amount} (Due: ${dueTimeStr})`,
           text: invoiceEmailText,
           reply_to: cleanEmail,
         }),
@@ -261,7 +262,7 @@ Automated message sent via VRGC Command Center
         amount: paymentData.amount,
         currency: paymentData.currency || 'INR',
         status: paymentData.status,
-        error_description: 'Invoice issued (Expires in 2 Hours)',
+        error_description: 'Invoice issued',
         timestamp: serverTimestamp(),
         created_at: nowIso,
       });

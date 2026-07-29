@@ -101,6 +101,72 @@ const loadRazorpayScript = (): Promise<boolean> => {
   });
 };
 
+export function getInvoiceTimeDetails(payment: PaymentItem) {
+  const createdMs = payment.created_at ? new Date(payment.created_at).getTime() : Date.now();
+  const createdDate = new Date(createdMs);
+
+  const genTimeFormatted = createdDate.toLocaleString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
+
+  const dueDateFormatted = payment.due_date
+    ? new Date(payment.due_date).toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      })
+    : 'No Due Date';
+
+  return {
+    genTimeFormatted,
+    dueDateFormatted,
+  };
+}
+
+export function getPresetDateStr(daysAhead: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + daysAhead);
+  return d.toISOString().split('T')[0];
+}
+
+export function renderDescriptionBox(description: string) {
+  if (!description) return null;
+
+  const isNotice =
+    description.includes('IMPORTANT') ||
+    description.includes('⚠️') ||
+    description.includes('generated at') ||
+    description.includes('Invoice Generated:') ||
+    description.includes('expire after due date');
+
+  if (isNotice) {
+    const cleanText = description.replace(/^⚠️\s*/, '').trim();
+
+    return (
+      <div className="mt-2.5 p-3 rounded-xl bg-gradient-to-r from-amber-500/15 via-purple-900/25 to-amber-500/10 border border-amber-500/35 shadow-[0_0_20px_rgba(245,158,11,0.12)] relative overflow-hidden group">
+        <div className="flex items-center gap-1.5 text-[10px] font-extrabold tracking-wider text-amber-300 uppercase mb-1">
+          <AlertCircle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 animate-pulse" />
+          <span>Important Notice</span>
+        </div>
+        <p className="text-[11px] text-slate-200 leading-relaxed font-medium whitespace-pre-line">
+          {cleanText}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2.5 p-3 rounded-xl bg-[#120726]/90 border border-purple-500/20 text-[11px] text-slate-300 leading-relaxed whitespace-pre-line border-l-2 border-l-purple-500">
+      {description}
+    </div>
+  );
+}
+
 const Payments: React.FC<PaymentsProps> = ({
   onRedirect,
   externalUser,
@@ -175,6 +241,8 @@ const Payments: React.FC<PaymentsProps> = ({
 
   // Single Member Due Form state
   const [selectedMemberEmail, setSelectedMemberEmail] = useState<string>('');
+  const [singleMemberSearch, setSingleMemberSearch] = useState<string>('');
+  const [showSingleDropdown, setShowSingleDropdown] = useState<boolean>(false);
   const [targetEmail, setTargetEmail] = useState<string>('');
   const [newTitle, setNewTitle] = useState<string>('');
   const [newAmount, setNewAmount] = useState<string>('');
@@ -428,6 +496,8 @@ const Payments: React.FC<PaymentsProps> = ({
       setNewDescription('');
       setTargetEmail('');
       setSelectedMemberEmail('');
+      setSingleMemberSearch('');
+      setShowSingleDropdown(false);
       setNewDueDate('');
     } catch (err: any) {
       showToast(err.message || 'Failed to create payment due', 'error');
@@ -1456,6 +1526,7 @@ const Payments: React.FC<PaymentsProps> = ({
               const isProcessing = processingId === payment.id || payment.status === 'Processing';
               const isPaid = payment.status === 'Paid';
               const isFailed = payment.status === 'Failed';
+              const timeDetails = getInvoiceTimeDetails(payment);
 
               return (
                 <motion.div
@@ -1502,33 +1573,35 @@ const Payments: React.FC<PaymentsProps> = ({
                             {payment.category}
                           </span>
                           <h3 className="text-base font-extrabold text-white leading-tight">{payment.title}</h3>
-                          {payment.description && (
-                            <p className="text-[11px] text-slate-500 mt-1.5 line-clamp-2 leading-relaxed">{payment.description}</p>
-                          )}
+                          {renderDescriptionBox(payment.description)}
                         </div>
                         {renderStatusBadge(payment.status)}
                       </div>
 
                       {/* Amount & Date block */}
-                      <div className="flex items-end justify-between gap-3 bg-black/30 border border-white/[0.05] rounded-xl px-4 py-3">
-                        <div>
-                          <p className="text-[9px] font-bold tracking-widest text-slate-500 uppercase mb-0.5">{isPaid ? 'Amount Paid' : 'Amount Due'}</p>
-                          <p className={`text-2xl font-black tracking-tight ${
-                            isPaid ? 'text-emerald-400' : 'text-white'
-                          }`}>
-                            ₹{Number(payment.amount).toLocaleString('en-IN')}
-                            <span className="text-xs font-normal text-slate-500 ml-1">INR</span>
-                          </p>
+                      <div className="bg-black/40 border border-white/[0.08] rounded-xl p-3.5 space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-[9px] font-bold tracking-widest text-slate-500 uppercase mb-0.5">{isPaid ? 'Amount Paid' : 'Amount Due'}</p>
+                            <p className={`text-2xl font-black tracking-tight ${
+                              isPaid ? 'text-emerald-400' : 'text-white'
+                            }`}>
+                              ₹{Number(payment.amount).toLocaleString('en-IN')}
+                              <span className="text-xs font-normal text-slate-500 ml-1">INR</span>
+                            </p>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-[9px] font-bold tracking-widest text-slate-500 uppercase mb-0.5">{isPaid ? 'Paid On' : 'Due By'}</p>
-                          <p className="text-xs font-semibold text-slate-300 font-mono">
-                            {isPaid && payment.paid_at
-                              ? new Date(payment.paid_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-                              : payment.due_date
-                              ? new Date(payment.due_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-                              : 'No Due Date'}
-                          </p>
+
+                        {/* Invoice Generated & Due Date Timestamps */}
+                        <div className="pt-2 border-t border-white/[0.06] grid grid-cols-2 gap-2 text-[10px]">
+                          <div>
+                            <span className="text-slate-500 block font-semibold uppercase tracking-wider text-[9px]">Invoice Generated</span>
+                            <span className="text-slate-200 font-mono font-medium">{timeDetails.genTimeFormatted}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-purple-400/90 block font-semibold uppercase tracking-wider text-[9px]">Payment Due Date</span>
+                            <span className="text-purple-200 font-mono font-medium">{timeDetails.dueDateFormatted}</span>
+                          </div>
                         </div>
                       </div>
 
@@ -1838,11 +1911,31 @@ const Payments: React.FC<PaymentsProps> = ({
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-[10px] text-slate-500 font-bold tracking-wider uppercase">Date</span>
-                        <span className="text-slate-400 text-xs font-medium">
+                        <span className="text-[10px] text-slate-500 font-bold tracking-wider uppercase">Invoice Generated</span>
+                        <span className="text-slate-300 text-xs font-mono">
+                          {receiptModalPayment.created_at
+                            ? new Date(receiptModalPayment.created_at).toLocaleString('en-IN', {
+                                day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true
+                              })
+                            : 'N/A'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] text-purple-300 font-bold tracking-wider uppercase">Payment Due Date</span>
+                        <span className="text-purple-200 text-xs font-mono">
+                          {receiptModalPayment.due_date
+                            ? new Date(receiptModalPayment.due_date).toLocaleDateString('en-IN', {
+                                day: 'numeric', month: 'short', year: 'numeric'
+                              })
+                            : 'No Due Date'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] text-emerald-400 font-bold tracking-wider uppercase">Paid On</span>
+                        <span className="text-emerald-300 text-xs font-mono font-medium">
                           {receiptModalPayment.paid_at
                             ? new Date(receiptModalPayment.paid_at).toLocaleString('en-IN', {
-                                day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                                day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true
                               })
                             : 'N/A'}
                         </span>
@@ -1902,20 +1995,147 @@ const Payments: React.FC<PaymentsProps> = ({
 
             <div className="space-y-4 text-xs">
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Select Registered Member *</label>
-                <select
-                  value={selectedMemberEmail}
-                  onChange={(e) => handleSelectMemberInModal(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#0a0315] border border-white/10 text-white focus:outline-none focus:border-amber-500 [&>option]:bg-[#130828] [&>option]:text-white"
-                >
-                  <option value="" className="bg-[#130828] text-slate-300">-- Choose Member from Directory ({membersList.length}) --</option>
-                  {membersList.map((m) => (
-                    <option key={m.email} value={m.email} className="bg-[#130828] text-white">
-                      {m.name} ({m.regNo}) - {m.email} [{m.team}]
-                    </option>
-                  ))}
-                  <option value="custom" className="bg-[#130828] text-amber-300">-- Type Custom Email --</option>
-                </select>
+                <label className="block text-slate-300 font-semibold mb-1">Search & Select Member *</label>
+                
+                {/* Search Input */}
+                <div className="relative">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-400/80 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Search member by name, reg no, email or team..."
+                    value={singleMemberSearch}
+                    onFocus={() => setShowSingleDropdown(true)}
+                    onChange={(e) => {
+                      setSingleMemberSearch(e.target.value);
+                      setShowSingleDropdown(true);
+                    }}
+                    className="w-full pl-10 pr-9 py-2.5 rounded-xl bg-[#0a0315] border border-white/15 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-amber-500 shadow-inner"
+                  />
+                  {singleMemberSearch && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSingleMemberSearch('');
+                        setShowSingleDropdown(true);
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-white"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Dropdown Results */}
+                {showSingleDropdown && (
+                  <div className="mt-1.5 max-h-52 overflow-y-auto rounded-xl bg-[#120726] border border-amber-500/30 p-1.5 space-y-1 shadow-2xl custom-scrollbar text-xs z-20">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleSelectMemberInModal('custom');
+                        setSingleMemberSearch('Custom Email');
+                        setShowSingleDropdown(false);
+                      }}
+                      className={`w-full text-left p-2 rounded-lg font-semibold transition-all flex items-center justify-between ${
+                        selectedMemberEmail === 'custom'
+                          ? 'bg-amber-500/25 text-amber-200 border border-amber-500/40'
+                          : 'text-amber-300 hover:bg-white/5'
+                      }`}
+                    >
+                      <span>+ Type Custom Email Address</span>
+                      <span className="text-[10px] text-amber-400/80 font-mono">Custom Email</span>
+                    </button>
+
+                    {membersList
+                      .filter((m) => {
+                        if (!singleMemberSearch.trim() || singleMemberSearch === 'Custom Email') return true;
+                        const q = singleMemberSearch.toLowerCase();
+                        return (
+                          m.name.toLowerCase().includes(q) ||
+                          m.regNo.toLowerCase().includes(q) ||
+                          m.email.toLowerCase().includes(q) ||
+                          m.team.toLowerCase().includes(q)
+                        );
+                      })
+                      .slice(0, 50)
+                      .map((m) => {
+                        const isSelected = selectedMemberEmail === m.email;
+                        return (
+                          <button
+                            key={m.email}
+                            type="button"
+                            onClick={() => {
+                              handleSelectMemberInModal(m.email);
+                              setSingleMemberSearch(`${m.name} (${m.regNo})`);
+                              setShowSingleDropdown(false);
+                            }}
+                            className={`w-full text-left p-2 rounded-lg transition-all flex items-center justify-between gap-2 ${
+                              isSelected
+                                ? 'bg-amber-500/25 text-white border border-amber-500/40 shadow-sm'
+                                : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                            }`}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold truncate text-white">{m.name}</span>
+                                {m.regNo && (
+                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-white/10 text-slate-300">
+                                    {m.regNo}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-slate-400 truncate mt-0.5">{m.email}</div>
+                            </div>
+                            {m.team && (
+                              <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 flex-shrink-0">
+                                {m.team}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+
+                    {membersList.filter((m) => {
+                      if (!singleMemberSearch.trim() || singleMemberSearch === 'Custom Email') return true;
+                      const q = singleMemberSearch.toLowerCase();
+                      return (
+                        m.name.toLowerCase().includes(q) ||
+                        m.regNo.toLowerCase().includes(q) ||
+                        m.email.toLowerCase().includes(q) ||
+                        m.team.toLowerCase().includes(q)
+                      );
+                    }).length === 0 && (
+                      <div className="p-3 text-center text-slate-400 text-xs">
+                        No matching members found.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Selected Member Details Badge */}
+                {selectedMemberEmail && selectedMemberEmail !== 'custom' && membersMap.get(selectedMemberEmail) && (
+                  <div className="mt-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs animate-in fade-in duration-150">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <UserCheck className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                      <div className="truncate">
+                        <span className="font-bold text-white">{membersMap.get(selectedMemberEmail)?.name}</span>{' '}
+                        <span className="text-slate-400 font-mono">({membersMap.get(selectedMemberEmail)?.regNo})</span>
+                        <div className="text-[10px] text-amber-200/80 truncate">{selectedMemberEmail}</div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedMemberEmail('');
+                        setTargetEmail('');
+                        setSingleMemberSearch('');
+                        setShowSingleDropdown(true);
+                      }}
+                      className="text-[10px] font-bold text-slate-400 hover:text-white px-2 py-1 rounded bg-white/5 hover:bg-white/10 transition-all flex-shrink-0 ml-2"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
               </div>
 
               {(selectedMemberEmail === 'custom' || !selectedMemberEmail) && (
@@ -1975,13 +2195,35 @@ const Payments: React.FC<PaymentsProps> = ({
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Due Date</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-slate-300 font-semibold">Payment Due Date</label>
+                  <span className="text-[10px] text-slate-400">Default: 7 Days from today</span>
+                </div>
                 <input
                   type="date"
                   value={newDueDate}
                   onChange={(e) => setNewDueDate(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-lowest border border-white/10 text-white focus:outline-none focus:border-amber-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-lowest border border-white/10 text-white focus:outline-none focus:border-amber-500 font-mono text-xs"
                 />
+                <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-1 custom-scrollbar">
+                  <span className="text-[10px] text-slate-400 font-semibold flex-shrink-0">Presets:</span>
+                  {[
+                    { label: '+1 Day', days: 1 },
+                    { label: '+3 Days', days: 3 },
+                    { label: '+7 Days', days: 7 },
+                    { label: '+14 Days', days: 14 },
+                    { label: '+30 Days', days: 30 },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => setNewDueDate(getPresetDateStr(preset.days))}
+                      className="px-2 py-1 rounded text-[10px] font-bold bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 transition-all flex-shrink-0"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div>
@@ -2085,13 +2327,35 @@ const Payments: React.FC<PaymentsProps> = ({
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Due Date</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-slate-300 font-semibold">Payment Due Date</label>
+                  <span className="text-[10px] text-slate-400">Default: 7 Days from today</span>
+                </div>
                 <input
                   type="date"
                   value={allDueDate}
                   onChange={(e) => setAllDueDate(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-lowest border border-white/10 text-white focus:outline-none focus:border-amber-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-lowest border border-white/10 text-white focus:outline-none focus:border-amber-500 font-mono text-xs"
                 />
+                <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-1 custom-scrollbar">
+                  <span className="text-[10px] text-slate-400 font-semibold flex-shrink-0">Presets:</span>
+                  {[
+                    { label: '+1 Day', days: 1 },
+                    { label: '+3 Days', days: 3 },
+                    { label: '+7 Days', days: 7 },
+                    { label: '+14 Days', days: 14 },
+                    { label: '+30 Days', days: 30 },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => setAllDueDate(getPresetDateStr(preset.days))}
+                      className="px-2 py-1 rounded text-[10px] font-bold bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 transition-all flex-shrink-0"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div>
@@ -2195,13 +2459,35 @@ const Payments: React.FC<PaymentsProps> = ({
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Due Date</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-slate-300 font-semibold">Payment Due Date</label>
+                  <span className="text-[10px] text-slate-400">Default: 7 Days from today</span>
+                </div>
                 <input
                   type="date"
                   value={multiDueDate}
                   onChange={(e) => setMultiDueDate(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-lowest border border-white/10 text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-lowest border border-white/10 text-white focus:outline-none focus:border-indigo-500 font-mono text-xs"
                 />
+                <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-1 custom-scrollbar">
+                  <span className="text-[10px] text-slate-400 font-semibold flex-shrink-0">Presets:</span>
+                  {[
+                    { label: '+1 Day', days: 1 },
+                    { label: '+3 Days', days: 3 },
+                    { label: '+7 Days', days: 7 },
+                    { label: '+14 Days', days: 14 },
+                    { label: '+30 Days', days: 30 },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => setMultiDueDate(getPresetDateStr(preset.days))}
+                      className="px-2 py-1 rounded text-[10px] font-bold bg-indigo-500/15 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 transition-all flex-shrink-0"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div>
