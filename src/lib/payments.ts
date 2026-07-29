@@ -177,7 +177,7 @@ export async function createPaymentInFirestore(
       year: 'numeric',
     });
 
-    const invoiceNoticeMsg = `⚠️ IMPORTANT: Invoice generated at ${genTimeStr} and will expire after due date (${dueTimeStr}). Please complete your payment before expiration.`;
+    const invoiceNoticeMsg = `⚠️ IMPORTANT: Invoice generated at ${genTimeStr}. Please pay within due date (${dueTimeStr}).`;
     const userDescription = paymentData.description ? paymentData.description.trim() : '';
     const fullDescription = userDescription
       ? (userDescription.toLowerCase().includes('invoice generated') || userDescription.includes('IMPORTANT:')

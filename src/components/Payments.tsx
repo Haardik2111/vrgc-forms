@@ -142,6 +142,7 @@ export function renderDescriptionBox(description: string) {
     description.includes('⚠️') ||
     description.includes('generated at') ||
     description.includes('Invoice Generated:') ||
+    description.includes('pay within due date') ||
     description.includes('expire after due date');
 
   if (isNotice) {
