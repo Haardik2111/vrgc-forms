@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp, getDocs } from 'firebase/firestore';
 
 // Helper to log a transaction attempt record to Firestore `payments/{payment_id}/attempts` subcollection (non-blocking)
 async function logTransactionToFirestore(tx: {
@@ -21,16 +21,37 @@ async function logTransactionToFirestore(tx: {
   try {
     if (tx.payment_id) {
       const attemptsCol = collection(db, 'payments', tx.payment_id, 'attempts');
-      await addDoc(attemptsCol, {
-        ...tx,
-        user_email: (tx.user_email || 'unknown').toLowerCase(),
-        payment_title: tx.payment_title || 'Unknown Payment',
-        amount: tx.amount || 0,
-        currency: tx.currency || 'INR',
-        created_at: serverTimestamp(),
-        updated_at: serverTimestamp(),
-        source: 'vrgc-forms',
+      const existingSnap = await getDocs(attemptsCol);
+      let duplicateDocRef = null;
+
+      existingSnap.forEach((dSnap) => {
+        const dData = dSnap.data();
+        if (
+          dData.status === tx.status &&
+          ((tx.razorpay_payment_id && dData.razorpay_payment_id === tx.razorpay_payment_id) ||
+            (tx.razorpay_order_id && dData.razorpay_order_id === tx.razorpay_order_id))
+        ) {
+          duplicateDocRef = dSnap.ref;
+        }
       });
+
+      if (duplicateDocRef) {
+        await updateDoc(duplicateDocRef, {
+          ...tx,
+          updated_at: serverTimestamp(),
+        });
+      } else {
+        await addDoc(attemptsCol, {
+          ...tx,
+          user_email: (tx.user_email || 'unknown').toLowerCase(),
+          payment_title: tx.payment_title || 'Unknown Payment',
+          amount: tx.amount || 0,
+          currency: tx.currency || 'INR',
+          created_at: serverTimestamp(),
+          updated_at: serverTimestamp(),
+          source: 'vrgc-forms',
+        });
+      }
     }
   } catch (err) {
     console.warn('Transaction log to Firestore attempts collection failed:', err);

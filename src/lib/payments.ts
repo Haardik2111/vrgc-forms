@@ -81,11 +81,41 @@ export const SAMPLE_PAYMENTS: Omit<PaymentItem, 'id' | 'created_at'>[] = [
   }
 ];
 
-export const PROCESSING_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+export const PROCESSING_TIMEOUT_MS = 12 * 60 * 1000; // 12 minutes
 
 /**
- * Security-checked helper to auto-expire processing payment sessions that exceed 10 minutes.
- * CRITICAL SECURITY GUARANTEE: Never touch or alter any payment with status === 'Paid'.
+ * Verify payment status directly against Razorpay API to prevent false timeout failures.
+ */
+export async function syncPaymentStatusWithRazorpay(
+  paymentId?: string,
+  razorpayOrderId?: string,
+  syncAll: boolean = false
+): Promise<{ success: boolean; status?: string; updated?: boolean; syncedCount?: number }> {
+  try {
+    const res = await fetch('/api/check-payment-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        paymentId,
+        razorpay_order_id: razorpayOrderId,
+        syncAll,
+      }),
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+    return { success: false };
+  } catch (err) {
+    console.warn('Failed to sync payment status with Razorpay:', err);
+    return { success: false };
+  }
+}
+
+/**
+ * Security-checked helper to auto-expire processing payment sessions that exceed 12 minutes.
+ * CRITICAL SECURITY GUARANTEE:
+ * 1. Never touch or alter any payment with status === 'Paid'.
+ * 2. If razorpay_order_id exists, MUST check Razorpay API first before marking as Failed!
  */
 export function checkProcessingTimeout(item: PaymentItem): PaymentItem {
   if (!item || item.status !== 'Processing') {
@@ -97,33 +127,39 @@ export function checkProcessingTimeout(item: PaymentItem): PaymentItem {
   const nowMs = Date.now();
 
   if (lastUpdatedMs > 0 && nowMs - lastUpdatedMs >= PROCESSING_TIMEOUT_MS) {
-    const expiredDesc = 'Payment session timed out (10 minute limit exceeded). Please re-attempt payment.';
+    if (item.razorpay_order_id) {
+      // Trigger background status check with Razorpay API to prevent false failures for completed payments
+      syncPaymentStatusWithRazorpay(item.id, item.razorpay_order_id).catch((err) =>
+        console.warn('Background Razorpay status check warning:', err)
+      );
+    } else {
+      const expiredDesc = 'Payment session timed out (12 minute limit exceeded). Please re-attempt payment.';
 
-    // Asynchronously sync Firestore document and attempt history without blocking caller
-    updatePaymentStatusInFirestore(item.id, {
-      status: 'Failed',
-      error_description: expiredDesc,
-    }).catch((err) => console.warn('Failed to sync expired processing status in Firestore:', err));
+      // Asynchronously sync Firestore document and attempt history without blocking caller
+      updatePaymentStatusInFirestore(item.id, {
+        status: 'Failed',
+        error_description: expiredDesc,
+      }).catch((err) => console.warn('Failed to sync expired processing status in Firestore:', err));
 
-    saveTransactionToFirestore({
-      payment_id: item.id,
-      user_email: item.user_email,
-      candidate_name: item.candidate_name,
-      registration_number: item.registration_number,
-      team: item.team,
-      payment_title: item.title,
-      amount: item.amount,
-      currency: item.currency || 'INR',
-      status: 'Failed',
-      razorpay_order_id: item.razorpay_order_id,
-      error_description: expiredDesc,
-    }).catch((err) => console.warn('Failed to log expired transaction attempt in Firestore:', err));
+      saveTransactionToFirestore({
+        payment_id: item.id,
+        user_email: item.user_email,
+        candidate_name: item.candidate_name,
+        registration_number: item.registration_number,
+        team: item.team,
+        payment_title: item.title,
+        amount: item.amount,
+        currency: item.currency || 'INR',
+        status: 'Failed',
+        error_description: expiredDesc,
+      }).catch((err) => console.warn('Failed to log expired transaction attempt in Firestore:', err));
 
-    return {
-      ...item,
-      status: 'Failed',
-      error_description: expiredDesc,
-    };
+      return {
+        ...item,
+        status: 'Failed',
+        error_description: expiredDesc,
+      };
+    }
   }
 
   return item;
@@ -514,17 +550,17 @@ export async function updateInvoiceInFirestore(
 }
 
 /**
- * Fetch all attempt logs for a specific payment ID from Firestore.
+ * Fetch all attempt logs for a specific payment ID from Firestore (Deduplicated).
  */
 export async function fetchPaymentAttemptsFromFirestore(paymentId: string): Promise<TransactionLog[]> {
   try {
     const attemptsColRef = collection(db, PAYMENTS_COLLECTION, paymentId, 'attempts');
     const snapshot = await getDocs(attemptsColRef);
-    const logs: TransactionLog[] = [];
+    const rawLogs: TransactionLog[] = [];
 
     snapshot.forEach((docSnap) => {
       const data = docSnap.data();
-      logs.push({
+      rawLogs.push({
         id: docSnap.id,
         payment_id: paymentId,
         user_email: data.user_email || '',
@@ -545,6 +581,16 @@ export async function fetchPaymentAttemptsFromFirestore(paymentId: string): Prom
       });
     });
 
+    // Deduplicate attempt logs to prevent duplicate entries
+    const uniqueMap = new Map<string, TransactionLog>();
+    rawLogs.forEach((log) => {
+      const key = `${log.status}__${log.razorpay_payment_id}__${log.razorpay_order_id}__${log.error_description.slice(0, 30)}`;
+      if (!uniqueMap.has(key)) {
+        uniqueMap.set(key, log);
+      }
+    });
+
+    const logs = Array.from(uniqueMap.values());
     return logs.sort((a, b) => parseTimestampMs(b.created_at) - parseTimestampMs(a.created_at));
   } catch (err) {
     console.error('Failed to fetch payment attempt logs:', err);
@@ -569,7 +615,7 @@ export function parseTimestampMs(ts: any): number {
 }
 
 /**
- * Fetch invoice / transaction logs from Firestore `invoices` collection.
+ * Fetch invoice / transaction logs from Firestore `invoices` collection (1 clean entry per payment).
  */
 export async function fetchInvoicesFromFirestore(
   email: string,
@@ -610,39 +656,6 @@ export async function fetchInvoicesFromFirestore(
         paid_at: data.paid_at || '',
         created_at: createdAtIso,
       });
-
-      // Fetch subcollection attempts for processed / failed / attempt logs
-      try {
-        const attemptsColRef = collection(db, PAYMENTS_COLLECTION, docSnap.id, 'attempts');
-        const attemptsSnap = await getDocs(attemptsColRef);
-        attemptsSnap.forEach((attDoc) => {
-          const aData: any = attDoc.data();
-          const attCreatedMs = parseTimestampMs(aData.timestamp || aData.created_at);
-          const attCreatedIso = attCreatedMs > 0 ? new Date(attCreatedMs).toISOString() : createdAtIso;
-
-          if (attDoc.id !== docSnap.id) {
-            logs.push({
-              id: `${docSnap.id}_${attDoc.id}`,
-              payment_id: docSnap.id,
-              user_email: aData.user_email || data.user_email || '',
-              candidate_name: aData.candidate_name || data.candidate_name || '',
-              registration_number: aData.registration_number || data.registration_number || '',
-              team: aData.team || data.team || '',
-              payment_title: aData.payment_title || data.title || '',
-              amount: Number(aData.amount) || Number(data.amount) || 0,
-              currency: aData.currency || 'INR',
-              status: (aData.status as any) || 'Processing',
-              razorpay_payment_id: aData.razorpay_payment_id || data.razorpay_payment_id || '',
-              razorpay_order_id: aData.razorpay_order_id || data.razorpay_order_id || '',
-              error_description: aData.error_description || '',
-              paid_at: aData.paid_at || data.paid_at || '',
-              created_at: attCreatedIso,
-            });
-          }
-        });
-      } catch (attErr) {
-        // Silently skip if subcollection query fails
-      }
     }
 
     return logs.sort((a, b) => parseTimestampMs(b.created_at) - parseTimestampMs(a.created_at));

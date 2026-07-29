@@ -14,6 +14,7 @@ import {
   fetchPaymentAttemptsFromFirestore,
   seedDemoPayments,
   checkProcessingTimeout,
+  syncPaymentStatusWithRazorpay,
   TransactionLog,
   PAYMENTS_COLLECTION,
   INVOICES_COLLECTION,
@@ -397,7 +398,7 @@ const Payments: React.FC<PaymentsProps> = ({
     return () => unsubscribe();
   }, [userEmail, isAdminState, adminViewAll]);
 
-  // Periodically check and auto-expire stale "Processing" sessions (> 10 minutes)
+  // Periodically check and auto-expire stale "Processing" sessions (> 12 minutes)
   useEffect(() => {
     const interval = setInterval(() => {
       setPayments((prevPayments) => {
@@ -418,6 +419,19 @@ const Payments: React.FC<PaymentsProps> = ({
 
     return () => clearInterval(interval);
   }, []);
+
+  // Auto-sync non-Paid payments with Razorpay API on load to fix any erroneous status in Firestore
+  useEffect(() => {
+    if (payments.length === 0) return;
+    const itemsToSync = payments.filter((p) => p.status !== 'Paid' && p.razorpay_order_id);
+    if (itemsToSync.length > 0) {
+      itemsToSync.forEach((item) => {
+        syncPaymentStatusWithRazorpay(item.id, item.razorpay_order_id).catch((err) =>
+          console.warn('Auto-sync Razorpay check warning:', err)
+        );
+      });
+    }
+  }, [payments]);
 
   // Load transaction logs from Firestore invoices collection
   const loadTransactionLogs = useCallback(async () => {
@@ -2749,7 +2763,27 @@ const Payments: React.FC<PaymentsProps> = ({
                     {auditModalPayment.user_email}
                   </p>
                 </div>
-                {renderStatusBadge(auditModalPayment.status)}
+                <div className="flex items-center gap-2">
+                  {renderStatusBadge(auditModalPayment.status)}
+                  <button
+                    onClick={async () => {
+                      showToast('Syncing status with Razorpay API...', 'info');
+                      const res = await syncPaymentStatusWithRazorpay(auditModalPayment.id, auditModalPayment.razorpay_order_id);
+                      if (res.updated && res.status === 'Paid') {
+                        showToast('Payment confirmed and updated to Paid in Firestore! 🎉', 'success');
+                      } else if (res.status === 'Paid') {
+                        showToast('Payment is verified as Paid on Razorpay.', 'success');
+                      } else {
+                        showToast(`Sync complete. Status: ${res.status || auditModalPayment.status}`, 'info');
+                      }
+                    }}
+                    title="Check status directly with Razorpay API"
+                    className="p-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-xs font-bold transition-all flex items-center gap-1"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Sync Razorpay</span>
+                  </button>
+                </div>
               </div>
               <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/5 text-[11px]">
                 <div>
