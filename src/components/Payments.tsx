@@ -1438,32 +1438,6 @@ const Payments: React.FC<PaymentsProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-between lg:justify-end">
-          {/* Status Pills */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
-            <span className="text-xs text-slate-400 font-semibold pr-1">Status:</span>
-            {['All', 'Paid', 'Pending', 'Processing', 'Failed'].map((st) => (
-              <button
-                key={st}
-                onClick={() => setSelectedStatus(st)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                  selectedStatus === st
-                    ? st === 'Failed'
-                      ? 'bg-rose-600 text-white shadow-[0_0_15px_rgba(225,29,72,0.4)]'
-                      : st === 'Paid'
-                      ? 'bg-emerald-600 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]'
-                      : st === 'Processing'
-                      ? 'bg-blue-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.4)]'
-                      : st === 'Pending'
-                      ? 'bg-amber-600 text-white shadow-[0_0_15px_rgba(217,119,6,0.4)]'
-                      : 'bg-purple-600 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]'
-                    : 'bg-white/5 hover:bg-white/10 text-slate-400 border border-white/5'
-                }`}
-              >
-                {st}
-              </button>
-            ))}
-          </div>
-
           {/* Category Pills */}
           <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
             <span className="text-xs text-slate-400 font-semibold pr-1">Category:</span>

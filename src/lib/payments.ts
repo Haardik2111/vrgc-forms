@@ -591,7 +591,10 @@ export async function fetchPaymentAttemptsFromFirestore(paymentId: string): Prom
     });
 
     const logs = Array.from(uniqueMap.values());
-    return logs.sort((a, b) => parseTimestampMs(b.created_at) - parseTimestampMs(a.created_at));
+    const getLatestMs = (l: TransactionLog) =>
+      Math.max(parseTimestampMs(l.paid_at), parseTimestampMs(l.created_at));
+
+    return logs.sort((a, b) => getLatestMs(b) - getLatestMs(a));
   } catch (err) {
     console.error('Failed to fetch payment attempt logs:', err);
     return [];
@@ -658,7 +661,10 @@ export async function fetchInvoicesFromFirestore(
       });
     }
 
-    return logs.sort((a, b) => parseTimestampMs(b.created_at) - parseTimestampMs(a.created_at));
+    const getLatestMs = (l: TransactionLog) =>
+      Math.max(parseTimestampMs(l.paid_at), parseTimestampMs(l.created_at));
+
+    return logs.sort((a, b) => getLatestMs(b) - getLatestMs(a));
   } catch (err) {
     console.error('Failed to fetch transaction logs from Firestore:', err);
     return [];

@@ -64,7 +64,7 @@ async function logTransactionToFirestore(tx: {
   }
 }
 
-export async function processRazorpaySync(targetPaymentId?: string) {
+async function processRazorpaySync(targetPaymentId?: string) {
   const keyId = (process.env.RAZORPAY_KEY_ID || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || '').trim();
   const keySecret = (process.env.RAZORPAY_KEY_SECRET || '').trim();
 
