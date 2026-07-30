@@ -17,6 +17,7 @@ async function logTransactionToFirestore(tx: {
   payment_method?: string;
   error_description?: string;
   paid_at?: string;
+  failed_at?: string;
 }) {
   try {
     if (tx.payment_id) {
@@ -47,6 +48,7 @@ async function logTransactionToFirestore(tx: {
           payment_title: tx.payment_title || 'Unknown Payment',
           amount: tx.amount || 0,
           currency: tx.currency || 'INR',
+          failed_at: tx.failed_at || (tx.status === 'Failed' ? new Date().toISOString() : ''),
           created_at: serverTimestamp(),
           updated_at: serverTimestamp(),
           source: 'vrgc-forms',
@@ -157,10 +159,12 @@ export async function POST(request: Request) {
       console.warn(`Signature Mismatch! Expected: ${generatedSignature}, Received: ${razorpay_signature}`);
       
       // Update Firestore `payments` doc to Failed if paymentId is provided
+      const nowIso = new Date().toISOString();
       if (paymentDocRef) {
         try {
           await updateDoc(paymentDocRef, {
             status: 'Failed',
+            failed_at: nowIso,
             razorpay_order_id,
             razorpay_payment_id,
             updated_at: serverTimestamp(),
@@ -178,6 +182,7 @@ export async function POST(request: Request) {
         amount,
         currency,
         status: 'Failed',
+        failed_at: nowIso,
         razorpay_order_id,
         razorpay_payment_id,
         payment_method: paymentMethod,

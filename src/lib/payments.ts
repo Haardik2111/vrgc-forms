@@ -37,8 +37,35 @@ export interface TransactionLog {
   payment_method?: string;
   error_description?: string;
   paid_at?: string;
+  failed_at?: string;
   created_at: string;
   updated_at?: string;
+}
+
+/**
+ * Helper function to determine the real, accurate event timestamp for a transaction log.
+ * - Pending: Invoice generation time (created_at)
+ * - Paid: Payment confirmation time (paid_at || updated_at || created_at)
+ * - Failed / Cancelled: Failure timestamp (failed_at || updated_at || created_at)
+ * - Processing: Session update time (updated_at || created_at)
+ */
+export function getLogEventTimestamp(log: {
+  status: string;
+  created_at: string;
+  paid_at?: string;
+  failed_at?: string;
+  updated_at?: string;
+}): string {
+  if (log.status === 'Paid') {
+    return log.paid_at || log.updated_at || log.created_at;
+  }
+  if (log.status === 'Failed' || log.status === 'Cancelled') {
+    return log.failed_at || log.updated_at || log.created_at;
+  }
+  if (log.status === 'Processing') {
+    return log.updated_at || log.created_at;
+  }
+  return log.created_at;
 }
 
 // ─── Sample Data ──────────────────────────────────────────────────────────────
@@ -146,10 +173,12 @@ export function checkProcessingTimeout(item: PaymentItem): PaymentItem {
       );
     } else {
       const expiredDesc = 'Payment session timed out (12 minute limit exceeded). Please re-attempt payment.';
+      const nowIso = new Date().toISOString();
 
       // Asynchronously sync Firestore document and attempt history without blocking caller
       updatePaymentStatusInFirestore(item.id, {
         status: 'Failed',
+        failed_at: nowIso,
         error_description: expiredDesc,
       }).catch((err) => console.warn('Failed to sync expired processing status in Firestore:', err));
 
@@ -163,12 +192,14 @@ export function checkProcessingTimeout(item: PaymentItem): PaymentItem {
         amount: item.amount,
         currency: item.currency || 'INR',
         status: 'Failed',
+        failed_at: nowIso,
         error_description: expiredDesc,
       }).catch((err) => console.warn('Failed to log expired transaction attempt in Firestore:', err));
 
       return {
         ...item,
         status: 'Failed',
+        failed_at: nowIso,
         error_description: expiredDesc,
       };
     }
@@ -225,6 +256,7 @@ export async function fetchPaymentsFromFirestore(
         razorpay_signature: data.razorpay_signature || '',
         error_description: errorDesc,
         paid_at: data.paid_at || '',
+        failed_at: data.failed_at || '',
         created_at: createdAtIso,
         updated_at: updatedAtIso,
       };
@@ -392,10 +424,18 @@ export async function updatePaymentStatusInFirestore(
 ): Promise<boolean> {
   try {
     const docRef = doc(db, INVOICES_COLLECTION, paymentId);
-    await updateDoc(docRef, {
+    const nowIso = new Date().toISOString();
+    const finalUpdates: any = {
       ...updates,
       updated_at: serverTimestamp(),
-    });
+    };
+    if (updates.status === 'Paid' && !updates.paid_at) {
+      finalUpdates.paid_at = nowIso;
+    }
+    if ((updates.status === 'Failed' || updates.status === 'Cancelled') && !updates.failed_at) {
+      finalUpdates.failed_at = nowIso;
+    }
+    await updateDoc(docRef, finalUpdates);
     return true;
   } catch (err) {
     console.error('Failed to update payment status in Firestore:', err);
@@ -458,17 +498,23 @@ export async function saveTransactionToFirestore(tx: {
   payment_method?: string;
   error_description?: string;
   paid_at?: string;
+  failed_at?: string;
 }): Promise<string | null> {
   try {
     const cleanEmail = tx.user_email ? tx.user_email.toLowerCase() : '';
+    const nowIso = new Date().toISOString();
     if (tx.payment_id) {
+      const paidAtVal = tx.paid_at || (tx.status === 'Paid' ? nowIso : '');
+      const failedAtVal = tx.failed_at || (tx.status === 'Failed' || tx.status === 'Cancelled' ? nowIso : '');
+
       // 1. Update primary payment status in main `invoices` doc
       await updatePaymentStatusInFirestore(tx.payment_id, {
         status: tx.status as PaymentStatus,
         razorpay_order_id: tx.razorpay_order_id || '',
         razorpay_payment_id: tx.razorpay_payment_id || '',
         razorpay_signature: tx.razorpay_signature || '',
-        paid_at: tx.paid_at || (tx.status === 'Paid' ? new Date().toISOString() : ''),
+        paid_at: paidAtVal,
+        failed_at: failedAtVal,
         ...(tx.error_description ? { error_description: tx.error_description } : {}),
       });
 
@@ -487,9 +533,10 @@ export async function saveTransactionToFirestore(tx: {
         razorpay_order_id: tx.razorpay_order_id || '',
         razorpay_payment_id: tx.razorpay_payment_id || '',
         error_description: tx.error_description || '',
-        paid_at: tx.paid_at || '',
+        paid_at: paidAtVal,
+        failed_at: failedAtVal,
         timestamp: serverTimestamp(),
-        created_at: new Date().toISOString(),
+        created_at: nowIso,
       });
 
       return tx.payment_id;
@@ -572,6 +619,15 @@ export async function fetchPaymentAttemptsFromFirestore(paymentId: string): Prom
 
     snapshot.forEach((docSnap) => {
       const data = docSnap.data();
+      const createdAtMs = parseTimestampMs(data.created_at || data.timestamp);
+      const createdAtIso = createdAtMs > 0 ? new Date(createdAtMs).toISOString() : new Date().toISOString();
+      const updatedAtMs = parseTimestampMs(data.updated_at);
+      const updatedAtIso = updatedAtMs > 0 ? new Date(updatedAtMs).toISOString() : undefined;
+      const paidAtMs = parseTimestampMs(data.paid_at);
+      const paidAtIso = paidAtMs > 0 ? new Date(paidAtMs).toISOString() : (data.paid_at || undefined);
+      const failedAtMs = parseTimestampMs(data.failed_at);
+      const failedAtIso = failedAtMs > 0 ? new Date(failedAtMs).toISOString() : (data.failed_at || undefined);
+
       rawLogs.push({
         id: docSnap.id,
         payment_id: paymentId,
@@ -586,10 +642,10 @@ export async function fetchPaymentAttemptsFromFirestore(paymentId: string): Prom
         razorpay_payment_id: data.razorpay_payment_id || '',
         razorpay_order_id: data.razorpay_order_id || '',
         error_description: data.error_description || '',
-        paid_at: data.paid_at || '',
-        created_at: parseTimestampMs(data.timestamp || data.created_at) > 0
-          ? new Date(parseTimestampMs(data.timestamp || data.created_at)).toISOString()
-          : new Date().toISOString(),
+        paid_at: paidAtIso,
+        failed_at: failedAtIso,
+        updated_at: updatedAtIso,
+        created_at: createdAtIso,
       });
     });
 
@@ -603,10 +659,15 @@ export async function fetchPaymentAttemptsFromFirestore(paymentId: string): Prom
     });
 
     const logs = Array.from(uniqueMap.values());
-    const getLatestMs = (l: TransactionLog) =>
-      Math.max(parseTimestampMs(l.paid_at), parseTimestampMs(l.created_at));
-
-    return logs.sort((a, b) => getLatestMs(b) - getLatestMs(a));
+    return logs.sort((a, b) => {
+      const timeA = parseTimestampMs(getLogEventTimestamp(a));
+      const timeB = parseTimestampMs(getLogEventTimestamp(b));
+      if (timeB !== timeA) return timeB - timeA;
+      const createdA = parseTimestampMs(a.created_at);
+      const createdB = parseTimestampMs(b.created_at);
+      if (createdB !== createdA) return createdB - createdA;
+      return (b.id || '').localeCompare(a.id || '');
+    });
   } catch (err) {
     console.error('Failed to fetch payment attempt logs:', err);
     return [];
@@ -653,6 +714,12 @@ export async function fetchInvoicesFromFirestore(
       const data: any = docSnap.data();
       const createdAtMs = parseTimestampMs(data.created_at || data.timestamp);
       const createdAtIso = createdAtMs > 0 ? new Date(createdAtMs).toISOString() : new Date().toISOString();
+      const updatedAtMs = parseTimestampMs(data.updated_at);
+      const updatedAtIso = updatedAtMs > 0 ? new Date(updatedAtMs).toISOString() : undefined;
+      const paidAtMs = parseTimestampMs(data.paid_at);
+      const paidAtIso = paidAtMs > 0 ? new Date(paidAtMs).toISOString() : (data.paid_at || undefined);
+      const failedAtMs = parseTimestampMs(data.failed_at);
+      const failedAtIso = failedAtMs > 0 ? new Date(failedAtMs).toISOString() : (data.failed_at || undefined);
 
       logs.push({
         id: docSnap.id,
@@ -668,15 +735,22 @@ export async function fetchInvoicesFromFirestore(
         razorpay_payment_id: data.razorpay_payment_id || '',
         razorpay_order_id: data.razorpay_order_id || '',
         error_description: data.error_description || '',
-        paid_at: data.paid_at || '',
+        paid_at: paidAtIso,
+        failed_at: failedAtIso,
+        updated_at: updatedAtIso,
         created_at: createdAtIso,
       });
     }
 
-    const getLatestMs = (l: TransactionLog) =>
-      Math.max(parseTimestampMs(l.paid_at), parseTimestampMs(l.created_at));
-
-    return logs.sort((a, b) => getLatestMs(b) - getLatestMs(a));
+    return logs.sort((a, b) => {
+      const timeA = parseTimestampMs(getLogEventTimestamp(a));
+      const timeB = parseTimestampMs(getLogEventTimestamp(b));
+      if (timeB !== timeA) return timeB - timeA;
+      const createdA = parseTimestampMs(a.created_at);
+      const createdB = parseTimestampMs(b.created_at);
+      if (createdB !== createdA) return createdB - createdA;
+      return (b.id || '').localeCompare(a.id || '');
+    });
   } catch (err) {
     console.error('Failed to fetch transaction logs from Firestore:', err);
     return [];

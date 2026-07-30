@@ -26,6 +26,7 @@ export interface PaymentItem {
   razorpay_contact?: string;
   error_description?: string;
   paid_at?: string;
+  failed_at?: string;
   created_at: string;
   updated_at?: string;
 }

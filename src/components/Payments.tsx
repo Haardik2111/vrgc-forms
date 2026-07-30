@@ -16,6 +16,8 @@ import {
   checkProcessingTimeout,
   syncPaymentStatusWithRazorpay,
   isInvoiceExpired,
+  getLogEventTimestamp,
+  parseTimestampMs,
   TransactionLog,
   PAYMENTS_COLLECTION,
   INVOICES_COLLECTION,
@@ -245,6 +247,18 @@ const Payments: React.FC<PaymentsProps> = ({
   const [transactionLogs, setTransactionLogs] = useState<TransactionLog[]>([]);
   const [logsLoading, setLogsLoading] = useState<boolean>(false);
   const [showLogsPanel, setShowLogsPanel] = useState<boolean>(false);
+
+  const sortedTransactionLogs = useMemo(() => {
+    return [...transactionLogs].sort((a, b) => {
+      const timeA = parseTimestampMs(getLogEventTimestamp(a));
+      const timeB = parseTimestampMs(getLogEventTimestamp(b));
+      if (timeB !== timeA) return timeB - timeA;
+      const createdA = parseTimestampMs(a.created_at);
+      const createdB = parseTimestampMs(b.created_at);
+      if (createdB !== createdA) return createdB - createdA;
+      return (b.id || '').localeCompare(a.id || '');
+    });
+  }, [transactionLogs]);
 
   const [auditModalPayment, setAuditModalPayment] = useState<PaymentItem | null>(null);
   const [auditAttempts, setAuditAttempts] = useState<TransactionLog[]>([]);
@@ -1106,14 +1120,15 @@ const Payments: React.FC<PaymentsProps> = ({
   // Statistics calculation
   const stats = useMemo(() => {
     const totalPending = payments
-      .filter((p) => p.status === 'Pending' || p.status === 'Processing')
+      .filter((p) => p.status === 'Pending' || p.status === 'Processing' || p.status === 'Failed')
       .reduce((sum, p) => sum + Number(p.amount), 0);
     const totalPaid = payments
       .filter((p) => p.status === 'Paid')
       .reduce((sum, p) => sum + Number(p.amount), 0);
     const pendingCount = payments.filter((p) => p.status === 'Pending' || p.status === 'Processing').length;
+    const failedCount = payments.filter((p) => p.status === 'Failed').length;
     const paidCount = payments.filter((p) => p.status === 'Paid').length;
-    return { totalPending, totalPaid, pendingCount, paidCount, total: payments.length };
+    return { totalPending, totalPaid, pendingCount, failedCount, paidCount, total: payments.length };
   }, [payments]);
 
   // Helper badge generator
@@ -1312,7 +1327,7 @@ const Payments: React.FC<PaymentsProps> = ({
               ₹{stats.totalPending.toLocaleString('en-IN')}
             </div>
             <div className="text-[11px] text-amber-400/80 font-medium">
-              {stats.pendingCount} payment{stats.pendingCount !== 1 ? 's' : ''} awaiting completion
+              {stats.pendingCount} Pending &amp; {stats.failedCount} Failed
             </div>
           </div>
 
@@ -1404,7 +1419,7 @@ const Payments: React.FC<PaymentsProps> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {transactionLogs.map((log) => (
+                  {sortedTransactionLogs.map((log) => (
                     <tr key={log.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
                       <td className="px-4 py-2.5">
                         {log.status === 'Paid' ? (
@@ -1434,7 +1449,7 @@ const Payments: React.FC<PaymentsProps> = ({
                         ) : '—'}
                       </td>
                       <td className="px-4 py-2.5 text-slate-400 whitespace-nowrap">
-                        {new Date(log.created_at).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                        {new Date(getLogEventTimestamp(log)).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
                       </td>
                       <td className="px-4 py-2.5 text-rose-400/80 text-[10px] max-w-[120px] truncate" title={log.error_description}>
                         {log.error_description || '—'}

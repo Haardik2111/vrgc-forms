@@ -23,6 +23,7 @@ async function logTransactionToFirestore(tx: {
   razorpay_contact?: string;
   error_description?: string;
   paid_at?: string;
+  failed_at?: string;
 }) {
   try {
     if (tx.payment_id) {
@@ -53,6 +54,7 @@ async function logTransactionToFirestore(tx: {
           payment_title: tx.payment_title || 'Unknown Payment',
           amount: tx.amount || 0,
           currency: tx.currency || 'INR',
+          failed_at: tx.failed_at || (tx.status === 'Failed' ? new Date().toISOString() : ''),
           created_at: serverTimestamp(),
           updated_at: serverTimestamp(),
           source: 'vrgc-forms',
@@ -254,8 +256,10 @@ async function processRazorpaySync(targetPaymentId?: string) {
 
       // Transition to Failed ONLY if backend confirms all attempts failed or session is stale
       if (allAttemptsFailed || isStaleTimeout) {
+        const nowIso = new Date().toISOString();
         await updateDoc(pDoc.ref, {
           status: 'Failed',
+          failed_at: nowIso,
           error_description: failureReason,
           updated_at: serverTimestamp(),
         });
@@ -270,6 +274,7 @@ async function processRazorpaySync(targetPaymentId?: string) {
           amount: Number(pData.amount) || 0,
           currency: pData.currency || 'INR',
           status: 'Failed',
+          failed_at: nowIso,
           razorpay_order_id: docOrderId,
           error_description: failureReason,
         });
