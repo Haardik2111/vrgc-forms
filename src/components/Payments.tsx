@@ -1241,31 +1241,31 @@ const Payments: React.FC<PaymentsProps> = ({
               <>
                 <button
                   onClick={() => setAdminViewAll((prev) => !prev)}
-                  className={`px-3 py-2 rounded-lg border text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${!adminViewAll
+                  className={`px-2.5 py-2 rounded-lg border text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 whitespace-nowrap ${!adminViewAll
                       ? 'bg-purple-600 border-purple-400 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]'
                       : 'bg-purple-600/15 hover:bg-purple-600/25 text-purple-300 border border-purple-500/30'
                     }`}
                   title="Toggle between Campaign Management & My Personal Dues"
                 >
-                  <CreditCard className="w-3.5 h-3.5" />
-                  <span>{!adminViewAll ? '📊 All Campaigns' : '💳 My Personal Dues'}</span>
+                  <CreditCard className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">{!adminViewAll ? '📊 All Campaigns' : '💳 Personal Dues'}</span>
                 </button>
                 <button
                   onClick={() => setShowLogsPanel((v) => !v)}
-                  className={`px-3 py-2 rounded-lg border text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${showLogsPanel
+                  className={`px-2.5 py-2 rounded-lg border text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 whitespace-nowrap ${showLogsPanel
                       ? 'bg-blue-600/30 border-blue-500/50 text-blue-200'
                       : 'bg-blue-600/10 hover:bg-blue-600/20 text-blue-300 border border-blue-500/30'
                     }`}
                 >
-                  <Receipt className="w-3.5 h-3.5" />
-                  Tx Logs
+                  <Receipt className="w-3.5 h-3.5 shrink-0" />
+                  <span>Tx Logs</span>
                 </button>
                 <button
                   onClick={() => handleExportCSV(undefined, true)}
-                  className="px-3 py-2 rounded-lg bg-emerald-600/15 hover:bg-emerald-600/25 text-emerald-300 border border-emerald-500/30 text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                  className="px-2.5 py-2 rounded-lg bg-emerald-600/15 hover:bg-emerald-600/25 text-emerald-300 border border-emerald-500/30 text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 whitespace-nowrap"
                 >
-                  <FileSpreadsheet className="w-3.5 h-3.5" />
-                  Export CSV
+                  <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
+                  <span>Export CSV</span>
                 </button>
                 <button
                   onClick={async () => {
@@ -1277,10 +1277,10 @@ const Payments: React.FC<PaymentsProps> = ({
                       showToast('Razorpay Sync complete. All records are up to date.', 'info');
                     }
                   }}
-                  className="px-3 py-2 rounded-lg bg-purple-600/20 hover:bg-purple-600/35 text-purple-300 border border-purple-500/40 text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-[0_0_15px_rgba(168,85,247,0.2)]"
+                  className="px-2.5 py-2 rounded-lg bg-purple-600/20 hover:bg-purple-600/35 text-purple-300 border border-purple-500/40 text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-[0_0_15px_rgba(168,85,247,0.2)] whitespace-nowrap"
                   title="Sync and verify all payment statuses with Razorpay API"
                 >
-                  <RotateCcw className="w-3.5 h-3.5" />
+                  <RotateCcw className="w-3.5 h-3.5 shrink-0" />
                   <span>Sync Razorpay</span>
                 </button>
                 {/* Initiate Payment Controls — STRICTLY FOR vrgc@vitbhopal.ac.in */}
@@ -1288,24 +1288,24 @@ const Payments: React.FC<PaymentsProps> = ({
                   <>
                     <button
                       onClick={() => setShowMultiMemberModal(true)}
-                      className="px-3 py-2 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-[0_0_15px_rgba(99,102,241,0.2)]"
+                      className="px-2.5 py-2 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-[0_0_15px_rgba(99,102,241,0.2)] whitespace-nowrap"
                     >
-                      <Users className="w-3.5 h-3.5" />
-                      Specific Persons
+                      <Users className="w-3.5 h-3.5 shrink-0" />
+                      <span>Specific Persons</span>
                     </button>
                     <button
                       onClick={() => setShowAssignAllModal(true)}
-                      className="px-3 py-2 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                      className="px-2.5 py-2 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 whitespace-nowrap"
                     >
-                      <Megaphone className="w-3.5 h-3.5" />
-                      All Members
+                      <Megaphone className="w-3.5 h-3.5 shrink-0" />
+                      <span>All Members</span>
                     </button>
                     <button
                       onClick={() => setShowCreateModal(true)}
-                      className="col-span-2 sm:col-span-1 px-3 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-[0_0_15px_rgba(168,85,247,0.3)]"
+                      className="col-span-2 sm:col-span-1 px-2.5 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-white text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-[0_0_15px_rgba(168,85,247,0.3)] whitespace-nowrap"
                     >
-                      <PlusCircle className="w-3.5 h-3.5" />
-                      Assign Due
+                      <PlusCircle className="w-3.5 h-3.5 shrink-0" />
+                      <span>Assign Due</span>
                     </button>
                   </>
                 )}
@@ -1515,36 +1515,36 @@ const Payments: React.FC<PaymentsProps> = ({
 
       {/* Admin Action Required: Pending Personal Invoice Alert Banner */}
       {isAdminState && personalPendingDues.length > 0 && (
-        <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-purple-900/30 to-fuchsia-900/20 border border-amber-500/40 shadow-[0_0_25px_rgba(245,158,11,0.15)] flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in duration-300">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 flex-shrink-0">
-              <CreditCard className="w-5 h-5 animate-pulse" />
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-purple-900/30 to-fuchsia-900/20 border border-amber-500/40 shadow-[0_0_25px_rgba(245,158,11,0.15)] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 animate-in fade-in duration-300">
+          <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0 mt-0.5 sm:mt-0">
+              <CreditCard className="w-4 h-4 sm:w-5 sm:h-5 animate-pulse" />
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-amber-300 uppercase tracking-wider">Action Required</span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-200 border border-amber-500/30">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] sm:text-xs font-bold text-amber-300 uppercase tracking-wider">Action Required</span>
+                <span className="px-2 py-0.5 rounded text-[9px] sm:text-[10px] font-bold bg-amber-500/20 text-amber-200 border border-amber-500/30">
                   {personalPendingDues.length} Pending Invoice{personalPendingDues.length > 1 ? 's' : ''}
                 </span>
               </div>
-              <p className="text-sm font-extrabold text-white mt-0.5 truncate">
+              <p className="text-xs sm:text-sm font-extrabold text-white mt-0.5 truncate">
                 {personalPendingDues[0].title} — <span className="text-amber-300 font-mono">₹{personalPendingDues[0].amount} INR</span>
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end flex-shrink-0">
+          <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto justify-end shrink-0">
             <button
               onClick={() => setAdminViewAll((prev) => !prev)}
-              className="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all"
+              className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all text-center justify-center"
             >
-              {adminViewAll ? 'View My Dues' : 'View All Campaigns'}
+              {adminViewAll ? 'View My Dues' : 'View All'}
             </button>
             <button
               onClick={() => handlePayNow(personalPendingDues[0])}
-              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white text-xs font-extrabold shadow-[0_0_20px_rgba(245,158,11,0.4)] transition-all flex items-center gap-1.5"
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white text-xs font-extrabold shadow-[0_0_20px_rgba(245,158,11,0.4)] transition-all flex items-center justify-center gap-1.5 whitespace-nowrap"
             >
-              <CreditCard className="w-4 h-4" />
+              <CreditCard className="w-3.5 h-3.5" />
               <span>Pay Now (₹{personalPendingDues[0].amount})</span>
             </button>
           </div>
@@ -1591,12 +1591,12 @@ const Payments: React.FC<PaymentsProps> = ({
           </div>
         ) : (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-4">
+              <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2 shrink-0">
                 <Layers className="w-5 h-5 text-purple-400" />
                 <span>Active Payment Campaigns ({campaignGroups.length})</span>
               </h2>
-              <span className="text-xs text-slate-400">
+              <span className="text-[11px] sm:text-xs text-slate-400 block sm:inline">
                 Click any campaign to inspect assigned members and payment statuses.
               </span>
             </div>
@@ -2904,40 +2904,40 @@ const Payments: React.FC<PaymentsProps> = ({
       )}
       {/* Admin Individual Payment Audit Log Modal */}
       {auditModalPayment && (
-        <div className="fixed inset-0 z-[130] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-[#0e0518] border border-amber-500/40 rounded-3xl max-w-xl w-full p-6 md:p-8 space-y-5 shadow-[0_0_60px_rgba(245,158,11,0.25)] relative max-h-[90vh] overflow-y-auto custom-scrollbar">
+        <div className="fixed inset-0 z-[130] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+          <div className="bg-[#0e0518] border border-amber-500/40 rounded-2xl sm:rounded-3xl max-w-xl w-full p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-5 shadow-[0_0_60px_rgba(245,158,11,0.25)] relative max-h-[92vh] overflow-y-auto custom-scrollbar mx-2 sm:mx-auto">
             <button
               onClick={() => {
                 setAuditModalPayment(null);
                 setAuditAttempts([]);
               }}
-              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-full bg-white/5 hover:bg-white/10 transition-all"
+              className="absolute top-3.5 right-3.5 sm:top-4 sm:right-4 p-2 text-slate-400 hover:text-white rounded-full bg-white/5 hover:bg-white/10 transition-all"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
 
-            <div className="space-y-1">
+            <div className="space-y-1 pr-6">
               <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                <FileText className="w-3.5 h-3.5 text-amber-400" /> PAYMENT AUDIT & ATTEMPTS LOG
+                <FileText className="w-3.5 h-3.5 text-amber-400" /> PAYMENT AUDIT &amp; ATTEMPTS LOG
               </div>
-              <h3 className="text-xl font-bold text-white">{auditModalPayment.title}</h3>
-              <p className="text-xs text-slate-400">
+              <h3 className="text-lg sm:text-xl font-bold text-white leading-tight">{auditModalPayment.title}</h3>
+              <p className="text-[11px] sm:text-xs text-slate-400">
                 Detailed transaction audit trail and candidate attempt history for invoice <span className="text-amber-300 font-mono">#{auditModalPayment.id.slice(0, 8)}</span>.
               </p>
             </div>
 
             {/* Candidate Target Overview Card */}
-            <div className="bg-black/50 border border-white/10 rounded-2xl p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-sm font-bold text-white">
+            <div className="bg-black/50 border border-white/10 rounded-2xl p-3.5 sm:p-4 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0">
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-sm font-bold text-white truncate">
                     {auditModalPayment.candidate_name || membersMap.get(auditModalPayment.user_email?.toLowerCase() || '')?.name || 'Candidate Member'}
                   </h4>
-                  <p className="text-xs text-slate-400 font-mono">
+                  <p className="text-xs text-slate-400 font-mono truncate">
                     {auditModalPayment.user_email}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
                   {renderStatusBadge(auditModalPayment.status)}
                   <button
                     onClick={async () => {
@@ -2952,29 +2952,29 @@ const Payments: React.FC<PaymentsProps> = ({
                       }
                     }}
                     title="Check status directly with Razorpay API"
-                    className="p-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-xs font-bold transition-all flex items-center gap-1"
+                    className="px-2.5 py-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-[11px] sm:text-xs font-bold transition-all flex items-center gap-1 shrink-0"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
                     <span>Sync Razorpay</span>
                   </button>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/5 text-[11px]">
-                <div>
+              <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/5 text-[10px] sm:text-[11px]">
+                <div className="min-w-0">
                   <span className="text-slate-500 block text-[9px] uppercase font-bold">Regn No</span>
-                  <span className="text-purple-300 font-mono font-semibold">
+                  <span className="text-purple-300 font-mono font-semibold truncate block">
                     {auditModalPayment.registration_number || membersMap.get(auditModalPayment.user_email?.toLowerCase() || '')?.regNo || 'N/A'}
                   </span>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <span className="text-slate-500 block text-[9px] uppercase font-bold">Team</span>
-                  <span className="text-slate-300 font-medium">
+                  <span className="text-slate-300 font-medium truncate block">
                     {auditModalPayment.team || membersMap.get(auditModalPayment.user_email?.toLowerCase() || '')?.team || 'N/A'}
                   </span>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <span className="text-slate-500 block text-[9px] uppercase font-bold">Amount Due</span>
-                  <span className="text-amber-400 font-bold">₹{auditModalPayment.amount}</span>
+                  <span className="text-amber-400 font-bold truncate block">₹{auditModalPayment.amount}</span>
                 </div>
               </div>
             </div>
@@ -3006,7 +3006,7 @@ const Payments: React.FC<PaymentsProps> = ({
                       key={attempt.id || idx}
                       className="p-3 rounded-xl bg-black/40 border border-white/10 text-xs space-y-1.5"
                     >
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${attempt.status === 'Paid' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                             : attempt.status === 'Failed' || attempt.status === 'Cancelled' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
                               : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
@@ -3019,14 +3019,14 @@ const Payments: React.FC<PaymentsProps> = ({
                       </div>
 
                       {attempt.error_description && (
-                        <p className="text-slate-300 text-[11px] leading-relaxed">
+                        <p className="text-slate-300 text-[11px] leading-relaxed break-words">
                           <strong className="text-rose-300 font-bold">Reason / Gateway Output:</strong> {attempt.error_description}
                         </p>
                       )}
 
-                      <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono pt-1 border-t border-white/5">
-                        <span>Order: {attempt.razorpay_order_id || 'N/A'}</span>
-                        <span>Payment: {attempt.razorpay_payment_id || 'N/A'}</span>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between text-[10px] text-slate-500 font-mono pt-1 border-t border-white/5 gap-1">
+                        <span className="truncate">Order: {attempt.razorpay_order_id || 'N/A'}</span>
+                        <span className="truncate">Payment: {attempt.razorpay_payment_id || 'N/A'}</span>
                       </div>
                     </div>
                   ))}
