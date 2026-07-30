@@ -27,7 +27,8 @@ const LinkedinIcon: React.FC<{ className?: string }> = ({ className = "w-3.5 h-3
 interface TeamMember {
   name: string;
   role: string;
-  rank: number;
+  badgeRole?: string;
+  rank?: number;
   regNo?: string;
   email?: string;
   position?: string;
@@ -45,7 +46,7 @@ const TECH_TEAM_LIST: TeamMember[] = [
     rank: 1,
     regNo: "24BSA10096",
     githubUrl: "https://github.com/RiShAv-MaNdAl3122",
-    linkedinUrl: "https://linkedin.com/rishav-mandal-655318339",
+    linkedinUrl: "https://www.linkedin.com/in/rishav-mandal-655318339",
   },
   {
     name: "Abhinav Mishra",
@@ -60,7 +61,7 @@ const TECH_TEAM_LIST: TeamMember[] = [
     role: "Core Technical Member",
     rank: 3,
     githubUrl: "https://github.com/Jaiyansh-4n6",
-    linkedinUrl: "https://linkedin.com/Jaiyansh-4n6",
+    linkedinUrl: "https://linkedin.com/in/Jaiyansh-4n6",
   },
   {
     name: "Anmol Shrivastava",
@@ -75,6 +76,13 @@ const TECH_TEAM_LIST: TeamMember[] = [
     rank: 5,
     githubUrl: "https://github.com/Mohit-Borekar",
     linkedinUrl: "https://www.linkedin.com/in/mohit-borekar-522879396/",
+  },
+  {
+    name: "Parardha Dhar",
+    role: "Technical Guide",
+    badgeRole: "Student Coordinator",
+    githubUrl: "https://github.com/parardhadhar",
+    linkedinUrl: "https://www.linkedin.com/in/parardhadhar/",
   },
 ];
 
@@ -202,46 +210,64 @@ export default function AboutPage() {
           {/* Liquid Glass Roster Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {teamMembers.map((member) => {
-              const isLead = member.rank === 1;
-              const isCoLead = member.rank === 2;
+              const isLead = member.rank === 1 || member.role === 'Technical Lead';
+              const isCoLead = member.rank === 2 || member.role === 'Technical Co-Lead';
+              const isGuide = member.role?.toLowerCase().includes('guide');
 
               return (
                 <div
                   key={member.name}
-                  className={`group relative p-6 rounded-2xl transition-all duration-300 hover:-translate-y-1.5 flex flex-col justify-between gap-5 overflow-hidden ${
-                    isLead
-                      ? 'bg-gradient-to-br from-amber-500/15 via-white/[0.04] to-pink-950/20 backdrop-blur-2xl border border-amber-500/40 shadow-[inset_0_1px_1px_rgba(255,255,255,0.3),0_0_35px_rgba(245,158,11,0.15)] hover:shadow-[inset_0_1px_1px_rgba(255,255,255,0.4),0_0_45px_rgba(245,158,11,0.25)]'
-                      : isCoLead
+                  className={`group relative p-6 rounded-2xl transition-all duration-300 hover:-translate-y-1.5 flex flex-col justify-between gap-5 overflow-hidden ${isLead
+                    ? 'bg-gradient-to-br from-amber-500/15 via-white/[0.04] to-pink-950/20 backdrop-blur-2xl border border-amber-500/40 shadow-[inset_0_1px_1px_rgba(255,255,255,0.3),0_0_35px_rgba(245,158,11,0.15)] hover:shadow-[inset_0_1px_1px_rgba(255,255,255,0.4),0_0_45px_rgba(245,158,11,0.25)]'
+                    : isCoLead
                       ? 'bg-gradient-to-br from-purple-950/50 via-white/[0.04] to-pink-950/30 backdrop-blur-2xl border border-purple-500/40 shadow-[inset_0_1px_1px_rgba(255,255,255,0.25),0_0_25px_rgba(168,85,247,0.12)] hover:shadow-[inset_0_1px_1px_rgba(255,255,255,0.35),0_0_35px_rgba(168,85,247,0.22)]'
-                      : 'bg-gradient-to-b from-white/[0.07] via-white/[0.03] to-white/[0.01] backdrop-blur-2xl border border-white/[0.12] shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)] hover:border-purple-500/40 hover:shadow-[inset_0_1px_1px_rgba(255,255,255,0.3),0_0_25px_rgba(168,85,247,0.15)]'
-                  }`}
+                      : isGuide
+                        ? 'bg-gradient-to-br from-fuchsia-950/50 via-white/[0.04] to-purple-950/30 backdrop-blur-2xl border border-fuchsia-500/40 shadow-[inset_0_1px_1px_rgba(255,255,255,0.25),0_0_25px_rgba(217,70,239,0.12)] hover:shadow-[inset_0_1px_1px_rgba(255,255,255,0.35),0_0_35px_rgba(217,70,239,0.22)]'
+                        : 'bg-gradient-to-b from-white/[0.07] via-white/[0.03] to-white/[0.01] backdrop-blur-2xl border border-white/[0.12] shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)] hover:border-purple-500/40 hover:shadow-[inset_0_1px_1px_rgba(255,255,255,0.3),0_0_25px_rgba(168,85,247,0.15)]'
+                    }`}
                 >
                   {/* Liquid Specular Light Sheen Reflection */}
                   <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.08] to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out" />
 
                   <div className="space-y-4 relative z-10">
                     <div className="flex items-center justify-between">
-                      {/* Rank Badge */}
-                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs shadow-md ${
-                        isLead
-                          ? 'bg-gradient-to-br from-amber-400 to-amber-600 text-black shadow-amber-500/40'
-                          : isCoLead
+                      {/* Rank / Role Badge */}
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs shadow-md ${isLead
+                        ? 'bg-gradient-to-br from-amber-400 to-amber-600 text-black shadow-amber-500/40'
+                        : isCoLead
                           ? 'bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-purple-500/40'
-                          : 'bg-white/10 text-slate-300 border border-white/10'
-                      }`}>
-                        {isLead ? <Crown className="w-4 h-4 fill-black" /> : `#${member.rank}`}
+                          : isGuide
+                            ? 'bg-gradient-to-br from-fuchsia-500 to-pink-600 text-white shadow-fuchsia-500/40'
+                            : 'bg-white/10 text-slate-300 border border-white/10'
+                        }`}>
+                        {isLead ? (
+                          <Crown className="w-4 h-4 fill-black" />
+                        ) : isGuide ? (
+                          <ShieldCheck className="w-4 h-4 text-white" />
+                        ) : member.rank ? (
+                          `#${member.rank}`
+                        ) : (
+                          <Sparkles className="w-4 h-4 text-white" />
+                        )}
                       </div>
 
                       {/* Status Tag */}
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold tracking-wider uppercase border flex items-center gap-1.5 shadow-sm backdrop-blur-md ${
-                        isLead
-                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                          : isCoLead
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold tracking-wider uppercase border flex items-center gap-1.5 shadow-sm backdrop-blur-md ${isLead
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                        : isCoLead
                           ? 'bg-purple-500/20 text-purple-200 border-purple-500/40'
-                          : 'bg-slate-800/80 text-slate-300 border-slate-700'
-                      }`}>
-                        {isLead ? <Award className="w-3 h-3 text-amber-400" /> : <UserCheck className="w-3 h-3 text-purple-400" />}
-                        <span>{isLead ? 'Technical Lead' : isCoLead ? 'Technical Co-Lead' : 'Core Member'}</span>
+                          : isGuide
+                            ? 'bg-fuchsia-500/20 text-fuchsia-200 border-fuchsia-500/40'
+                            : 'bg-slate-800/80 text-slate-300 border-slate-700'
+                        }`}>
+                        {isLead ? (
+                          <Award className="w-3 h-3 text-amber-400" />
+                        ) : isGuide ? (
+                          <Sparkles className="w-3 h-3 text-fuchsia-400" />
+                        ) : (
+                          <UserCheck className="w-3 h-3 text-purple-400" />
+                        )}
+                        <span>{member.badgeRole || member.role}</span>
                       </span>
                     </div>
 
@@ -253,9 +279,8 @@ export default function AboutPage() {
                           alt={member.name}
                           className="w-13 h-13 rounded-2xl bg-purple-950/60 border border-white/20 object-cover shadow-lg"
                         />
-                        <div className={`absolute -inset-1 rounded-2xl -z-10 blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-300 ${
-                          isLead ? 'bg-amber-500/30' : 'bg-purple-500/30'
-                        }`} />
+                        <div className={`absolute -inset-1 rounded-2xl -z-10 blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-300 ${isLead ? 'bg-amber-500/30' : 'bg-purple-500/30'
+                          }`} />
                       </div>
 
                       <div className="min-w-0 flex-1">
