@@ -1204,8 +1204,8 @@ const Payments: React.FC<PaymentsProps> = ({
       )}
 
       {/* Top Banner & Header — Minimal Admin Panel */}
-      <div className="relative overflow-hidden rounded-2xl bg-[#0e0518] border border-purple-500/20 p-5 shadow-lg">
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="relative overflow-hidden rounded-2xl bg-[#0e0518] border border-purple-500/20 p-4 sm:p-5 shadow-lg">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           {/* Left: title + status */}
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center flex-shrink-0">
@@ -1213,14 +1213,14 @@ const Payments: React.FC<PaymentsProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-base font-extrabold text-white tracking-tight">Payments & Dues</h1>
+                <h1 className="text-base font-extrabold text-white tracking-tight">Payments &amp; Dues</h1>
                 {isAdminState && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
                     <ShieldAlert className="w-3 h-3" /> ADMIN
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-slate-500 mt-0.5">
+              <p className="text-[11px] text-slate-500 mt-0.5 truncate">
                 {userEmail || 'Guest'} •{' '}
                 <span className="text-emerald-400 font-semibold">Razorpay Secured</span>
               </p>
@@ -1228,11 +1228,11 @@ const Payments: React.FC<PaymentsProps> = ({
           </div>
 
           {/* Right: action buttons */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full md:w-auto">
             {onRedirect && (
               <button
                 onClick={onRedirect}
-                className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs font-bold text-slate-400 transition-all"
+                className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs font-bold text-slate-400 transition-all flex items-center justify-center gap-1.5"
               >
                 ← Dashboard
               </button>
@@ -1241,7 +1241,7 @@ const Payments: React.FC<PaymentsProps> = ({
               <>
                 <button
                   onClick={() => setAdminViewAll((prev) => !prev)}
-                  className={`px-3 py-2 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 ${!adminViewAll
+                  className={`px-3 py-2 rounded-lg border text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${!adminViewAll
                       ? 'bg-purple-600 border-purple-400 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]'
                       : 'bg-purple-600/15 hover:bg-purple-600/25 text-purple-300 border border-purple-500/30'
                     }`}
@@ -1252,7 +1252,7 @@ const Payments: React.FC<PaymentsProps> = ({
                 </button>
                 <button
                   onClick={() => setShowLogsPanel((v) => !v)}
-                  className={`px-3 py-2 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 ${showLogsPanel
+                  className={`px-3 py-2 rounded-lg border text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${showLogsPanel
                       ? 'bg-blue-600/30 border-blue-500/50 text-blue-200'
                       : 'bg-blue-600/10 hover:bg-blue-600/20 text-blue-300 border border-blue-500/30'
                     }`}
@@ -1262,7 +1262,7 @@ const Payments: React.FC<PaymentsProps> = ({
                 </button>
                 <button
                   onClick={() => handleExportCSV(undefined, true)}
-                  className="px-3 py-2 rounded-lg bg-emerald-600/15 hover:bg-emerald-600/25 text-emerald-300 border border-emerald-500/30 text-xs font-bold transition-all flex items-center gap-1.5"
+                  className="px-3 py-2 rounded-lg bg-emerald-600/15 hover:bg-emerald-600/25 text-emerald-300 border border-emerald-500/30 text-xs font-bold transition-all flex items-center justify-center gap-1.5"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5" />
                   Export CSV
@@ -1277,7 +1277,7 @@ const Payments: React.FC<PaymentsProps> = ({
                       showToast('Razorpay Sync complete. All records are up to date.', 'info');
                     }
                   }}
-                  className="px-3 py-2 rounded-lg bg-purple-600/20 hover:bg-purple-600/35 text-purple-300 border border-purple-500/40 text-xs font-bold transition-all flex items-center gap-1.5 shadow-[0_0_15px_rgba(168,85,247,0.2)]"
+                  className="px-3 py-2 rounded-lg bg-purple-600/20 hover:bg-purple-600/35 text-purple-300 border border-purple-500/40 text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-[0_0_15px_rgba(168,85,247,0.2)]"
                   title="Sync and verify all payment statuses with Razorpay API"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
@@ -1288,21 +1288,21 @@ const Payments: React.FC<PaymentsProps> = ({
                   <>
                     <button
                       onClick={() => setShowMultiMemberModal(true)}
-                      className="px-3 py-2 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 text-xs font-bold transition-all flex items-center gap-1.5 shadow-[0_0_15px_rgba(99,102,241,0.2)]"
+                      className="px-3 py-2 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-[0_0_15px_rgba(99,102,241,0.2)]"
                     >
                       <Users className="w-3.5 h-3.5" />
                       Specific Persons
                     </button>
                     <button
                       onClick={() => setShowAssignAllModal(true)}
-                      className="px-3 py-2 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs font-bold transition-all flex items-center gap-1.5"
+                      className="px-3 py-2 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs font-bold transition-all flex items-center justify-center gap-1.5"
                     >
                       <Megaphone className="w-3.5 h-3.5" />
                       All Members
                     </button>
                     <button
                       onClick={() => setShowCreateModal(true)}
-                      className="px-3 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-[0_0_15px_rgba(168,85,247,0.3)]"
+                      className="col-span-2 sm:col-span-1 px-3 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-[0_0_15px_rgba(168,85,247,0.3)]"
                     >
                       <PlusCircle className="w-3.5 h-3.5" />
                       Assign Due
@@ -1317,8 +1317,8 @@ const Payments: React.FC<PaymentsProps> = ({
 
       {/* Summary Statistics — STRICTLY FOR vrgc@vitbhopal.ac.in */}
       {canInitiatePayments && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="p-5 rounded-2xl bg-[#0e0518]/90 border border-purple-500/20 backdrop-blur-md shadow-lg flex flex-col justify-between space-y-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="p-4 sm:p-5 rounded-2xl bg-[#0e0518]/90 border border-purple-500/20 backdrop-blur-md shadow-lg flex flex-col justify-between space-y-2">
             <div className="flex items-center justify-between text-slate-400 text-xs font-semibold">
               <span>PENDING DUES</span>
               <Clock className="w-4 h-4 text-amber-400" />
@@ -1331,12 +1331,12 @@ const Payments: React.FC<PaymentsProps> = ({
             </div>
           </div>
 
-          <div className="p-5 rounded-2xl bg-[#0e0518]/90 border border-emerald-500/20 backdrop-blur-md shadow-lg flex flex-col justify-between space-y-2">
+          <div className="p-4 sm:p-5 rounded-2xl bg-[#0e0518]/90 border border-emerald-500/20 backdrop-blur-md shadow-lg flex flex-col justify-between space-y-2">
             <div className="flex items-center justify-between text-slate-400 text-xs font-semibold">
               <span>TOTAL COLLECTED</span>
               <CheckCircle2 className="w-4 h-4 text-emerald-400" />
             </div>
-            <div className="text-2xl md:text-3xl font-black text-emerald-300">
+            <div className="text-xl sm:text-2xl md:text-3xl font-black text-emerald-300">
               ₹{stats.totalPaid.toLocaleString('en-IN')}
             </div>
             <div className="text-[11px] text-emerald-400/80 font-medium">
@@ -1344,12 +1344,12 @@ const Payments: React.FC<PaymentsProps> = ({
             </div>
           </div>
 
-          <div className="p-5 rounded-2xl bg-[#0e0518]/90 border border-purple-500/20 backdrop-blur-md shadow-lg flex flex-col justify-between space-y-2">
+          <div className="p-4 sm:p-5 rounded-2xl bg-[#0e0518]/90 border border-purple-500/20 backdrop-blur-md shadow-lg flex flex-col justify-between space-y-2">
             <div className="flex items-center justify-between text-slate-400 text-xs font-semibold">
               <span>REGISTERED CREW</span>
               <Users className="w-4 h-4 text-purple-400" />
             </div>
-            <div className="text-2xl md:text-3xl font-black text-purple-300">
+            <div className="text-xl sm:text-2xl md:text-3xl font-black text-purple-300">
               {membersList.length} Members
             </div>
             <div className="text-[11px] text-slate-400 font-medium">
@@ -1463,38 +1463,52 @@ const Payments: React.FC<PaymentsProps> = ({
         </div>
       )}
 
-      {/* Toolbar: Category Filters & Search */}
-      <div className="p-4 rounded-2xl bg-[#0e0518]/80 border border-purple-500/20 backdrop-blur-md flex flex-col lg:flex-row gap-4 items-center justify-between">
-        <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
-          {/* Search Input */}
-          <div className="relative w-full sm:w-80">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search payment title, category or member..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-surface-container-lowest border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 transition-all"
-            />
-          </div>
+      {/* Toolbar: Category & Status Dropdown Filters & Search */}
+      <div className="p-4 rounded-2xl bg-[#0e0518]/80 border border-purple-500/20 backdrop-blur-md flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch sm:items-center justify-between">
+        {/* Search Input */}
+        <div className="relative w-full sm:w-80">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search payment title, category or member..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-surface-container-lowest border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 transition-all"
+          />
         </div>
 
-        <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-between lg:justify-end">
-          {/* Category Pills */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
-            <span className="text-xs text-slate-400 font-semibold pr-1">Category:</span>
-            {['All', 'Club Fee', 'Event Registration', 'Merchandise', 'Fine'].map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setSelectedCategory(cat)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${selectedCategory === cat
-                    ? 'bg-purple-600 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]'
-                    : 'bg-white/5 hover:bg-white/10 text-slate-400 border border-white/5'
-                  }`}
-              >
-                {cat}
-              </button>
-            ))}
+        {/* Dropdown Filters Container */}
+        <div className="grid grid-cols-2 sm:flex items-center gap-2.5 w-full sm:w-auto">
+          {/* Category Dropdown Filter */}
+          <div className="relative flex-1 sm:w-44">
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="w-full appearance-none pl-3 pr-8 py-2.5 rounded-xl bg-black/50 border border-purple-500/30 text-xs font-bold text-white focus:outline-none focus:border-purple-400 transition-all cursor-pointer"
+            >
+              <option value="All" className="bg-[#0e0518] text-white">Category: All</option>
+              <option value="Club Fee" className="bg-[#0e0518] text-white">Club Fee</option>
+              <option value="Event Registration" className="bg-[#0e0518] text-white">Event Registration</option>
+              <option value="Merchandise" className="bg-[#0e0518] text-white">Merchandise</option>
+              <option value="Fine" className="bg-[#0e0518] text-white">Fine</option>
+            </select>
+            <Filter className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-purple-400 pointer-events-none" />
+          </div>
+
+          {/* Status Dropdown Filter */}
+          <div className="relative flex-1 sm:w-40">
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="w-full appearance-none pl-3 pr-8 py-2.5 rounded-xl bg-black/50 border border-purple-500/30 text-xs font-bold text-white focus:outline-none focus:border-purple-400 transition-all cursor-pointer"
+            >
+              <option value="All" className="bg-[#0e0518] text-white">Status: All</option>
+              <option value="Pending" className="bg-[#0e0518] text-amber-400">Pending</option>
+              <option value="Processing" className="bg-[#0e0518] text-blue-400">Processing</option>
+              <option value="Paid" className="bg-[#0e0518] text-emerald-400">Paid</option>
+              <option value="Failed" className="bg-[#0e0518] text-rose-400">Failed</option>
+            </select>
+            <Filter className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-purple-400 pointer-events-none" />
           </div>
         </div>
       </div>
@@ -1521,10 +1535,10 @@ const Payments: React.FC<PaymentsProps> = ({
 
           <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end flex-shrink-0">
             <button
-              onClick={() => setAdminViewAll(false)}
+              onClick={() => setAdminViewAll((prev) => !prev)}
               className="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all"
             >
-              View My Dues
+              {adminViewAll ? 'View My Dues' : 'View All Campaigns'}
             </button>
             <button
               onClick={() => handlePayNow(personalPendingDues[0])}
@@ -1851,29 +1865,29 @@ const Payments: React.FC<PaymentsProps> = ({
 
       {/* ADMIN CAMPAIGN MEMBER ROSTER MODAL */}
       {activeRosterCampaign && (
-        <div className="fixed inset-0 z-[130] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-[#0e0518] border border-purple-500/40 rounded-3xl max-w-4xl w-full p-6 md:p-8 space-y-6 shadow-[0_0_60px_rgba(168,85,247,0.3)] relative max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-[130] bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+          <div className="bg-[#0e0518] border border-purple-500/40 rounded-2xl sm:rounded-3xl max-w-4xl w-full p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-6 shadow-[0_0_60px_rgba(168,85,247,0.3)] relative max-h-[92vh] flex flex-col mx-1 sm:mx-auto">
             {/* Modal Header */}
             <button
               onClick={() => setActiveRosterCampaign(null)}
-              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-full bg-white/5 hover:bg-white/10 transition-all"
+              className="absolute top-3.5 right-3.5 sm:top-4 sm:right-4 p-2 text-slate-400 hover:text-white rounded-full bg-white/5 hover:bg-white/10 transition-all"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
 
-            <div className="space-y-1">
+            <div className="space-y-1 pr-6">
               <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                <Layers className="w-3.5 h-3.5 text-purple-400" /> CAMPAIGN ROSTER & COMPLIANCE
+                <Layers className="w-3.5 h-3.5 text-purple-400" /> CAMPAIGN ROSTER &amp; COMPLIANCE
               </div>
-              <h3 className="text-2xl font-bold text-white">{activeRosterCampaign.title}</h3>
-              <p className="text-xs text-slate-400">
-                Category: <strong>{activeRosterCampaign.category}</strong> | Amount per member:{' '}
+              <h3 className="text-xl sm:text-2xl font-bold text-white leading-tight">{activeRosterCampaign.title}</h3>
+              <p className="text-[11px] sm:text-xs text-slate-400">
+                Category: <strong>{activeRosterCampaign.category}</strong> | Amount:{' '}
                 <strong className="text-white">₹{activeRosterCampaign.amount} INR</strong>
               </p>
             </div>
 
             {/* Roster Toolbar */}
-            <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-surface-container-lowest/60 p-3 rounded-2xl border border-white/5">
+            <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-3 items-stretch sm:items-center justify-between bg-surface-container-lowest/60 p-3 rounded-2xl border border-white/5">
               <div className="relative w-full sm:w-72">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
@@ -1885,34 +1899,27 @@ const Payments: React.FC<PaymentsProps> = ({
                 />
               </div>
 
-              <div className="flex items-center gap-3 w-full sm:w-auto justify-between">
-                <div className="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/10 text-xs overflow-x-auto custom-scrollbar">
-                  {['All', 'Paid', 'Pending', 'Processing', 'Failed', 'Expired'].map((st) => (
-                    <button
-                      key={st}
-                      onClick={() => setRosterStatusFilter(st)}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                        rosterStatusFilter === st
-                          ? st === 'Failed' || st === 'Expired'
-                            ? 'bg-rose-600 text-white shadow-[0_0_15px_rgba(225,29,72,0.4)]'
-                            : st === 'Paid'
-                            ? 'bg-emerald-600 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]'
-                            : st === 'Processing'
-                            ? 'bg-blue-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.4)]'
-                            : st === 'Pending'
-                            ? 'bg-amber-600 text-white shadow-[0_0_15px_rgba(217,119,6,0.4)]'
-                            : 'bg-purple-600 text-white'
-                          : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      {st}
-                    </button>
-                  ))}
+              <div className="grid grid-cols-1 sm:flex items-center gap-2.5 w-full sm:w-auto">
+                {/* Roster Status Dropdown Filter */}
+                <div className="relative w-full sm:w-44">
+                  <select
+                    value={rosterStatusFilter}
+                    onChange={(e) => setRosterStatusFilter(e.target.value)}
+                    className="w-full appearance-none pl-3 pr-8 py-2 rounded-xl bg-black/60 border border-purple-500/30 text-xs font-bold text-white focus:outline-none focus:border-purple-400 cursor-pointer"
+                  >
+                    <option value="All" className="bg-[#0e0518] text-white">Status: All</option>
+                    <option value="Paid" className="bg-[#0e0518] text-emerald-400">Status: Paid</option>
+                    <option value="Pending" className="bg-[#0e0518] text-amber-400">Status: Pending</option>
+                    <option value="Processing" className="bg-[#0e0518] text-blue-400">Status: Processing</option>
+                    <option value="Failed" className="bg-[#0e0518] text-rose-400">Status: Failed</option>
+                    <option value="Expired" className="bg-[#0e0518] text-slate-400">Status: Expired</option>
+                  </select>
+                  <Filter className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-purple-400 pointer-events-none" />
                 </div>
 
                 <button
                   onClick={() => handleExportCSV(activeRosterCampaign.title, true)}
-                  className="px-3 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-all flex items-center gap-1.5 shrink-0"
+                  className="px-3 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-all flex items-center justify-center gap-1.5 shrink-0"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Download Paid CSV</span>
@@ -1920,100 +1927,178 @@ const Payments: React.FC<PaymentsProps> = ({
               </div>
             </div>
 
-            {/* Roster Table */}
-            <div className="overflow-y-auto flex-1 custom-scrollbar border border-white/10 rounded-2xl">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-[#180a2b] text-slate-400 font-semibold sticky top-0 border-b border-white/10">
-                  <tr>
-                    <th className="p-3.5">Member Name</th>
-                    <th className="p-3.5">Registration No</th>
-                    <th className="p-3.5">Email</th>
-                    <th className="p-3.5">Status</th>
-                    <th className="p-3.5 text-right">Payment Ref / Date</th>
-                    <th className="p-3.5 text-center">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5 font-mono text-slate-300">
-                  {activeRosterCampaign.items
-                    .filter((item) => {
-                      const email = item.user_email ? item.user_email.toLowerCase() : '';
-                      const member = membersMap.get(email);
-                      const name = member ? member.name : '';
-                      const regNo = member ? member.regNo : '';
+            {/* Roster List Section */}
+            <div className="overflow-y-auto flex-1 custom-scrollbar">
+              {/* Mobile View: Cards */}
+              <div className="block md:hidden space-y-2.5 pr-1">
+                {activeRosterCampaign.items
+                  .filter((item) => {
+                    const email = item.user_email ? item.user_email.toLowerCase() : '';
+                    const member = membersMap.get(email);
+                    const name = member ? member.name : '';
+                    const regNo = member ? member.regNo : '';
 
-                      const matchesSearch =
-                        !rosterSearch.trim() ||
-                        name.toLowerCase().includes(rosterSearch.toLowerCase()) ||
-                        regNo.toLowerCase().includes(rosterSearch.toLowerCase()) ||
-                        email.includes(rosterSearch.toLowerCase());
+                    const matchesSearch =
+                      !rosterSearch.trim() ||
+                      name.toLowerCase().includes(rosterSearch.toLowerCase()) ||
+                      regNo.toLowerCase().includes(rosterSearch.toLowerCase()) ||
+                      email.includes(rosterSearch.toLowerCase());
 
-                      const isExp = isInvoiceExpired(item);
-                      const matchesStatus =
-                        rosterStatusFilter === 'All' ||
-                        (rosterStatusFilter === 'Paid' && item.status === 'Paid') ||
-                        (rosterStatusFilter === 'Expired' && isExp) ||
-                        (rosterStatusFilter === 'Pending' && item.status === 'Pending' && !isExp) ||
-                        (rosterStatusFilter === 'Processing' && item.status === 'Processing' && !isExp) ||
-                        (rosterStatusFilter === 'Failed' && item.status === 'Failed' && !isExp);
+                    const isExp = isInvoiceExpired(item);
+                    const matchesStatus =
+                      rosterStatusFilter === 'All' ||
+                      (rosterStatusFilter === 'Paid' && item.status === 'Paid') ||
+                      (rosterStatusFilter === 'Expired' && isExp) ||
+                      (rosterStatusFilter === 'Pending' && item.status === 'Pending' && !isExp) ||
+                      (rosterStatusFilter === 'Processing' && item.status === 'Processing' && !isExp) ||
+                      (rosterStatusFilter === 'Failed' && item.status === 'Failed' && !isExp);
 
-                      return matchesSearch && matchesStatus;
-                    })
-                    .map((item) => {
-                      const email = item.user_email ? item.user_email.toLowerCase() : '';
-                      const member = membersMap.get(email);
-                      const name = member ? member.name : 'Unknown Member';
-                      const regNo = member ? member.regNo : 'N/A';
+                    return matchesSearch && matchesStatus;
+                  })
+                  .map((item) => {
+                    const email = item.user_email ? item.user_email.toLowerCase() : '';
+                    const member = membersMap.get(email);
+                    const name = member ? member.name : 'Unknown Member';
+                    const regNo = member ? member.regNo : 'N/A';
 
-                      return (
-                        <tr key={item.id} className="hover:bg-white/5 transition-colors">
-                          <td className="p-3.5 font-sans font-bold text-white">{name}</td>
-                          <td className="p-3.5 text-purple-300 font-semibold">{regNo}</td>
-                          <td className="p-3.5 text-slate-400">{email}</td>
-                          <td className="p-3.5 font-sans">
+                    return (
+                      <div key={item.id} className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <h4 className="font-bold text-xs text-white truncate">{name}</h4>
+                            <p className="text-[10px] text-purple-300 font-mono mt-0.5">{regNo}</p>
+                            <p className="text-[10px] text-slate-400 font-mono truncate">{email}</p>
+                          </div>
+                          <div className="shrink-0">
                             {renderStatusBadge(isInvoiceExpired(item) ? 'Expired' : paymentStatusToString(item.status))}
-                          </td>
-                          <td className="p-3.5 text-right">
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between pt-2 border-t border-white/5 text-[10px]">
+                          <div className="font-mono">
                             {item.status === 'Paid' && item.paid_at ? (
-                              <div className="text-[11px] text-emerald-400 font-mono">
-                                <div>{item.razorpay_payment_id || 'Paid'}</div>
-                                <div className="text-[9px] text-slate-400">
-                                  {new Date(item.paid_at).toLocaleDateString('en-IN')}
-                                </div>
+                              <div className="text-[10px] text-emerald-400">
+                                <span className="font-bold">{item.razorpay_payment_id || 'Paid'}</span>
+                                <span className="text-[9px] text-slate-500 ml-1.5">{new Date(item.paid_at).toLocaleDateString('en-IN')}</span>
                               </div>
                             ) : (
-                              <span className="text-amber-400 text-[11px]">Unpaid</span>
+                              <span className="text-amber-400 font-bold">Unpaid</span>
                             )}
-                          </td>
-                          <td className="p-3.5 text-center">
-                            <div className="flex items-center justify-center gap-1">
-                              <button
-                                onClick={() => handleOpenAuditModal(item)}
-                                title="View Audit & Attempt Logs"
-                                className="p-1.5 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 rounded-lg transition-all flex items-center gap-1 text-[10px] font-bold"
-                              >
-                                <FileText className="w-3.5 h-3.5" />
-                                <span>Audit Logs</span>
-                              </button>
-                              <button
-                                onClick={() => handleDeletePayment(item.id)}
-                                title="Delete record"
-                                className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                </tbody>
-              </table>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleOpenAuditModal(item)}
+                              className="px-2 py-1 text-amber-400 hover:bg-amber-500/10 rounded-lg flex items-center gap-1 font-bold text-[10px]"
+                            >
+                              <FileText className="w-3 h-3" /> Audit Logs
+                            </button>
+                            <button
+                              onClick={() => handleDeletePayment(item.id)}
+                              className="p-1 text-slate-500 hover:text-rose-400 rounded-lg"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+
+              {/* Desktop View: Table */}
+              <div className="hidden md:block border border-white/10 rounded-2xl overflow-hidden">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#180a2b] text-slate-400 font-semibold sticky top-0 border-b border-white/10">
+                    <tr>
+                      <th className="p-3.5">Member Name</th>
+                      <th className="p-3.5">Registration No</th>
+                      <th className="p-3.5">Email</th>
+                      <th className="p-3.5">Status</th>
+                      <th className="p-3.5 text-right">Payment Ref / Date</th>
+                      <th className="p-3.5 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 font-mono text-slate-300">
+                    {activeRosterCampaign.items
+                      .filter((item) => {
+                        const email = item.user_email ? item.user_email.toLowerCase() : '';
+                        const member = membersMap.get(email);
+                        const name = member ? member.name : '';
+                        const regNo = member ? member.regNo : '';
+
+                        const matchesSearch =
+                          !rosterSearch.trim() ||
+                          name.toLowerCase().includes(rosterSearch.toLowerCase()) ||
+                          regNo.toLowerCase().includes(rosterSearch.toLowerCase()) ||
+                          email.includes(rosterSearch.toLowerCase());
+
+                        const isExp = isInvoiceExpired(item);
+                        const matchesStatus =
+                          rosterStatusFilter === 'All' ||
+                          (rosterStatusFilter === 'Paid' && item.status === 'Paid') ||
+                          (rosterStatusFilter === 'Expired' && isExp) ||
+                          (rosterStatusFilter === 'Pending' && item.status === 'Pending' && !isExp) ||
+                          (rosterStatusFilter === 'Processing' && item.status === 'Processing' && !isExp) ||
+                          (rosterStatusFilter === 'Failed' && item.status === 'Failed' && !isExp);
+
+                        return matchesSearch && matchesStatus;
+                      })
+                      .map((item) => {
+                        const email = item.user_email ? item.user_email.toLowerCase() : '';
+                        const member = membersMap.get(email);
+                        const name = member ? member.name : 'Unknown Member';
+                        const regNo = member ? member.regNo : 'N/A';
+
+                        return (
+                          <tr key={item.id} className="hover:bg-white/5 transition-colors">
+                            <td className="p-3.5 font-sans font-bold text-white">{name}</td>
+                            <td className="p-3.5 text-purple-300 font-semibold">{regNo}</td>
+                            <td className="p-3.5 text-slate-400">{email}</td>
+                            <td className="p-3.5 font-sans">
+                              {renderStatusBadge(isInvoiceExpired(item) ? 'Expired' : paymentStatusToString(item.status))}
+                            </td>
+                            <td className="p-3.5 text-right">
+                              {item.status === 'Paid' && item.paid_at ? (
+                                <div className="text-[11px] text-emerald-400 font-mono">
+                                  <div>{item.razorpay_payment_id || 'Paid'}</div>
+                                  <div className="text-[9px] text-slate-400">
+                                    {new Date(item.paid_at).toLocaleDateString('en-IN')}
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-amber-400 text-[11px]">Unpaid</span>
+                              )}
+                            </td>
+                            <td className="p-3.5 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={() => handleOpenAuditModal(item)}
+                                  title="View Audit & Attempt Logs"
+                                  className="p-1.5 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 rounded-lg transition-all flex items-center gap-1 text-[10px] font-bold"
+                                >
+                                  <FileText className="w-3.5 h-3.5" />
+                                  <span>Audit Logs</span>
+                                </button>
+                                <button
+                                  onClick={() => handleDeletePayment(item.id)}
+                                  title="Delete record"
+                                  className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             <div className="pt-2 flex justify-end">
               <button
                 onClick={() => setActiveRosterCampaign(null)}
-                className="px-6 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-[0_0_20px_rgba(168,85,247,0.4)] transition-all"
+                className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-[0_0_20px_rgba(168,85,247,0.4)] transition-all"
               >
                 Close Roster
               </button>
