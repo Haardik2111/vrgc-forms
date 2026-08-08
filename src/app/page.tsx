@@ -143,7 +143,7 @@ function AppContent() {
   // ── Main app shell (Dashboard is public, sub-pages require sign-in) ───────
   return (
     <div className="min-h-screen bg-[#05010a] text-[#e2e8f0] flex flex-col custom-scrollbar">
-      <Navbar pageTitle={getPageTitle()} userEmail={userEmail} isAdmin={isAdmin} onLogout={handleLogout} onLogin={handleLogin} />
+      <Navbar pageTitle={getPageTitle()} userEmail={userEmail} user={user} memberData={memberData} isAdmin={isAdmin} onLogout={handleLogout} onLogin={handleLogin} />
 
       <div className="flex flex-1">
         <Sidebar activePage={activePage} onPageChange={handlePageChange} isAdmin={isAdmin} />

@@ -245,10 +245,11 @@ const IDCard: React.FC<IDCardProps> = ({
   ) => {
     try {
       if (!db || !currentUser) return;
+      const adminDisplayName = currentUser.displayName || memberData?.name || (currentUser.email ? currentUser.email.split('@')[0] : 'Admin');
       const logEntry: AdminActivityLog = {
         action,
-        performedBy: 'VRGC Admin',
-        adminEmail: 'VRGC Admin',
+        performedBy: adminDisplayName,
+        adminEmail: currentUser.email || adminDisplayName,
         targetEmail: targetEmail || 'N/A',
         targetName: targetName || 'N/A',
         targetRegNo: targetRegNo || 'N/A',
@@ -2116,7 +2117,7 @@ const IDCard: React.FC<IDCardProps> = ({
                           <tr className="border-b border-white/10 bg-white/5 text-[10px] font-label-caps text-outline tracking-wider uppercase">
                             <th className="py-3.5 px-4">Timestamp</th>
                             <th className="py-3.5 px-4">Action</th>
-                            <th className="py-3.5 px-4">Admin Email</th>
+                            <th className="py-3.5 px-4">Admin Name</th>
                             <th className="py-3.5 px-4">Target Candidate</th>
                             <th className="py-3.5 px-4">Activity Details</th>
                             {canDeleteLogs && <th className="py-3.5 px-4 text-right">Actions</th>}
@@ -2132,7 +2133,10 @@ const IDCard: React.FC<IDCardProps> = ({
                                 hour: '2-digit', minute: '2-digit', second: '2-digit'
                               });
                             const rawAdmin = log.performedBy || log.adminEmail || 'Admin';
-                            const adminMail = rawAdmin.includes('@') ? 'VRGC Admin' : rawAdmin;
+                            const foundCandidate = candidates.find(c => (c.email || '').toLowerCase() === rawAdmin.toLowerCase());
+                            const adminMail = rawAdmin.includes('@')
+                              ? (foundCandidate?.name || rawAdmin.split('@')[0])
+                              : rawAdmin;
 
                             let badgeStyle = 'bg-purple-500/20 text-purple-300 border-purple-500/30';
                             let badgeLabel: string = log.action;
@@ -2218,7 +2222,11 @@ const IDCard: React.FC<IDCardProps> = ({
                             month: 'short', day: 'numeric', year: 'numeric',
                             hour: '2-digit', minute: '2-digit', second: '2-digit'
                           });
-                        const adminMail = log.performedBy || log.adminEmail || 'Admin';
+                        const rawAdmin = log.performedBy || log.adminEmail || 'Admin';
+                        const foundCandidate = candidates.find(c => (c.email || '').toLowerCase() === rawAdmin.toLowerCase());
+                        const adminMail = rawAdmin.includes('@')
+                          ? (foundCandidate?.name || rawAdmin.split('@')[0])
+                          : rawAdmin;
                         const logKey = log.id || log.timestamp;
 
                         let badgeStyle = 'bg-purple-500/20 text-purple-300 border-purple-500/30';
@@ -2282,17 +2290,33 @@ const IDCard: React.FC<IDCardProps> = ({
                                 </div>
                               </div>
 
-                              {/* 3-Dots Button (Directly opens log details modal) */}
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedLogForDetails(log);
-                                }}
-                                className="p-1.5 rounded-lg bg-black/60 border border-white/10 text-white/80 hover:text-white hover:border-purple-500/50 transition-all active:scale-95 shrink-0"
-                                title="View Log Details"
-                              >
-                                <span className="material-symbols-outlined text-base">more_vert</span>
-                              </button>
+                              {/* Actions Container */}
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {canDeleteLogs && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (log.id && confirm('Are you sure you want to delete this activity log entry?')) {
+                                        handleDeleteLog(log.id);
+                                      }
+                                    }}
+                                    className="p-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-all active:scale-95 shrink-0"
+                                    title="Delete Log Entry"
+                                  >
+                                    <span className="material-symbols-outlined text-sm">delete</span>
+                                  </button>
+                                )}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedLogForDetails(log);
+                                  }}
+                                  className="p-1.5 rounded-lg bg-black/60 border border-white/10 text-white/80 hover:text-white hover:border-purple-500/50 transition-all active:scale-95 shrink-0"
+                                  title="View Log Details"
+                                >
+                                  <span className="material-symbols-outlined text-base">more_vert</span>
+                                </button>
+                              </div>
                             </div>
                           </div>
                         );
@@ -2826,11 +2850,14 @@ const IDCard: React.FC<IDCardProps> = ({
               </div>
 
               <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-white/5 border border-white/5">
-                <span className="text-[10px] font-label-caps text-outline uppercase font-bold">Admin Email:</span>
+                <span className="text-[10px] font-label-caps text-outline uppercase font-bold">Admin Name:</span>
                 <span className="font-bold text-white font-code-sm text-[11px] truncate">
                   {(() => {
                     const raw = selectedLogForDetails.performedBy || selectedLogForDetails.adminEmail || 'Admin';
-                    return raw.includes('@') ? 'VRGC Admin' : raw;
+                    const found = candidates.find(c => (c.email || '').toLowerCase() === raw.toLowerCase());
+                    return raw.includes('@')
+                      ? (found?.name || raw.split('@')[0])
+                      : raw;
                   })()}
                 </span>
               </div>

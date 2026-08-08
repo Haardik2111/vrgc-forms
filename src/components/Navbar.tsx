@@ -3,22 +3,28 @@
 import React from 'react';
 import Link from 'next/link';
 
+import { User } from 'firebase/auth';
+
 interface NavbarProps {
   pageTitle?: string;
   userEmail?: string | null;
+  user?: User | null;
+  memberData?: { name?: string; fullName?: string; registrationNumber?: string; regNo?: string } | null;
   isAdmin?: boolean;
   onLogout?: () => Promise<void> | void;
   onLogin?: () => Promise<void> | void;
 }
 
-const Navbar: React.FC<NavbarProps> = ({ pageTitle = 'Dashboard', userEmail, isAdmin, onLogout, onLogin }) => {
+const Navbar: React.FC<NavbarProps> = ({ pageTitle = 'Dashboard', userEmail, user, memberData, isAdmin, onLogout, onLogin }) => {
   const extractRegNo = (emailAddress?: string | null) => {
     if (!emailAddress) return null;
     const match = emailAddress.match(/\b\d{2}[a-zA-Z]{3}\d{5}\b/);
     return match ? match[0].toUpperCase() : null;
   };
 
-  const regNo = extractRegNo(userEmail);
+  const regNo = memberData?.registrationNumber || memberData?.regNo || extractRegNo(userEmail);
+  const displayName = user?.displayName || memberData?.name || memberData?.fullName || (userEmail ? userEmail.split('@')[0] : '');
+  const photoUrl = user?.photoURL || null;
 
   return (
     <header className="bg-black/85 backdrop-blur-2xl flex justify-between items-center w-full px-3.5 sm:px-6 md:px-12 py-3 sm:py-5 sticky top-0 z-50 border-b border-[#a855f7]/20 shadow-[0_5px_30px_rgba(168,85,247,0.05)] select-none">
@@ -55,13 +61,22 @@ const Navbar: React.FC<NavbarProps> = ({ pageTitle = 'Dashboard', userEmail, isA
           </span>
         )}
 
-        {/* User Email & Registration Number Pill */}
+        {/* User Name, Google Photo & Email Pill */}
         {userEmail && (
-          <div className="hidden md:flex items-center gap-2 bg-[#12081c]/80 rounded-full px-3 py-1 border border-purple-500/30 max-w-[240px]">
-            <span className="material-symbols-outlined text-[13px] text-purple-400">person</span>
+          <div className="hidden md:flex items-center gap-2 bg-[#12081c]/80 rounded-full px-2.5 py-1 border border-purple-500/30 max-w-[260px]">
+            {photoUrl ? (
+              <img
+                src={photoUrl}
+                alt={displayName || 'User Avatar'}
+                className="w-6 h-6 rounded-full object-cover border border-purple-400/40 shrink-0"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <span className="material-symbols-outlined text-[15px] text-purple-400 shrink-0">account_circle</span>
+            )}
             <div className="flex flex-col text-left min-w-0">
-              <span className="text-[10px] text-white/90 font-semibold truncate leading-tight">{userEmail}</span>
-              {regNo && <span className="text-[8px] text-purple-300 font-bold tracking-wider">{regNo}</span>}
+              <span className="text-[10px] text-white font-bold truncate leading-tight">{displayName}</span>
+              <span className="text-[8px] text-purple-300/80 font-mono truncate">{userEmail}</span>
             </div>
           </div>
         )}
