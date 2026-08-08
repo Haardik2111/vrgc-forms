@@ -245,11 +245,10 @@ const IDCard: React.FC<IDCardProps> = ({
   ) => {
     try {
       if (!db || !currentUser) return;
-      const userMail = currentUser.email || 'Admin';
       const logEntry: AdminActivityLog = {
         action,
-        performedBy: userMail,
-        adminEmail: userMail,
+        performedBy: 'VRGC Admin',
+        adminEmail: 'VRGC Admin',
         targetEmail: targetEmail || 'N/A',
         targetName: targetName || 'N/A',
         targetRegNo: targetRegNo || 'N/A',
@@ -264,7 +263,9 @@ const IDCard: React.FC<IDCardProps> = ({
 
   // Admins can delete individual log entries
   const handleDeleteLog = useCallback(async (logId?: string) => {
-    if (!logId || !db || !isAdmin) return;
+    const userMail = (currentUser?.email || '').toLowerCase();
+    const canDelete = CONFIG.LOG_DELETE_ADMIN_EMAILS.includes(userMail);
+    if (!logId || !db || !isAdmin || !canDelete) return;
     try {
       await deleteDoc(doc(db, 'admin_logs', logId));
       setAdminLogs(prev => prev.filter(l => l.id !== logId));
@@ -273,7 +274,7 @@ const IDCard: React.FC<IDCardProps> = ({
     } catch (err) {
       console.error('Failed to delete log entry:', err);
     }
-  }, [isAdmin]);
+  }, [isAdmin, currentUser]);
 
   // Performance optimization: Pagination / Windowing states (Massive TBT & LCP boost)
   const [dossierPageLimit, setDossierPageLimit] = useState<number>(12);
@@ -2061,7 +2062,10 @@ const IDCard: React.FC<IDCardProps> = ({
             )}
 
             {/* ACTIVITY LOGS SUB-TAB */}
-            {adminSectionTab === 'logs' && (
+            {adminSectionTab === 'logs' && (() => {
+              const userMail = (currentUser?.email || '').toLowerCase();
+              const canDeleteLogs = CONFIG.LOG_DELETE_ADMIN_EMAILS.includes(userMail);
+              return (
               <div className="space-y-4">
                 {/* Search & Action Filter Controls */}
                 <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-white/5 flex flex-col md:flex-row md:items-center gap-2.5 sm:gap-4">
@@ -2127,7 +2131,8 @@ const IDCard: React.FC<IDCardProps> = ({
                                 month: 'short', day: 'numeric', year: 'numeric',
                                 hour: '2-digit', minute: '2-digit', second: '2-digit'
                               });
-                            const adminMail = log.performedBy || log.adminEmail || 'Admin';
+                            const rawAdmin = log.performedBy || log.adminEmail || 'Admin';
+                            const adminMail = rawAdmin.includes('@') ? 'VRGC Admin' : rawAdmin;
 
                             let badgeStyle = 'bg-purple-500/20 text-purple-300 border-purple-500/30';
                             let badgeLabel: string = log.action;
@@ -2296,8 +2301,8 @@ const IDCard: React.FC<IDCardProps> = ({
                   </div>
                 )}
               </div>
-            )}
-
+              );
+            })()}
           </div>
         )}
 
@@ -2823,7 +2828,10 @@ const IDCard: React.FC<IDCardProps> = ({
               <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-white/5 border border-white/5">
                 <span className="text-[10px] font-label-caps text-outline uppercase font-bold">Admin Email:</span>
                 <span className="font-bold text-white font-code-sm text-[11px] truncate">
-                  {selectedLogForDetails.performedBy || selectedLogForDetails.adminEmail || 'Admin'}
+                  {(() => {
+                    const raw = selectedLogForDetails.performedBy || selectedLogForDetails.adminEmail || 'Admin';
+                    return raw.includes('@') ? 'VRGC Admin' : raw;
+                  })()}
                 </span>
               </div>
 
@@ -2847,7 +2855,7 @@ const IDCard: React.FC<IDCardProps> = ({
             </div>
 
             <div className="flex items-center justify-between pt-3 border-t border-white/10">
-              {canDeleteLogs ? (
+              {CONFIG.LOG_DELETE_ADMIN_EMAILS.includes((currentUser?.email || '').toLowerCase()) ? (
                 <button
                   onClick={() => {
                     if (selectedLogForDetails.id && confirm('Are you sure you want to delete this activity log entry?')) {

@@ -15,6 +15,18 @@ export const CONFIG = {
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean),
 
+  // Payment Admins (managed via env variable)
+  PAYMENT_ADMIN_EMAILS: (process.env.NEXT_PUBLIC_PAYMENT_ADMIN_EMAILS || '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean),
+
+  // Log Deletion Authorized Admins (managed via env variable)
+  LOG_DELETE_ADMIN_EMAILS: (process.env.NEXT_PUBLIC_LOG_DELETE_ADMIN_EMAILS || '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean),
+
   // Live Firebase Production Configuration
   FIREBASE_CONFIG: {
     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "",

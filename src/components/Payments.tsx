@@ -1283,7 +1283,7 @@ const Payments: React.FC<PaymentsProps> = ({
                   <RotateCcw className="w-3.5 h-3.5 shrink-0" />
                   <span>Sync Razorpay</span>
                 </button>
-                {/* Initiate Payment Controls — STRICTLY FOR vrgc@vitbhopal.ac.in */}
+                {/* Initiate Payment Controls — STRICTLY FOR Payment Admins */}
                 {canInitiatePayments && (
                   <>
                     <button
@@ -1315,7 +1315,7 @@ const Payments: React.FC<PaymentsProps> = ({
         </div>
       </div>
 
-      {/* Summary Statistics — STRICTLY FOR vrgc@vitbhopal.ac.in */}
+      {/* Summary Statistics — STRICTLY FOR Payment Admins */}
       {canInitiatePayments && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <div className="p-4 sm:p-5 rounded-2xl bg-[#0e0518]/90 border border-purple-500/20 backdrop-blur-md shadow-lg flex flex-col justify-between space-y-2">
