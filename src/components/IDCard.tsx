@@ -781,6 +781,12 @@ const IDCard: React.FC<IDCardProps> = ({
           pos.includes('management') ||
           pos.includes('coordinator') ||
           pos.includes('president');
+      } else if (selectedTeam === 'Esports (Mobile)' || selectedTeam === 'Esports(Mobile)') {
+        const team = (c.team || '').toLowerCase();
+        matchesTeam = team.includes('mobile') || team === 'esports(mobile)';
+      } else if (selectedTeam === 'Esports (PC)' || selectedTeam === 'Esports(PC)') {
+        const team = (c.team || '').toLowerCase();
+        matchesTeam = team.includes('pc') || team === 'esports(pc)';
       } else {
         matchesTeam = c.team && c.team.toLowerCase() === selectedTeam.toLowerCase();
       }
@@ -1569,7 +1575,8 @@ const IDCard: React.FC<IDCardProps> = ({
                         <option value="All">All Teams</option>
                         <option value="Design">Design</option>
                         <option value="Education">Education</option>
-                        <option value="Esports">Esports</option>
+                        <option value="Esports (Mobile)">Esports (Mobile)</option>
+                        <option value="Esports (PC)">Esports (PC)</option>
                         <option value="PR">PR</option>
                         <option value="Social Media">Social Media</option>
                         <option value="Technical">Technical</option>
@@ -2067,264 +2074,264 @@ const IDCard: React.FC<IDCardProps> = ({
               const userMail = (currentUser?.email || '').toLowerCase();
               const canDeleteLogs = CONFIG.LOG_DELETE_ADMIN_EMAILS.includes(userMail);
               return (
-              <div className="space-y-4">
-                {/* Search & Action Filter Controls */}
-                <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-white/5 flex flex-col md:flex-row md:items-center gap-2.5 sm:gap-4">
-                  <div className="relative flex-1 w-full">
-                    <span className="material-symbols-outlined absolute left-3 top-2.5 text-outline text-sm">search</span>
-                    <input
-                      type="text"
-                      placeholder="Search logs, email, candidate..."
-                      value={logSearchQuery}
-                      onChange={(e) => setLogSearchQuery(e.target.value)}
-                      className="w-full bg-black/30 border border-outline-variant/30 rounded-lg pl-9 pr-4 py-2 text-xs text-white focus:outline-none focus:border-primary placeholder:text-white/30 transition-all duration-300"
-                    />
+                <div className="space-y-4">
+                  {/* Search & Action Filter Controls */}
+                  <div className="glass-panel p-3 sm:p-4 rounded-xl border border-white/5 bg-white/5 flex flex-col md:flex-row md:items-center gap-2.5 sm:gap-4">
+                    <div className="relative flex-1 w-full">
+                      <span className="material-symbols-outlined absolute left-3 top-2.5 text-outline text-sm">search</span>
+                      <input
+                        type="text"
+                        placeholder="Search logs, email, candidate..."
+                        value={logSearchQuery}
+                        onChange={(e) => setLogSearchQuery(e.target.value)}
+                        className="w-full bg-black/30 border border-outline-variant/30 rounded-lg pl-9 pr-4 py-2 text-xs text-white focus:outline-none focus:border-primary placeholder:text-white/30 transition-all duration-300"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between md:justify-end gap-2 shrink-0 w-full md:w-auto">
+                      <label className="text-[10px] font-label-caps text-outline tracking-wider font-bold shrink-0">ACTION:</label>
+                      <select
+                        value={logActionFilter}
+                        onChange={(e) => setLogActionFilter(e.target.value)}
+                        className="bg-black/50 border border-outline-variant/30 text-white rounded-lg px-3 py-1.5 text-xs focus:ring-0 focus:border-primary cursor-pointer hover:bg-black/80 font-label-caps flex-1 md:flex-initial min-w-0"
+                      >
+                        <option value="All">All Actions</option>
+                        <option value="APPROVE_DOSSIER">Approvals</option>
+                        <option value="REVERT_PENDING_DOSSIER">Reversions</option>
+                        <option value="DELETE_DOSSIER">Deletions</option>
+                        <option value="FORCE_SHEETS_SYNC">Sheets Syncs</option>
+                      </select>
+                    </div>
                   </div>
 
-                  <div className="flex items-center justify-between md:justify-end gap-2 shrink-0 w-full md:w-auto">
-                    <label className="text-[10px] font-label-caps text-outline tracking-wider font-bold shrink-0">ACTION:</label>
-                    <select
-                      value={logActionFilter}
-                      onChange={(e) => setLogActionFilter(e.target.value)}
-                      className="bg-black/50 border border-outline-variant/30 text-white rounded-lg px-3 py-1.5 text-xs focus:ring-0 focus:border-primary cursor-pointer hover:bg-black/80 font-label-caps flex-1 md:flex-initial min-w-0"
-                    >
-                      <option value="All">All Actions</option>
-                      <option value="APPROVE_DOSSIER">Approvals</option>
-                      <option value="REVERT_PENDING_DOSSIER">Reversions</option>
-                      <option value="DELETE_DOSSIER">Deletions</option>
-                      <option value="FORCE_SHEETS_SYNC">Sheets Syncs</option>
-                    </select>
-                  </div>
-                </div>
+                  {/* Audit Logs Table & Mobile Cards */}
+                  {filteredLogs.length === 0 ? (
+                    <div className="glass-panel p-12 rounded-2xl border border-white/5 bg-white/5 text-center space-y-3">
+                      <span className="material-symbols-outlined text-4xl text-white/30">find_in_page</span>
+                      <div className="text-white font-bold text-sm">No Activity Logs Found</div>
+                      <p className="text-xs text-white/50 max-w-md mx-auto">
+                        {logSearchQuery || logActionFilter !== 'All'
+                          ? 'No logs match your current search query or action type filter.'
+                          : 'All administrative activities (approvals, reversions to pending, deletions, syncs) will automatically record here in real-time.'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="glass-panel rounded-2xl border border-white/5 bg-black/40 overflow-hidden shadow-2xl">
+                      {/* DESKTOP TABLE VIEW */}
+                      <div className="hidden md:block overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="border-b border-white/10 bg-white/5 text-[10px] font-label-caps text-outline tracking-wider uppercase">
+                              <th className="py-3.5 px-4">Timestamp</th>
+                              <th className="py-3.5 px-4">Action</th>
+                              <th className="py-3.5 px-4">Admin Name</th>
+                              <th className="py-3.5 px-4">Target Candidate</th>
+                              <th className="py-3.5 px-4">Activity Details</th>
+                              {canDeleteLogs && <th className="py-3.5 px-4 text-right">Actions</th>}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5 text-xs">
+                            {visibleLogs.map(log => {
+                              const dateObj = new Date(log.timestamp);
+                              const formattedTime = isNaN(dateObj.getTime())
+                                ? log.timestamp
+                                : dateObj.toLocaleString('en-US', {
+                                  month: 'short', day: 'numeric', year: 'numeric',
+                                  hour: '2-digit', minute: '2-digit', second: '2-digit'
+                                });
+                              const rawAdmin = log.performedBy || log.adminEmail || 'Admin';
+                              const foundCandidate = candidates.find(c => (c.email || '').toLowerCase() === rawAdmin.toLowerCase());
+                              const adminMail = rawAdmin.includes('@')
+                                ? (foundCandidate?.name || rawAdmin.split('@')[0])
+                                : rawAdmin;
 
-                {/* Audit Logs Table & Mobile Cards */}
-                {filteredLogs.length === 0 ? (
-                  <div className="glass-panel p-12 rounded-2xl border border-white/5 bg-white/5 text-center space-y-3">
-                    <span className="material-symbols-outlined text-4xl text-white/30">find_in_page</span>
-                    <div className="text-white font-bold text-sm">No Activity Logs Found</div>
-                    <p className="text-xs text-white/50 max-w-md mx-auto">
-                      {logSearchQuery || logActionFilter !== 'All'
-                        ? 'No logs match your current search query or action type filter.'
-                        : 'All administrative activities (approvals, reversions to pending, deletions, syncs) will automatically record here in real-time.'}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="glass-panel rounded-2xl border border-white/5 bg-black/40 overflow-hidden shadow-2xl">
-                    {/* DESKTOP TABLE VIEW */}
-                    <div className="hidden md:block overflow-x-auto">
-                      <table className="w-full text-left border-collapse">
-                        <thead>
-                          <tr className="border-b border-white/10 bg-white/5 text-[10px] font-label-caps text-outline tracking-wider uppercase">
-                            <th className="py-3.5 px-4">Timestamp</th>
-                            <th className="py-3.5 px-4">Action</th>
-                            <th className="py-3.5 px-4">Admin Name</th>
-                            <th className="py-3.5 px-4">Target Candidate</th>
-                            <th className="py-3.5 px-4">Activity Details</th>
-                            {canDeleteLogs && <th className="py-3.5 px-4 text-right">Actions</th>}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/5 text-xs">
-                          {visibleLogs.map(log => {
-                            const dateObj = new Date(log.timestamp);
-                            const formattedTime = isNaN(dateObj.getTime())
-                              ? log.timestamp
-                              : dateObj.toLocaleString('en-US', {
-                                month: 'short', day: 'numeric', year: 'numeric',
-                                hour: '2-digit', minute: '2-digit', second: '2-digit'
-                              });
-                            const rawAdmin = log.performedBy || log.adminEmail || 'Admin';
-                            const foundCandidate = candidates.find(c => (c.email || '').toLowerCase() === rawAdmin.toLowerCase());
-                            const adminMail = rawAdmin.includes('@')
-                              ? (foundCandidate?.name || rawAdmin.split('@')[0])
-                              : rawAdmin;
+                              let badgeStyle = 'bg-purple-500/20 text-purple-300 border-purple-500/30';
+                              let badgeLabel: string = log.action;
+                              let badgeIcon = 'info';
 
-                            let badgeStyle = 'bg-purple-500/20 text-purple-300 border-purple-500/30';
-                            let badgeLabel: string = log.action;
-                            let badgeIcon = 'info';
+                              if (log.action === 'APPROVE_DOSSIER' || log.action === 'VERIFY') {
+                                badgeStyle = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
+                                badgeLabel = 'APPROVED';
+                                badgeIcon = 'verified';
+                              } else if (log.action === 'REVERT_PENDING_DOSSIER' || log.action === 'SET_PENDING') {
+                                badgeStyle = 'bg-amber-500/20 text-amber-300 border-amber-500/40';
+                                badgeLabel = 'REVERTED PENDING';
+                                badgeIcon = 'history';
+                              } else if (log.action === 'DELETE_DOSSIER' || log.action === 'DELETE') {
+                                badgeStyle = 'bg-red-500/20 text-red-300 border-red-500/40';
+                                badgeLabel = 'DELETED';
+                                badgeIcon = 'delete';
+                              } else if (log.action === 'FORCE_SHEETS_SYNC' || log.action === 'SYNC_SHEETS') {
+                                badgeStyle = 'bg-purple-500/20 text-purple-300 border-purple-500/40';
+                                badgeLabel = 'SHEETS SYNC';
+                                badgeIcon = 'cloud_upload';
+                              }
 
-                            if (log.action === 'APPROVE_DOSSIER' || log.action === 'VERIFY') {
-                              badgeStyle = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
-                              badgeLabel = 'APPROVED';
-                              badgeIcon = 'verified';
-                            } else if (log.action === 'REVERT_PENDING_DOSSIER' || log.action === 'SET_PENDING') {
-                              badgeStyle = 'bg-amber-500/20 text-amber-300 border-amber-500/40';
-                              badgeLabel = 'REVERTED PENDING';
-                              badgeIcon = 'history';
-                            } else if (log.action === 'DELETE_DOSSIER' || log.action === 'DELETE') {
-                              badgeStyle = 'bg-red-500/20 text-red-300 border-red-500/40';
-                              badgeLabel = 'DELETED';
-                              badgeIcon = 'delete';
-                            } else if (log.action === 'FORCE_SHEETS_SYNC' || log.action === 'SYNC_SHEETS') {
-                              badgeStyle = 'bg-purple-500/20 text-purple-300 border-purple-500/40';
-                              badgeLabel = 'SHEETS SYNC';
-                              badgeIcon = 'cloud_upload';
-                            }
+                              return (
+                                <tr key={log.id || log.timestamp + Math.random()} className="hover:bg-white/5 transition-colors">
+                                  <td className="py-3.5 px-4 font-code-sm text-[11px] whitespace-nowrap">
+                                    <span className="text-purple-300 font-mono font-bold inline-flex items-center gap-1.5">
+                                      <span className="material-symbols-outlined text-xs text-purple-400">schedule</span>
+                                      <span>{formattedTime}</span>
+                                    </span>
+                                  </td>
+                                  <td className="py-3.5 px-4 whitespace-nowrap">
+                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[9px] font-bold font-label-caps tracking-wider ${badgeStyle}`}>
+                                      <span className="material-symbols-outlined text-xs">{badgeIcon}</span>
+                                      <span>{badgeLabel}</span>
+                                    </span>
+                                  </td>
+                                  <td className="py-3.5 px-4 font-bold text-white text-[11px] whitespace-nowrap">
+                                    {adminMail}
+                                  </td>
+                                  <td className="py-3.5 px-4 whitespace-nowrap">
+                                    {log.targetName && log.targetName !== 'N/A' ? (
+                                      <div>
+                                        <div className="font-bold text-white text-[11px]">{log.targetName}</div>
+                                        <div className="text-[10px] text-primary font-code-sm">{log.targetRegNo}</div>
+                                      </div>
+                                    ) : (
+                                      <span className="text-white/40 text-[11px]">N/A</span>
+                                    )}
+                                  </td>
+                                  <td className="py-3.5 px-4 text-white/80 text-[11px]">
+                                    {log.details}
+                                  </td>
+                                  {canDeleteLogs && (
+                                    <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                                      <button
+                                        onClick={() => {
+                                          if (log.id && confirm('Are you sure you want to delete this activity log entry?')) {
+                                            handleDeleteLog(log.id);
+                                          }
+                                        }}
+                                        className="p-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 hover:border-red-500/40 transition-all shrink-0"
+                                        title="Delete Log Entry"
+                                      >
+                                        <span className="material-symbols-outlined text-xs">delete</span>
+                                      </button>
+                                    </td>
+                                  )}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
 
-                            return (
-                              <tr key={log.id || log.timestamp + Math.random()} className="hover:bg-white/5 transition-colors">
-                                <td className="py-3.5 px-4 font-code-sm text-[11px] whitespace-nowrap">
-                                  <span className="text-purple-300 font-mono font-bold inline-flex items-center gap-1.5">
-                                    <span className="material-symbols-outlined text-xs text-purple-400">schedule</span>
-                                    <span>{formattedTime}</span>
-                                  </span>
-                                </td>
-                                <td className="py-3.5 px-4 whitespace-nowrap">
-                                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[9px] font-bold font-label-caps tracking-wider ${badgeStyle}`}>
-                                    <span className="material-symbols-outlined text-xs">{badgeIcon}</span>
-                                    <span>{badgeLabel}</span>
-                                  </span>
-                                </td>
-                                <td className="py-3.5 px-4 font-bold text-white text-[11px] whitespace-nowrap">
-                                  {adminMail}
-                                </td>
-                                <td className="py-3.5 px-4 whitespace-nowrap">
+                      {/* MOBILE CLEAN LOG CARD VIEW */}
+                      <div className="flex md:hidden flex-col gap-2.5 p-1">
+                        {visibleLogs.map(log => {
+                          const dateObj = new Date(log.timestamp);
+                          const formattedTime = isNaN(dateObj.getTime())
+                            ? log.timestamp
+                            : dateObj.toLocaleString('en-US', {
+                              month: 'short', day: 'numeric', year: 'numeric',
+                              hour: '2-digit', minute: '2-digit', second: '2-digit'
+                            });
+                          const rawAdmin = log.performedBy || log.adminEmail || 'Admin';
+                          const foundCandidate = candidates.find(c => (c.email || '').toLowerCase() === rawAdmin.toLowerCase());
+                          const adminMail = rawAdmin.includes('@')
+                            ? (foundCandidate?.name || rawAdmin.split('@')[0])
+                            : rawAdmin;
+                          const logKey = log.id || log.timestamp;
+
+                          let badgeStyle = 'bg-purple-500/20 text-purple-300 border-purple-500/30';
+                          let badgeLabel: string = log.action;
+                          let badgeIcon = 'info';
+
+                          if (log.action === 'APPROVE_DOSSIER' || log.action === 'VERIFY') {
+                            badgeStyle = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
+                            badgeLabel = 'APPROVED';
+                            badgeIcon = 'verified';
+                          } else if (log.action === 'REVERT_PENDING_DOSSIER' || log.action === 'SET_PENDING') {
+                            badgeStyle = 'bg-amber-500/20 text-amber-300 border-amber-500/40';
+                            badgeLabel = 'REVERTED';
+                            badgeIcon = 'history';
+                          } else if (log.action === 'DELETE_DOSSIER' || log.action === 'DELETE') {
+                            badgeStyle = 'bg-red-500/20 text-red-300 border-red-500/40';
+                            badgeLabel = 'DELETED';
+                            badgeIcon = 'delete';
+                          } else if (log.action === 'FORCE_SHEETS_SYNC' || log.action === 'SYNC_SHEETS') {
+                            badgeStyle = 'bg-purple-500/20 text-purple-300 border-purple-500/30';
+                            badgeLabel = 'SHEETS SYNC';
+                            badgeIcon = 'cloud_upload';
+                          }
+
+                          return (
+                            <div
+                              key={logKey + Math.random()}
+                              onClick={() => setSelectedLogForDetails(log)}
+                              className="rounded-xl border border-white/5 bg-white/5 hover:border-primary/30 hover:bg-white/10 transition-all duration-200 cursor-pointer p-3.5 space-y-3 overflow-visible"
+                            >
+                              {/* Top Header Row: Action Badge + Statically Highlighted Timestamp */}
+                              <div className="flex items-center justify-between gap-2">
+                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[9px] font-bold font-label-caps tracking-wider ${badgeStyle}`}>
+                                  <span className="material-symbols-outlined text-xs">{badgeIcon}</span>
+                                  <span>{badgeLabel}</span>
+                                </span>
+
+                                <span className="text-purple-300 font-mono text-[9px] font-bold inline-flex items-center gap-1 shrink-0">
+                                  <span className="material-symbols-outlined text-[10px] text-purple-400">schedule</span>
+                                  <span>{formattedTime}</span>
+                                </span>
+                              </div>
+
+                              {/* Content Body Row: Primary Candidate/Details on Left, 3-Dots Menu on Right */}
+                              <div className="flex items-center justify-between gap-3 pt-0.5 border-t border-white/5">
+                                <div className="min-w-0 flex-1">
                                   {log.targetName && log.targetName !== 'N/A' ? (
-                                    <div>
-                                      <div className="font-bold text-white text-[11px]">{log.targetName}</div>
-                                      <div className="text-[10px] text-primary font-code-sm">{log.targetRegNo}</div>
+                                    <div className="truncate">
+                                      <span className="font-bold text-white text-xs">{log.targetName}</span>
+                                      {log.targetRegNo && log.targetRegNo !== 'N/A' && (
+                                        <span className="text-primary font-code-sm text-[10px] ml-1.5 font-bold">({log.targetRegNo})</span>
+                                      )}
                                     </div>
                                   ) : (
-                                    <span className="text-white/40 text-[11px]">N/A</span>
+                                    <div className="text-xs text-white/90 font-medium truncate">
+                                      {log.details || adminMail}
+                                    </div>
                                   )}
-                                </td>
-                                <td className="py-3.5 px-4 text-white/80 text-[11px]">
-                                  {log.details}
-                                </td>
-                                {canDeleteLogs && (
-                                  <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                                  <div className="text-[10px] text-white/40 truncate font-code-sm mt-0.5">
+                                    By: {adminMail}
+                                  </div>
+                                </div>
+
+                                {/* Actions Container */}
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {canDeleteLogs && (
                                     <button
-                                      onClick={() => {
+                                      onClick={(e) => {
+                                        e.stopPropagation();
                                         if (log.id && confirm('Are you sure you want to delete this activity log entry?')) {
                                           handleDeleteLog(log.id);
                                         }
                                       }}
-                                      className="p-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 hover:border-red-500/40 transition-all shrink-0"
+                                      className="p-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-all active:scale-95 shrink-0"
                                       title="Delete Log Entry"
                                     >
-                                      <span className="material-symbols-outlined text-xs">delete</span>
+                                      <span className="material-symbols-outlined text-sm">delete</span>
                                     </button>
-                                  </td>
-                                )}
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {/* MOBILE CLEAN LOG CARD VIEW */}
-                    <div className="flex md:hidden flex-col gap-2.5 p-1">
-                      {visibleLogs.map(log => {
-                        const dateObj = new Date(log.timestamp);
-                        const formattedTime = isNaN(dateObj.getTime())
-                          ? log.timestamp
-                          : dateObj.toLocaleString('en-US', {
-                            month: 'short', day: 'numeric', year: 'numeric',
-                            hour: '2-digit', minute: '2-digit', second: '2-digit'
-                          });
-                        const rawAdmin = log.performedBy || log.adminEmail || 'Admin';
-                        const foundCandidate = candidates.find(c => (c.email || '').toLowerCase() === rawAdmin.toLowerCase());
-                        const adminMail = rawAdmin.includes('@')
-                          ? (foundCandidate?.name || rawAdmin.split('@')[0])
-                          : rawAdmin;
-                        const logKey = log.id || log.timestamp;
-
-                        let badgeStyle = 'bg-purple-500/20 text-purple-300 border-purple-500/30';
-                        let badgeLabel: string = log.action;
-                        let badgeIcon = 'info';
-
-                        if (log.action === 'APPROVE_DOSSIER' || log.action === 'VERIFY') {
-                          badgeStyle = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
-                          badgeLabel = 'APPROVED';
-                          badgeIcon = 'verified';
-                        } else if (log.action === 'REVERT_PENDING_DOSSIER' || log.action === 'SET_PENDING') {
-                          badgeStyle = 'bg-amber-500/20 text-amber-300 border-amber-500/40';
-                          badgeLabel = 'REVERTED';
-                          badgeIcon = 'history';
-                        } else if (log.action === 'DELETE_DOSSIER' || log.action === 'DELETE') {
-                          badgeStyle = 'bg-red-500/20 text-red-300 border-red-500/40';
-                          badgeLabel = 'DELETED';
-                          badgeIcon = 'delete';
-                        } else if (log.action === 'FORCE_SHEETS_SYNC' || log.action === 'SYNC_SHEETS') {
-                          badgeStyle = 'bg-purple-500/20 text-purple-300 border-purple-500/30';
-                          badgeLabel = 'SHEETS SYNC';
-                          badgeIcon = 'cloud_upload';
-                        }
-
-                        return (
-                          <div
-                            key={logKey + Math.random()}
-                            onClick={() => setSelectedLogForDetails(log)}
-                            className="rounded-xl border border-white/5 bg-white/5 hover:border-primary/30 hover:bg-white/10 transition-all duration-200 cursor-pointer p-3.5 space-y-3 overflow-visible"
-                          >
-                            {/* Top Header Row: Action Badge + Statically Highlighted Timestamp */}
-                            <div className="flex items-center justify-between gap-2">
-                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[9px] font-bold font-label-caps tracking-wider ${badgeStyle}`}>
-                                <span className="material-symbols-outlined text-xs">{badgeIcon}</span>
-                                <span>{badgeLabel}</span>
-                              </span>
-
-                              <span className="text-purple-300 font-mono text-[9px] font-bold inline-flex items-center gap-1 shrink-0">
-                                <span className="material-symbols-outlined text-[10px] text-purple-400">schedule</span>
-                                <span>{formattedTime}</span>
-                              </span>
-                            </div>
-
-                            {/* Content Body Row: Primary Candidate/Details on Left, 3-Dots Menu on Right */}
-                            <div className="flex items-center justify-between gap-3 pt-0.5 border-t border-white/5">
-                              <div className="min-w-0 flex-1">
-                                {log.targetName && log.targetName !== 'N/A' ? (
-                                  <div className="truncate">
-                                    <span className="font-bold text-white text-xs">{log.targetName}</span>
-                                    {log.targetRegNo && log.targetRegNo !== 'N/A' && (
-                                      <span className="text-primary font-code-sm text-[10px] ml-1.5 font-bold">({log.targetRegNo})</span>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <div className="text-xs text-white/90 font-medium truncate">
-                                    {log.details || adminMail}
-                                  </div>
-                                )}
-                                <div className="text-[10px] text-white/40 truncate font-code-sm mt-0.5">
-                                  By: {adminMail}
-                                </div>
-                              </div>
-
-                              {/* Actions Container */}
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                {canDeleteLogs && (
+                                  )}
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      if (log.id && confirm('Are you sure you want to delete this activity log entry?')) {
-                                        handleDeleteLog(log.id);
-                                      }
+                                      setSelectedLogForDetails(log);
                                     }}
-                                    className="p-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-all active:scale-95 shrink-0"
-                                    title="Delete Log Entry"
+                                    className="p-1.5 rounded-lg bg-black/60 border border-white/10 text-white/80 hover:text-white hover:border-purple-500/50 transition-all active:scale-95 shrink-0"
+                                    title="View Log Details"
                                   >
-                                    <span className="material-symbols-outlined text-sm">delete</span>
+                                    <span className="material-symbols-outlined text-base">more_vert</span>
                                   </button>
-                                )}
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedLogForDetails(log);
-                                  }}
-                                  className="p-1.5 rounded-lg bg-black/60 border border-white/10 text-white/80 hover:text-white hover:border-purple-500/50 transition-all active:scale-95 shrink-0"
-                                  title="View Log Details"
-                                >
-                                  <span className="material-symbols-outlined text-base">more_vert</span>
-                                </button>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
               );
             })()}
           </div>
