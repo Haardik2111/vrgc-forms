@@ -116,7 +116,7 @@ const IDCard: React.FC<IDCardProps> = ({
   const [selectedTeam, setSelectedTeam] = useState<string>('All');
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [previewCandidate, setPreviewCandidate] = useState<CandidateSubmission | null>(null);
-  const [totalMembers, setTotalMembers] = useState<number>(50);
+  const [totalMembers, setTotalMembers] = useState<number>(0);
 
   // Admin Logs sub-tab state
   const [adminSectionTab, setAdminSectionTab] = useState<'dossiers' | 'logs'>('dossiers');
@@ -214,6 +214,19 @@ const IDCard: React.FC<IDCardProps> = ({
 
     return () => unsub();
   }, [currentUser, isAdmin]);
+
+  // Subscribe to real-time updates from 'members' Firestore collection to calculate dynamic total member count
+  useEffect(() => {
+    if (!isAdmin) return;
+    const unsub = onSnapshot(collection(db, 'members'), (snapshot) => {
+      const count = snapshot.size;
+      setTotalMembers(count);
+    }, (error) => {
+      console.warn("Firestore members subscription notice:", error);
+    });
+
+    return () => unsub();
+  }, [isAdmin]);
 
   // Real-time listener for admin activity logs
   useEffect(() => {
@@ -1495,7 +1508,7 @@ const IDCard: React.FC<IDCardProps> = ({
                     Candidate Dossier Submissions
                   </div>
                   <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-red-500/20 text-red-300 border border-red-500/30 shadow-[0_0_15px_rgba(239,68,68,0.2)]">
-                    {candidates.length} / {totalMembers} MEMBERS
+                    {candidates.length} / {Math.max(candidates.length, totalMembers)} MEMBERS
                   </span>
                 </h3>
                 <p className="text-xs text-on-surface-variant max-w-lg mt-0.5">
