@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import Sidebar from '@/components/Sidebar';
 import Dashboard from '@/components/Dashboard';
@@ -15,15 +15,55 @@ import Footer from '@/components/Footer';
 import { useAuth } from '@/lib/auth-context';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import { db } from '@/lib/firebase';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 
 const googleProvider = new GoogleAuthProvider();
 
 // ─── Inner app that consumes the auth context ───────────────────────────────
+// ── Under-maintenance screen (shown instead of the locked section) ────────────
+const MaintenanceScreen = ({ section }: { section: string }) => (
+  <div className="flex-1 flex items-center justify-center p-6">
+    <div className="max-w-md w-full bg-[#0e0518]/90 border border-amber-500/30 rounded-2xl p-10 backdrop-blur-xl shadow-[0_0_60px_rgba(245,158,11,0.1)] flex flex-col items-center gap-5 text-center">
+      <span className="text-5xl">🔧</span>
+      <div>
+        <h2 className="text-xl font-extrabold text-amber-400 mb-1">Under Maintenance</h2>
+        <p className="text-slate-400 text-sm">
+          The <span className="text-white font-bold">{section}</span> section is temporarily unavailable while we make improvements.
+        </p>
+        <p className="text-slate-500 text-xs mt-2">Please check back soon.</p>
+      </div>
+    </div>
+  </div>
+);
+
 function AppContent() {
   const { user, userEmail, isAdmin, isPaymentAdmin, isAuthorized, memberData, authLoading, authError, handleLogin, handleLogout } = useAuth();
   const [activePage, setActivePage] = useState<string>('dashboard');
   const [toast, setToast] = useState<string | null>(null);
   const [toastKey, setToastKey] = useState<number>(0);
+
+  // ── Maintenance mode — read from Firestore in real time ───────────────────
+  const [maintenanceMode, setMaintenanceMode] = useState<boolean>(false);
+  const [togglingMaintenance, setTogglingMaintenance] = useState<boolean>(false);
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'config', 'maintenance'), (snap) => {
+      setMaintenanceMode(snap.exists() ? !!snap.data()?.enabled : false);
+    });
+    return () => unsub();
+  }, []);
+
+  const handleToggleMaintenance = async () => {
+    setTogglingMaintenance(true);
+    try {
+      await setDoc(doc(db, 'config', 'maintenance'), { enabled: !maintenanceMode });
+    } catch (err) {
+      console.error('Failed to toggle maintenance mode:', err);
+    } finally {
+      setTogglingMaintenance(false);
+    }
+  };
 
   const showToast = (message: string) => {
     setToast(message);
@@ -147,6 +187,24 @@ function AppContent() {
     <div className="min-h-screen bg-[#05010a] text-[#e2e8f0] flex flex-col custom-scrollbar">
       <Navbar pageTitle={getPageTitle()} userEmail={userEmail} user={user} memberData={memberData} isAdmin={isAdmin} onLogout={handleLogout} onLogin={handleLogin} />
 
+      {/* Admin maintenance toggle — only visible to payment admin */}
+      {isPaymentAdmin && (
+        <div className="flex justify-center sm:justify-end px-4 py-2 bg-[#05010a] border-b border-white/5">
+          <button
+            onClick={handleToggleMaintenance}
+            disabled={togglingMaintenance}
+            className={`w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 sm:py-1.5 rounded-lg text-xs font-bold transition-all border active:scale-95 ${
+              maintenanceMode
+                ? 'bg-amber-500/20 border-amber-500/40 text-amber-300 hover:bg-amber-500/30'
+                : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10'
+            }`}
+          >
+            <span className="material-symbols-outlined text-sm">construction</span>
+            {togglingMaintenance ? 'Updating…' : maintenanceMode ? 'Maintenance ON — Click to Disable' : 'Enable Maintenance Mode'}
+          </button>
+        </div>
+      )}
+
       <div className="flex flex-1">
         <Sidebar activePage={activePage} onPageChange={handlePageChange} isAdmin={isAdmin} isAuthorized={isAuthorized} />
 
@@ -167,6 +225,7 @@ function AppContent() {
             isAuthorized ? <Lobby24MemberEntry onRedirect={() => handlePageChange('dashboard')} /> : renderRestrictedSignIn('Lobby 24')
           )}
           {activePage === 'referrals' && (
+            maintenanceMode ? <MaintenanceScreen section="Referrals" /> :
             isAuthorized ? (
               <Referrals 
                 onRedirect={() => handlePageChange('dashboard')} 
@@ -178,6 +237,7 @@ function AppContent() {
             ) : renderRestrictedSignIn('Referrals')
           )}
           {activePage === 'idcard' && (
+            maintenanceMode ? <MaintenanceScreen section="ID Card Form" /> :
             isAuthorized ? (
               <IDCard
                 onRedirect={() => handlePageChange('dashboard')}
@@ -190,6 +250,7 @@ function AppContent() {
             ) : renderRestrictedSignIn('ID Card Portal')
           )}
           {activePage === 'payments' && (
+            maintenanceMode ? <MaintenanceScreen section="Payments & Dues" /> :
             isAuthorized ? (
               <Payments
                 onRedirect={() => handlePageChange('dashboard')}
