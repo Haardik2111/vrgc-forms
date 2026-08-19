@@ -10,6 +10,7 @@ import Tickets from '@/components/Tickets';
 import Payments from '@/components/Payments';
 import Lobby25MemberEntry from '@/components/Lobby25MemberEntry';
 import Lobby24MemberEntry from '@/components/Lobby24MemberEntry';
+import EventRegister from '@/components/EventRegister';
 import Footer from '@/components/Footer';
 import { useAuth } from '@/lib/auth-context';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
@@ -30,16 +31,16 @@ function AppContent() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // Parse initial tab from clean URL path (e.g. /referrals, /idcard, /payments)
+  // Parse initial tab from clean URL path (e.g. /register, /referrals, /idcard, /payments)
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
       const path = window.location.pathname.replace(/^\//, '');
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get('tab');
       
-      if (path && ['referrals', 'idcard', 'payments', 'dashboard', 'batch24', 'batch25'].includes(path)) {
+      if (path && ['register', 'referrals', 'idcard', 'payments', 'dashboard', 'batch24', 'batch25'].includes(path)) {
         setActivePage(path);
-      } else if (tabParam && ['dashboard', 'referrals', 'idcard', 'payments', 'batch24', 'batch25'].includes(tabParam)) {
+      } else if (tabParam && ['dashboard', 'register', 'referrals', 'idcard', 'payments', 'batch24', 'batch25'].includes(tabParam)) {
         setActivePage(tabParam);
       }
     }
@@ -61,6 +62,7 @@ function AppContent() {
   const getPageTitle = () => {
     switch (activePage) {
       case 'dashboard': return 'Dashboard';
+      case 'register': return 'Event Register';
       case 'batch25': return 'Lobby 25';
       case 'batch24': return 'Lobby 24';
       case 'referrals': return 'Referrals';
@@ -146,18 +148,26 @@ function AppContent() {
       <Navbar pageTitle={getPageTitle()} userEmail={userEmail} user={user} memberData={memberData} isAdmin={isAdmin} onLogout={handleLogout} onLogin={handleLogin} />
 
       <div className="flex flex-1">
-        <Sidebar activePage={activePage} onPageChange={handlePageChange} isAdmin={isAdmin} />
+        <Sidebar activePage={activePage} onPageChange={handlePageChange} isAdmin={isAdmin} isAuthorized={isAuthorized} />
 
         <main className="flex-grow min-w-0 pb-24 md:pb-12 min-h-[calc(100vh-76px)] flex flex-col">
           {activePage === 'dashboard' && <Dashboard onPageChange={handlePageChange} />}
+          {activePage === 'register' && (
+            <EventRegister
+              onRedirect={() => handlePageChange('dashboard')}
+              externalUser={user}
+              externalUserEmail={userEmail}
+              externalIsPaymentAdmin={isPaymentAdmin}
+            />
+          )}
           {activePage === 'batch25' && (
-            user ? <Lobby25MemberEntry onRedirect={() => handlePageChange('dashboard')} /> : renderRestrictedSignIn('Lobby 25')
+            isAuthorized ? <Lobby25MemberEntry onRedirect={() => handlePageChange('dashboard')} /> : renderRestrictedSignIn('Lobby 25')
           )}
           {activePage === 'batch24' && (
-            user ? <Lobby24MemberEntry onRedirect={() => handlePageChange('dashboard')} /> : renderRestrictedSignIn('Lobby 24')
+            isAuthorized ? <Lobby24MemberEntry onRedirect={() => handlePageChange('dashboard')} /> : renderRestrictedSignIn('Lobby 24')
           )}
           {activePage === 'referrals' && (
-            user ? (
+            isAuthorized ? (
               <Referrals 
                 onRedirect={() => handlePageChange('dashboard')} 
                 externalUser={user}
@@ -168,7 +178,7 @@ function AppContent() {
             ) : renderRestrictedSignIn('Referrals')
           )}
           {activePage === 'idcard' && (
-            user ? (
+            isAuthorized ? (
               <IDCard
                 onRedirect={() => handlePageChange('dashboard')}
                 externalUser={user}
@@ -180,7 +190,7 @@ function AppContent() {
             ) : renderRestrictedSignIn('ID Card Portal')
           )}
           {activePage === 'payments' && (
-            user ? (
+            isAuthorized ? (
               <Payments
                 onRedirect={() => handlePageChange('dashboard')}
                 externalUser={user}
@@ -199,22 +209,30 @@ function AppContent() {
           <span className="material-symbols-outlined text-xl">dashboard</span>
           <span className="font-label-caps text-[9px]">HOME</span>
         </button>
-        <button onClick={() => handlePageChange('referrals')} className={`flex flex-col items-center gap-1 ${activePage === 'referrals' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
-          <span className="material-symbols-outlined text-xl">share</span>
-          <span className="font-label-caps text-[9px]">REFER</span>
+        <button onClick={() => handlePageChange('register')} className={`flex flex-col items-center gap-1 ${activePage === 'register' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
+          <span className="material-symbols-outlined text-xl">how_to_reg</span>
+          <span className="font-label-caps text-[9px]">REGISTER</span>
         </button>
-        <button onClick={() => handlePageChange('idcard')} className={`flex flex-col items-center gap-1 ${activePage === 'idcard' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
-          <span className="material-symbols-outlined text-xl">badge</span>
-          <span className="font-label-caps text-[9px]">ID CARD</span>
-        </button>
-        <button onClick={() => handlePageChange('payments')} className={`flex flex-col items-center gap-1 ${activePage === 'payments' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
-          <span className="material-symbols-outlined text-xl">payments</span>
-          <span className="font-label-caps text-[9px]">PAYMENTS</span>
-        </button>
-        <button onClick={() => handlePageChange('tickets')} className={`flex flex-col items-center gap-1 ${activePage === 'tickets' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
-          <span className="material-symbols-outlined text-xl">confirmation_number</span>
-          <span className="font-label-caps text-[9px]">TICKETS</span>
-        </button>
+        {isAuthorized && (
+          <>
+            <button onClick={() => handlePageChange('referrals')} className={`flex flex-col items-center gap-1 ${activePage === 'referrals' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
+              <span className="material-symbols-outlined text-xl">share</span>
+              <span className="font-label-caps text-[9px]">REFER</span>
+            </button>
+            <button onClick={() => handlePageChange('idcard')} className={`flex flex-col items-center gap-1 ${activePage === 'idcard' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
+              <span className="material-symbols-outlined text-xl">badge</span>
+              <span className="font-label-caps text-[9px]">ID CARD</span>
+            </button>
+            <button onClick={() => handlePageChange('payments')} className={`flex flex-col items-center gap-1 ${activePage === 'payments' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
+              <span className="material-symbols-outlined text-xl">payments</span>
+              <span className="font-label-caps text-[9px]">PAYMENTS</span>
+            </button>
+            <button onClick={() => handlePageChange('tickets')} className={`flex flex-col items-center gap-1 ${activePage === 'tickets' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
+              <span className="material-symbols-outlined text-xl">confirmation_number</span>
+              <span className="font-label-caps text-[9px]">TICKETS</span>
+            </button>
+          </>
+        )}
       </nav>
 
       {/* Toast */}

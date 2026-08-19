@@ -6,16 +6,20 @@ interface SidebarProps {
   activePage: string;
   onPageChange: (pageId: string) => void;
   isAdmin?: boolean;
+  isAuthorized?: boolean;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activePage, onPageChange }) => {
-  const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
-    { id: 'referrals', label: 'Referrals', icon: 'share' },
-    { id: 'idcard', label: 'ID Card Form', icon: 'badge' },
-    { id: 'payments', label: 'Payments & Dues', icon: 'payments' },
-    { id: 'tickets', label: 'Tickets', icon: 'confirmation_number' },
+const Sidebar: React.FC<SidebarProps> = ({ activePage, onPageChange, isAuthorized = true }) => {
+  const allMenuItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', public: true },
+    { id: 'register', label: 'Event Register', icon: 'how_to_reg', public: true },
+    { id: 'referrals', label: 'Referrals', icon: 'share', public: false },
+    { id: 'idcard', label: 'ID Card Form', icon: 'badge', public: false },
+    { id: 'payments', label: 'Payments & Dues', icon: 'payments', public: false },
+    { id: 'tickets', label: 'Tickets', icon: 'confirmation_number', public: false },
   ];
+
+  const menuItems = isAuthorized ? allMenuItems : allMenuItems.filter((item) => item.public);
 
   return (
     <aside className="h-[calc(100vh-76px)] w-64 hidden md:flex flex-col p-4 bg-surface-container-lowest border-r border-outline-variant sticky top-[76px]">

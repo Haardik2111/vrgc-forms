@@ -150,10 +150,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
         setIsAuthorized(true);
         setAuthError('');
+      } else if (em.endsWith('@vitbhopal.ac.in')) {
+        // Allow VIT Bhopal students/attendees to sign in, but set isAuthorized = false (non-member / event guest)
+        setMemberData(null);
+        setIsAuthorized(false);
+        setAuthError('');
       } else {
         setIsAuthorized(false);
         setMemberData(null);
-        setAuthError('Access Denied: You are not a registered VRGC member. Please contact admin.');
+        setAuthError('Access Denied: Please sign in with your official @vitbhopal.ac.in Google email address.');
         signOut(auth).catch(console.error);
       }
     } catch (err: any) {
