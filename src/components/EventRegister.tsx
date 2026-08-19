@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { db } from '@/lib/firebase';
 import {
-  collection, getDocs, addDoc, deleteDoc, doc,
+  collection, getDocs, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp, onSnapshot, query, where, orderBy,
 } from 'firebase/firestore';
 import { createPaymentInFirestore } from '@/lib/payments';
@@ -33,6 +33,7 @@ interface Registrant {
   phone: string;
   branch: string;
   registered_at: any;
+  is_present?: boolean;
 }
 
 interface EventRegisterProps {
@@ -77,7 +78,25 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
   const [adminPanelEventId, setAdminPanelEventId] = useState<string | null>(null);
   const [adminRegistrants, setAdminRegistrants] = useState<Record<string, Registrant[]>>({});
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [togglingPresenceId, setTogglingPresenceId] = useState<string | null>(null);
   const [registrantSearch, setRegistrantSearch] = useState<string>('');
+  const [presenceFilter, setPresenceFilter] = useState<'All' | 'Present' | 'Absent'>('All');
+
+  // Admin: Toggle registrant attendance status
+  const handleTogglePresence = async (docId: string, currentPresence: boolean) => {
+    if (!canManageEvents) return;
+    setTogglingPresenceId(docId);
+    try {
+      await updateDoc(doc(db, 'event_registrations', docId), {
+        is_present: !currentPresence,
+        updated_at: serverTimestamp(),
+      });
+    } catch (err) {
+      console.error('Failed to update attendance status:', err);
+    } finally {
+      setTogglingPresenceId(null);
+    }
+  };
 
   // Form inputs for user registration
   const [fullName, setFullName] = useState<string>(currentUser?.displayName || '');
@@ -179,12 +198,87 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
           phone: data.phone || '',
           branch: data.branch || '',
           registered_at: data.registered_at,
+          is_present: Boolean(data.is_present),
         });
       });
       setAdminRegistrants((prev) => ({ ...prev, [adminPanelEventId]: list }));
     });
     return () => unsub();
   }, [adminPanelEventId, canManageEvents]);
+
+  // Admin: Toggle registration status (Live / Closed)
+  const handleToggleRegistration = async (evt: EventItem) => {
+    if (!canManageEvents) return;
+
+    const nextStatus: EventItem['status'] = evt.status === 'Closed' ? 'Live' : 'Closed';
+
+    try {
+      await updateDoc(doc(db, 'events', evt.id), {
+        status: nextStatus,
+        updated_at: serverTimestamp(),
+      });
+      setEvents((prev) =>
+        prev.map((event) => (event.id === evt.id ? { ...event, status: nextStatus } : event))
+      );
+    } catch (err) {
+      console.error('Failed to update registration status:', err);
+    }
+  };
+
+  // Admin Edit Event State
+  const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
+  const [editTitle, setEditTitle] = useState<string>('');
+  const [editCategory, setEditCategory] = useState<string>('Esports Tournament');
+  const [editDate, setEditDate] = useState<string>('');
+  const [editLocation, setEditLocation] = useState<string>('');
+  const [editFee, setEditFee] = useState<string>('0');
+  const [editOriginalFee, setEditOriginalFee] = useState<string>('');
+  const [editDescription, setEditDescription] = useState<string>('');
+  const [savingEdit, setSavingEdit] = useState<boolean>(false);
+
+  // Admin: Open Edit Event Modal
+  const handleOpenEditModal = (evt: EventItem) => {
+    setEditingEvent(evt);
+    setEditTitle(evt.title);
+    setEditCategory(evt.category || 'Esports Tournament');
+    setEditDate(evt.date || '');
+    setEditLocation(evt.location || '');
+    setEditFee(String(evt.fee ?? 0));
+    setEditOriginalFee(evt.originalFee !== undefined ? String(evt.originalFee) : '');
+    setEditDescription(evt.description || '');
+  };
+
+  // Admin: Save Edited Event in Firestore & Local State
+  const handleSaveEditEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingEvent || !canManageEvents) return;
+    if (!editTitle || editFee === '' || Number(editFee) < 0) return;
+
+    setSavingEdit(true);
+    try {
+      const updatedFields = {
+        title: editTitle,
+        category: editCategory,
+        date: editDate,
+        location: editLocation,
+        fee: Number(editFee),
+        originalFee: editOriginalFee !== '' ? Number(editOriginalFee) : undefined,
+        description: editDescription,
+        updated_at: serverTimestamp(),
+      };
+
+      await updateDoc(doc(db, 'events', editingEvent.id), updatedFields);
+
+      setEvents((prev) =>
+        prev.map((e) => (e.id === editingEvent.id ? { ...e, ...updatedFields } : e))
+      );
+      setEditingEvent(null);
+    } catch (err) {
+      console.error('Failed to update event:', err);
+    } finally {
+      setSavingEdit(false);
+    }
+  };
 
   // Admin: Create new Event and broadcast to database
   const handleCreateEvent = async (e: React.FormEvent) => {
@@ -392,29 +486,39 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
                       {evt.category}
                     </span>
                     <div className="flex items-center gap-2">
-                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-500/10 border border-amber-500/30">
+                      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-950/80 via-[#120824] to-[#0d041a] border border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
                         {evt.originalFee && evt.originalFee > evt.fee && (
-                          <span className="text-xs text-slate-400 font-mono line-through font-semibold">
+                          <span className="text-xs text-slate-400/90 font-mono line-through font-semibold">
                             ₹{evt.originalFee}
                           </span>
                         )}
-                        <span className="text-xs font-black text-emerald-400 font-mono">
+                        <span className="text-xs font-black text-emerald-300 font-mono tracking-tight flex items-center gap-1">
+                          <span className="material-symbols-outlined text-xs text-emerald-400">local_offer</span>
                           {evt.fee === 0 ? 'FREE ENTRY' : `₹${evt.fee}`}
                         </span>
                         {evt.originalFee && evt.originalFee > evt.fee && (
-                          <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                          <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-emerald-500/25 text-emerald-300 border border-emerald-400/50 shadow-[0_0_10px_rgba(16,185,129,0.35)] animate-pulse">
                             OFFER
                           </span>
                         )}
                       </div>
                       {canManageEvents && (
-                        <button
-                          onClick={() => handleDeleteEvent(evt.id, evt.title)}
-                          title="Delete Event"
-                          className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition-all shrink-0"
-                        >
-                          <span className="material-symbols-outlined text-sm">delete</span>
-                        </button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => handleOpenEditModal(evt)}
+                            title="Edit / Modify Event"
+                            className="p-1.5 text-amber-400 hover:text-amber-300 transition-colors shrink-0"
+                          >
+                            <span className="material-symbols-outlined text-base">edit</span>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteEvent(evt.id, evt.title)}
+                            title="Delete Event"
+                            className="p-1.5 text-rose-400 hover:text-rose-300 transition-colors shrink-0"
+                          >
+                            <span className="material-symbols-outlined text-base">delete</span>
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -492,6 +596,21 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
                           <span className="material-symbols-outlined text-xs">manage_accounts</span>
                           Manage Registrants
                         </button>
+
+                        <button
+                          onClick={() => handleToggleRegistration(evt)}
+                          title={evt.status === 'Closed' ? 'Start Registration' : 'Close Registration'}
+                          className={`w-full xs:w-auto inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg border text-[10px] font-extrabold transition-all active:scale-95 ${
+                            evt.status === 'Closed'
+                              ? 'bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/40 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.2)]'
+                              : 'bg-rose-500/15 hover:bg-rose-500/25 border-rose-500/40 text-rose-300 shadow-[0_0_10px_rgba(244,63,94,0.2)]'
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-xs">
+                            {evt.status === 'Closed' ? 'play_arrow' : 'lock'}
+                          </span>
+                          <span>{evt.status === 'Closed' ? 'Start Registration' : 'Close Registration'}</span>
+                        </button>
                       </div>
                     )}
                   </div>
@@ -510,6 +629,14 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
                     >
                       <span className="material-symbols-outlined text-base">task_alt</span>
                       <span>Registered</span>
+                    </button>
+                  ) : evt.status === 'Closed' ? (
+                    <button
+                      disabled
+                      className="w-full sm:w-auto justify-center px-5 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-bold flex items-center gap-1.5 cursor-not-allowed"
+                    >
+                      <span className="material-symbols-outlined text-base">lock</span>
+                      <span>Registration Closed</span>
                     </button>
                   ) : isFull ? (
                     <button
@@ -637,85 +764,160 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
       {/* Modal: Admin Registrant Manager */}
       {adminPanelEventId && canManageEvents && (() => {
         const allRegistrants = adminRegistrants[adminPanelEventId] || [];
+        const presentCount = allRegistrants.filter((r) => r.is_present).length;
+        const absentCount = allRegistrants.length - presentCount;
+
         const q = registrantSearch.trim().toLowerCase();
-        const filtered = q
-          ? allRegistrants.filter((r) =>
-              r.full_name.toLowerCase().includes(q) ||
-              r.user_email.toLowerCase().includes(q) ||
-              r.registration_number.toLowerCase().includes(q) ||
-              r.phone.includes(q)
-            )
-          : allRegistrants;
+        let filtered = allRegistrants;
+        
+        if (q) {
+          filtered = filtered.filter((r) =>
+            r.full_name.toLowerCase().includes(q) ||
+            r.user_email.toLowerCase().includes(q) ||
+            r.registration_number.toLowerCase().includes(q) ||
+            r.phone.includes(q)
+          );
+        }
+
+        if (presenceFilter === 'Present') {
+          filtered = filtered.filter((r) => r.is_present);
+        } else if (presenceFilter === 'Absent') {
+          filtered = filtered.filter((r) => !r.is_present);
+        }
+
         return (
           <div className="fixed inset-0 z-[150] bg-black/85 backdrop-blur-md flex items-end sm:items-center justify-center sm:p-4">
             <div className="bg-[#0e0518] border border-purple-500/40 rounded-t-3xl sm:rounded-3xl max-w-2xl w-full p-5 sm:p-8 space-y-4 shadow-[0_0_60px_rgba(168,85,247,0.3)] relative animate-in slide-in-from-bottom sm:fade-in duration-300 max-h-[90vh] sm:max-h-[85vh] flex flex-col">
               <button
-                onClick={() => { setAdminPanelEventId(null); setRegistrantSearch(''); }}
+                onClick={() => { setAdminPanelEventId(null); setRegistrantSearch(''); setPresenceFilter('All'); }}
                 className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-full bg-white/5 hover:bg-white/10"
               >
                 <span className="material-symbols-outlined text-lg">close</span>
               </button>
 
               <div className="space-y-1 shrink-0">
-                <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest">ADMIN — EVENT REGISTRANTS</span>
+                <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest">ADMIN — EVENT REGISTRANTS & ATTENDANCE</span>
                 <h3 className="text-xl font-extrabold text-white leading-snug">
                   {events.find((e) => e.id === adminPanelEventId)?.title}
                 </h3>
-                <p className="text-xs text-slate-400">
-                  {allRegistrants.length}/{SEAT_LIMIT} seats filled. Removing a user frees up a seat.
-                </p>
+                <div className="flex items-center gap-3 text-xs text-slate-400 pt-0.5">
+                  <span>{allRegistrants.length}/{SEAT_LIMIT} registered</span>
+                  <span>•</span>
+                  <span className="text-emerald-400 font-bold">{presentCount} Present</span>
+                  <span>•</span>
+                  <span className="text-rose-400 font-bold">{absentCount} Absent</span>
+                </div>
               </div>
 
-              {/* Search bar */}
-              <div className="relative shrink-0">
-                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-base">search</span>
-                <input
-                  type="text"
-                  placeholder="Search by name, reg no., email, or phone…"
-                  value={registrantSearch}
-                  onChange={(e) => setRegistrantSearch(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-black/50 border border-white/10 text-white text-xs placeholder-slate-500 focus:outline-none focus:border-purple-500 transition-colors"
-                />
-                {registrantSearch && (
-                  <button
-                    onClick={() => setRegistrantSearch('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
-                  >
-                    <span className="material-symbols-outlined text-sm">close</span>
-                  </button>
-                )}
+              {/* Search & Filter Bar */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+                {/* Search Input */}
+                <div className="relative flex-1">
+                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-base">search</span>
+                  <input
+                    type="text"
+                    placeholder="Search name, reg no, email…"
+                    value={registrantSearch}
+                    onChange={(e) => setRegistrantSearch(e.target.value)}
+                    className="w-full pl-9 pr-8 py-2 rounded-xl bg-black/50 border border-white/10 text-white text-xs placeholder-slate-500 focus:outline-none focus:border-purple-500 transition-colors"
+                  />
+                  {registrantSearch && (
+                    <button
+                      onClick={() => setRegistrantSearch('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+                    >
+                      <span className="material-symbols-outlined text-sm">close</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Attendance Filter Tabs */}
+                <div className="flex items-center bg-black/60 p-1 rounded-xl border border-white/10 shrink-0">
+                  {(['All', 'Present', 'Absent'] as const).map((filterOpt) => {
+                    const isActive = presenceFilter === filterOpt;
+                    const badgeCount = filterOpt === 'All' ? allRegistrants.length : filterOpt === 'Present' ? presentCount : absentCount;
+                    return (
+                      <button
+                        key={filterOpt}
+                        onClick={() => setPresenceFilter(filterOpt)}
+                        className={`px-3 py-1 rounded-lg text-[10px] font-extrabold transition-all flex items-center gap-1.5 ${
+                          isActive
+                            ? 'bg-purple-600 text-white shadow-[0_0_12px_rgba(168,85,247,0.4)]'
+                            : 'text-slate-400 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <span>{filterOpt}</span>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono ${isActive ? 'bg-white/20 text-white' : 'bg-white/10 text-slate-400'}`}>
+                          {badgeCount}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Registrant List */}
-              <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+              <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
                 {allRegistrants.length === 0 ? (
                   <div className="py-10 text-center text-slate-500 text-xs">No registrations yet.</div>
                 ) : filtered.length === 0 ? (
-                  <div className="py-10 text-center text-slate-500 text-xs">No results for &ldquo;{registrantSearch}&rdquo;</div>
+                  <div className="py-10 text-center text-slate-500 text-xs">No registrants match the selected criteria.</div>
                 ) : (
                   filtered.map((r, idx) => (
                     <div
                       key={r.docId}
-                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 px-4 py-3 rounded-xl bg-white/5 border border-white/10 hover:border-purple-500/30 transition-all"
+                      className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 rounded-xl border transition-all ${
+                        r.is_present
+                          ? 'bg-emerald-950/20 border-emerald-500/30'
+                          : 'bg-white/5 border-white/10 hover:border-purple-500/30'
+                      }`}
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <span className="text-[10px] font-mono text-slate-500 w-5 shrink-0">#{idx + 1}</span>
                         <div className="min-w-0">
-                          <p className="text-xs font-bold text-white truncate">{r.full_name}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs font-bold text-white truncate">{r.full_name}</p>
+                            {r.is_present && (
+                              <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[9px] font-extrabold uppercase tracking-wider flex items-center gap-1">
+                                <span className="material-symbols-outlined text-[10px]">check_circle</span>
+                                Present
+                              </span>
+                            )}
+                          </div>
                           <p className="text-[10px] text-slate-400 truncate">{r.user_email}</p>
                           <p className="text-[10px] font-mono text-purple-300">{r.registration_number}</p>
                           {r.phone && <p className="text-[10px] text-slate-500">{r.phone}</p>}
                         </div>
                       </div>
-                      <button
-                        onClick={() => handleRemoveRegistrant(r.docId)}
-                        disabled={removingId === r.docId}
-                        title="Remove registrant"
-                        className="self-end sm:self-auto shrink-0 px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 text-[10px] font-bold transition-all flex items-center gap-1 disabled:opacity-50 active:scale-95"
-                      >
-                        <span className="material-symbols-outlined text-xs">person_remove</span>
-                        {removingId === r.docId ? 'Removing...' : 'Remove'}
-                      </button>
+
+                      {/* Action buttons: Present toggle & Remove */}
+                      <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                        <button
+                          onClick={() => handleTogglePresence(r.docId, Boolean(r.is_present))}
+                          disabled={togglingPresenceId === r.docId}
+                          title={r.is_present ? 'Mark as Absent' : 'Mark as Present'}
+                          className={`px-3 py-1.5 rounded-lg text-[10px] font-extrabold transition-all flex items-center gap-1.5 shadow-sm active:scale-95 disabled:opacity-50 ${
+                            r.is_present
+                              ? 'bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.2)]'
+                              : 'bg-white/10 hover:bg-emerald-500/20 border border-white/20 hover:border-emerald-500/40 text-slate-300 hover:text-emerald-300'
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-xs">
+                            {r.is_present ? 'check_box' : 'check_box_outline_blank'}
+                          </span>
+                          <span>{togglingPresenceId === r.docId ? 'Saving...' : r.is_present ? 'Marked Present' : 'Mark Present'}</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleRemoveRegistrant(r.docId)}
+                          disabled={removingId === r.docId}
+                          title="Remove registrant"
+                          className="px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 text-[10px] font-bold transition-all flex items-center gap-1 disabled:opacity-50 active:scale-95"
+                        >
+                          <span className="material-symbols-outlined text-xs">person_remove</span>
+                          {removingId === r.docId ? 'Removing...' : 'Remove'}
+                        </button>
+                      </div>
                     </div>
                   ))
                 )}
@@ -784,14 +986,28 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
               </div>
             </div>
 
-            <div>
-              <label className="block text-slate-300 font-semibold mb-1">Event Date</label>
-              <input
-                type="date"
-                value={newDate}
-                onChange={(e) => setNewDate(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/10 text-white font-mono focus:outline-none focus:border-amber-500"
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Category *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Esports Tournament, VR Showcase..."
+                  value={newCategory}
+                  onChange={(e) => setNewCategory(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/10 text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Event Date</label>
+                <input
+                  type="date"
+                  value={newDate}
+                  onChange={(e) => setNewDate(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/10 text-white font-mono focus:outline-none focus:border-amber-500"
+                />
+              </div>
             </div>
 
             <div>
@@ -830,6 +1046,133 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
                 className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-extrabold shadow-[0_0_20px_rgba(245,158,11,0.4)] active:scale-95 transition-all"
               >
                 {creatingEvent ? 'Publishing...' : 'Publish Event'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Modal: Admin Edit Event */}
+      {editingEvent && canManageEvents && (
+        <div className="fixed inset-0 z-[150] bg-black/85 backdrop-blur-md flex items-end sm:items-center justify-center sm:p-4 animate-in fade-in duration-150">
+          <form
+            onSubmit={handleSaveEditEvent}
+            className="bg-[#0e0518] border border-amber-500/40 rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 sm:p-8 space-y-4 shadow-[0_0_60px_rgba(245,158,11,0.3)] relative text-xs max-h-[90vh] overflow-y-auto"
+          >
+            <button
+              type="button"
+              onClick={() => setEditingEvent(null)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-full bg-white/5 hover:bg-white/10"
+            >
+              <span className="material-symbols-outlined text-lg">close</span>
+            </button>
+
+            <div className="space-y-1">
+              <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest">ADMIN EVENT DESK</span>
+              <h3 className="text-xl font-extrabold text-white">Modify Event Details</h3>
+              <p className="text-[10px] text-slate-400 font-mono">ID: {editingEvent.id}</p>
+            </div>
+
+            <div>
+              <label className="block text-slate-300 font-semibold mb-1">Event Title *</label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. BGMI Squad Showdown 2026"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/10 text-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Original Price (₹ List Price)</label>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="e.g. 100"
+                  value={editOriginalFee}
+                  onChange={(e) => setEditOriginalFee(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/10 text-white font-mono placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Offer Price (₹ Charged) *</label>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  placeholder="0 (Free)"
+                  value={editFee}
+                  onChange={(e) => setEditFee(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/10 text-white font-mono placeholder-slate-500 focus:outline-none focus:border-amber-500 font-bold"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Category *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Esports Tournament, VR Showcase..."
+                  value={editCategory}
+                  onChange={(e) => setEditCategory(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/10 text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Event Date</label>
+                <input
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/10 text-white font-mono focus:outline-none focus:border-amber-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-slate-300 font-semibold mb-1">Venue / Location</label>
+              <input
+                type="text"
+                placeholder="e.g. Auditorium, VIT Bhopal"
+                value={editLocation}
+                onChange={(e) => setEditLocation(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/10 text-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-300 font-semibold mb-1">Event Description</label>
+              <textarea
+                rows={3}
+                placeholder="Details, prize pool, and guidelines..."
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/10 text-white focus:outline-none focus:border-amber-500 resize-none"
+              />
+            </div>
+
+            <div className="pt-2 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setEditingEvent(null)}
+                className="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={savingEdit}
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-extrabold shadow-[0_0_20px_rgba(245,158,11,0.4)] transition-all flex items-center gap-2"
+              >
+                <span className="material-symbols-outlined text-sm">save</span>
+                <span>{savingEdit ? 'Saving...' : 'Save Changes'}</span>
               </button>
             </div>
           </form>

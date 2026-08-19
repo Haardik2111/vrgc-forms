@@ -23,7 +23,8 @@ const Navbar: React.FC<NavbarProps> = ({ pageTitle = 'Dashboard', userEmail, use
   };
 
   const regNo = memberData?.registrationNumber || memberData?.regNo || extractRegNo(userEmail);
-  const displayName = user?.displayName || memberData?.name || memberData?.fullName || (userEmail ? userEmail.split('@')[0] : '');
+  const rawName = user?.displayName || memberData?.name || memberData?.fullName || (userEmail ? userEmail.split('@')[0] : 'User');
+  const firstName = rawName.trim().split(' ')[0];
   const photoUrl = user?.photoURL || null;
 
   return (
@@ -61,23 +62,20 @@ const Navbar: React.FC<NavbarProps> = ({ pageTitle = 'Dashboard', userEmail, use
           </span>
         )}
 
-        {/* User Name, Google Photo & Email Pill */}
+        {/* User First Name & Google Photo Pill (email & reg number hidden) */}
         {userEmail && (
-          <div className="hidden md:flex items-center gap-2 bg-[#12081c]/80 rounded-full px-2.5 py-1 border border-purple-500/30 max-w-[260px]">
+          <div className="hidden md:flex items-center gap-2 bg-[#12081c]/80 rounded-full px-3 py-1 border border-purple-500/30 max-w-[200px]">
             {photoUrl ? (
               <img
                 src={photoUrl}
-                alt={displayName || 'User Avatar'}
+                alt={firstName || 'User Avatar'}
                 className="w-6 h-6 rounded-full object-cover border border-purple-400/40 shrink-0"
                 referrerPolicy="no-referrer"
               />
             ) : (
               <span className="material-symbols-outlined text-[15px] text-purple-400 shrink-0">account_circle</span>
             )}
-            <div className="flex flex-col text-left min-w-0">
-              <span className="text-[10px] text-white font-bold truncate leading-tight">{displayName}</span>
-              <span className="text-[8px] text-purple-300/80 font-mono truncate">{userEmail}</span>
-            </div>
+            <span className="text-xs text-white font-extrabold truncate">{firstName}</span>
           </div>
         )}
 

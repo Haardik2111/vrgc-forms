@@ -597,8 +597,11 @@ const Referrals: React.FC<ReferralsProps> = ({
       }
 
       // 3. Status Filter
-      if (adminStatusFilter !== 'All') {
-        const status = (getRefVal(ref, 'Status') || getRefVal(ref, 'status') || 'Pending').toLowerCase();
+      const status = (getRefVal(ref, 'Status') || getRefVal(ref, 'status') || 'Pending').toLowerCase();
+      if (adminStatusFilter === 'All') {
+        // By default on main referral list, exclude Admitted and Rejected candidates (show only active/in-process/pending)
+        if (status === 'admitted' || status === 'rejected') return false;
+      } else {
         if (adminStatusFilter === 'Pending' && status !== 'pending') return false;
         if (adminStatusFilter === 'In Process' && !status.includes('process')) return false;
         if (adminStatusFilter === 'Invited to Interview' && !status.includes('interview')) return false;
@@ -1336,67 +1339,6 @@ const Referrals: React.FC<ReferralsProps> = ({
           </div>
         )}
 
-        {/* Candidate Detail Inspector Modal */}
-        {inspectingCandidate && (
-          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
-            <div className="glass-panel p-6 md:p-8 rounded-2xl max-w-lg w-full text-left space-y-6 border border-purple-500/30 shadow-[0_0_50px_rgba(168,85,247,0.3)] relative my-auto max-h-[90vh] overflow-y-auto custom-scrollbar">
-              <div className="flex justify-between items-start border-b border-purple-500/20 pb-4">
-                <div>
-                  <h3 className="font-display-lg text-2xl text-white font-extrabold">
-                    Candidate Dossier
-                  </h3>
-                  <p className="text-[10px] text-purple-400 font-code-sm uppercase tracking-wider mt-0.5">
-                    ID: {inspectingCandidate.id || 'LOCAL_RECORD'}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setInspectingCandidate(null)}
-                  className="p-1 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white"
-                >
-                  <span className="material-symbols-outlined text-xl">close</span>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                <div>
-                  <span className="text-[10px] text-purple-300 font-label-caps tracking-widest block font-bold">CANDIDATE NAME</span>
-                  <span className="text-sm font-bold text-white block">{getRefVal(inspectingCandidate, "Candidate Name") || getRefVal(inspectingCandidate, "candidateName")}</span>
-                </div>
-                
-                <div>
-                  <span className="text-[10px] text-purple-300 font-label-caps tracking-widest block font-bold">REGISTRATION NUMBER</span>
-                  <span className="text-sm font-bold text-purple-400 font-code-sm block">{getRefVal(inspectingCandidate, "Candidate Registration Number") || getRefVal(inspectingCandidate, "candidateRegNo")}</span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] text-purple-300 font-label-caps tracking-widest block font-bold">EMAIL ADDRESS</span>
-                  <span className="text-sm font-bold text-white block truncate">{getRefVal(inspectingCandidate, "Candidate Email") || getRefVal(inspectingCandidate, "candidateEmail")}</span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] text-purple-300 font-label-caps tracking-widest block font-bold">PHONE NUMBER</span>
-                  <span className="text-sm font-bold text-white block">{getRefVal(inspectingCandidate, "Candidate Phone") || getRefVal(inspectingCandidate, "candidatePhone")}</span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] text-purple-300 font-label-caps tracking-widest block font-bold">TARGETED TEAM</span>
-                  <span className="text-sm font-bold text-yellow-400 block">{getRefVal(inspectingCandidate, "Target Team") || getRefVal(inspectingCandidate, "targetTeam") || "Technical"}</span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] text-purple-300 font-label-caps tracking-widest block font-bold">SUBMISSION TIMESTAMP</span>
-                  <span className="text-sm font-bold text-white block">{new Date(getRefVal(inspectingCandidate, "Timestamp") || getRefVal(inspectingCandidate, "timestamp") || new Date()).toLocaleString()}</span>
-                </div>
-              </div>
-
-              <div className="flex justify-between items-center border-t border-purple-500/20 pt-4">
-                <span className="text-[10px] text-purple-300 font-label-caps tracking-widest font-bold">DOSSIER STATUS</span>
-                {getStatusPill(getRefVal(inspectingCandidate, "Status") || getRefVal(inspectingCandidate, "status"))}
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Sync Toast Notification */}
         {syncToastMessage && (
           <div className="fixed bottom-6 right-6 z-50 glass-panel p-4 rounded-xl border border-green-500/40 bg-black/90 flex items-center gap-3 text-left shadow-[0_10px_30px_rgba(0,0,0,0.8)]">
@@ -1406,6 +1348,67 @@ const Referrals: React.FC<ReferralsProps> = ({
         )}
 
       </div>
+
+      {/* Candidate Detail Inspector Modal */}
+      {inspectingCandidate && (
+        <div className="fixed inset-0 z-[999] w-screen h-screen bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="glass-panel p-6 md:p-8 rounded-2xl max-w-lg w-full text-left space-y-5 border border-purple-500/30 shadow-[0_0_60px_rgba(168,85,247,0.4)] relative max-h-[85vh] overflow-y-auto custom-scrollbar animate-in zoom-in-95 duration-150">
+            <div className="flex justify-between items-start border-b border-purple-500/20 pb-4">
+              <div>
+                <h3 className="font-display-lg text-2xl text-white font-extrabold">
+                  Candidate Dossier
+                </h3>
+                <p className="text-[10px] text-purple-400 font-code-sm uppercase tracking-wider mt-0.5">
+                  ID: {inspectingCandidate.id || 'LOCAL_RECORD'}
+                </p>
+              </div>
+              <button
+                onClick={() => setInspectingCandidate(null)}
+                className="p-1.5 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-colors"
+              >
+                <span className="material-symbols-outlined text-xl">close</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              <div>
+                <span className="text-[10px] text-purple-300 font-label-caps tracking-widest block font-bold mb-0.5">CANDIDATE NAME</span>
+                <span className="text-sm font-bold text-white block">{getRefVal(inspectingCandidate, "Candidate Name") || getRefVal(inspectingCandidate, "candidateName")}</span>
+              </div>
+              
+              <div>
+                <span className="text-[10px] text-purple-300 font-label-caps tracking-widest block font-bold mb-0.5">REGISTRATION NUMBER</span>
+                <span className="text-sm font-bold text-purple-400 font-code-sm block">{getRefVal(inspectingCandidate, "Candidate Registration Number") || getRefVal(inspectingCandidate, "candidateRegNo")}</span>
+              </div>
+
+              <div className="sm:col-span-2">
+                <span className="text-[10px] text-purple-300 font-label-caps tracking-widest block font-bold mb-0.5">EMAIL ADDRESS</span>
+                <span className="text-sm font-bold text-white block truncate">{getRefVal(inspectingCandidate, "Candidate Email") || getRefVal(inspectingCandidate, "candidateEmail")}</span>
+              </div>
+
+              <div>
+                <span className="text-[10px] text-purple-300 font-label-caps tracking-widest block font-bold mb-0.5">PHONE NUMBER</span>
+                <span className="text-sm font-bold text-white block">{getRefVal(inspectingCandidate, "Candidate Phone") || getRefVal(inspectingCandidate, "candidatePhone")}</span>
+              </div>
+
+              <div>
+                <span className="text-[10px] text-purple-300 font-label-caps tracking-widest block font-bold mb-0.5">TARGETED TEAM</span>
+                <span className="text-sm font-bold text-yellow-400 block">{getRefVal(inspectingCandidate, "Target Team") || getRefVal(inspectingCandidate, "targetTeam") || "Technical"}</span>
+              </div>
+
+              <div className="sm:col-span-2">
+                <span className="text-[10px] text-purple-300 font-label-caps tracking-widest block font-bold mb-0.5">SUBMISSION TIMESTAMP</span>
+                <span className="text-sm font-bold text-white block">{new Date(getRefVal(inspectingCandidate, "Timestamp") || getRefVal(inspectingCandidate, "timestamp") || new Date()).toLocaleString()}</span>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center border-t border-purple-500/20 pt-4">
+              <span className="text-[10px] text-purple-300 font-label-caps tracking-widest font-bold">DOSSIER STATUS</span>
+              {getStatusPill(getRefVal(inspectingCandidate, "Status") || getRefVal(inspectingCandidate, "status"))}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 };
