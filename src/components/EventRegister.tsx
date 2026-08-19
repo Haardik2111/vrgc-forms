@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, addDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { createPaymentInFirestore } from '@/lib/payments';
 import { PaymentItem } from '@/types/payment';
 
@@ -14,6 +14,7 @@ interface EventItem {
   date: string;
   location: string;
   fee: number;
+  originalFee?: number;
   description: string;
   bannerUrl?: string;
   status: 'Upcoming' | 'Live' | 'Closed';
@@ -33,7 +34,8 @@ const DEFAULT_EVENTS: EventItem[] = [
     category: 'Esports Tournament',
     date: '2026-09-15',
     location: 'Auditorium / VRGC Arena, VIT Bhopal',
-    fee: 150,
+    fee: 0,
+    originalFee: 100,
     description: 'Join the ultimate VR & Gaming showdown at VIT Bhopal! Compete in BGMI, Valorant, FIFA, and VR Immersion trials. Certificates and cash prizes for top teams.',
     status: 'Upcoming',
   },
@@ -43,7 +45,8 @@ const DEFAULT_EVENTS: EventItem[] = [
     category: 'Workshop',
     date: '2026-09-28',
     location: 'Lab Block L-204',
-    fee: 99,
+    fee: 0,
+    originalFee: 150,
     description: 'Hands-on Unity & Unreal Engine VR development bootcamp organized by VRGC Tech Team. Build your first VR room scale application.',
     status: 'Upcoming',
   },
@@ -75,7 +78,8 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
   const [newCategory, setNewCategory] = useState<string>('Esports Tournament');
   const [newDate, setNewDate] = useState<string>('');
   const [newLocation, setNewLocation] = useState<string>('');
-  const [newFee, setNewFee] = useState<string>('');
+  const [newFee, setNewFee] = useState<string>('0');
+  const [newOriginalFee, setNewOriginalFee] = useState<string>('100');
   const [newDescription, setNewDescription] = useState<string>('');
   const [creatingEvent, setCreatingEvent] = useState<boolean>(false);
 
@@ -106,6 +110,7 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
               date: data.date || '',
               location: data.location || '',
               fee: Number(data.fee) || 0,
+              originalFee: data.originalFee !== undefined ? Number(data.originalFee) : undefined,
               description: data.description || '',
               status: data.status || 'Upcoming',
             });
@@ -126,7 +131,7 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canManageEvents) return;
-    if (!newTitle || !newFee || Number(newFee) < 0) return;
+    if (!newTitle || newFee === '' || Number(newFee) < 0) return;
 
     setCreatingEvent(true);
     try {
@@ -136,6 +141,7 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
         date: newDate || new Date().toISOString().split('T')[0],
         location: newLocation || 'VIT Bhopal Campus',
         fee: Number(newFee),
+        originalFee: newOriginalFee !== '' ? Number(newOriginalFee) : undefined,
         description: newDescription || 'Official VRGC Event',
         status: 'Upcoming',
         created_at: serverTimestamp(),
@@ -151,7 +157,8 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
       setEvents((prev) => [createdItem, ...prev]);
       setShowCreateModal(false);
       setNewTitle('');
-      setNewFee('');
+      setNewFee('0');
+      setNewOriginalFee('100');
       setNewDescription('');
       setNewLocation('');
     } catch (err) {
@@ -205,6 +212,19 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
       console.error('Registration failed:', err);
     } finally {
       setIsSubmittingReg(false);
+    }
+  };
+
+  // Admin: Delete event from Firestore & state
+  const handleDeleteEvent = async (eventId: string, title: string) => {
+    if (!canManageEvents) return;
+    if (!confirm(`Are you sure you want to delete the event "${title}"? This cannot be undone.`)) return;
+
+    try {
+      await deleteDoc(doc(db, 'events', eventId));
+      setEvents((prev) => prev.filter((e) => e.id !== eventId));
+    } catch (err) {
+      console.error('Failed to delete event:', err);
     }
   };
 
@@ -286,9 +306,32 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
                     <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-purple-500/10 text-purple-400 border border-purple-500/30">
                       {evt.category}
                     </span>
-                    <span className="text-xs font-bold text-amber-400 font-mono bg-amber-500/10 px-3 py-1 rounded-xl border border-amber-500/20">
-                      {evt.fee === 0 ? 'FREE ENTRY' : `₹${evt.fee} INR`}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-500/10 border border-amber-500/30">
+                        {evt.originalFee && evt.originalFee > evt.fee && (
+                          <span className="text-xs text-slate-400 font-mono line-through font-semibold">
+                            ₹{evt.originalFee}
+                          </span>
+                        )}
+                        <span className="text-xs font-black text-emerald-400 font-mono">
+                          {evt.fee === 0 ? 'FREE ENTRY' : `₹${evt.fee}`}
+                        </span>
+                        {evt.originalFee && evt.originalFee > evt.fee && (
+                          <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                            OFFER
+                          </span>
+                        )}
+                      </div>
+                      {canManageEvents && (
+                        <button
+                          onClick={() => handleDeleteEvent(evt.id, evt.title)}
+                          title="Delete Event"
+                          className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition-all shrink-0"
+                        >
+                          <span className="material-symbols-outlined text-sm">delete</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div>
@@ -486,31 +529,28 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Entry Fee (₹ INR) *</label>
+                <label className="block text-slate-300 font-semibold mb-1">Original Price (₹ List Price)</label>
                 <input
                   type="number"
                   min="0"
-                  required
-                  placeholder="150"
-                  value={newFee}
-                  onChange={(e) => setNewFee(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/10 text-white focus:outline-none focus:border-amber-500"
+                  placeholder="e.g. 100"
+                  value={newOriginalFee}
+                  onChange={(e) => setNewOriginalFee(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/10 text-white font-mono placeholder-slate-500 focus:outline-none focus:border-amber-500"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Category</label>
-                <select
-                  value={newCategory}
-                  onChange={(e) => setNewCategory(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#0a0315] border border-white/10 text-white focus:outline-none focus:border-amber-500"
-                >
-                  <option value="Esports Tournament">Esports Tournament</option>
-                  <option value="Workshop">Workshop</option>
-                  <option value="VR Showcase">VR Showcase</option>
-                  <option value="Hackathon">Hackathon</option>
-                  <option value="Other">Other</option>
-                </select>
+                <label className="block text-slate-300 font-semibold mb-1">Offer Price (₹ Charged) *</label>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  placeholder="0 (Free)"
+                  value={newFee}
+                  onChange={(e) => setNewFee(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/10 text-white font-mono placeholder-slate-500 focus:outline-none focus:border-amber-500 font-bold"
+                />
               </div>
             </div>
 
