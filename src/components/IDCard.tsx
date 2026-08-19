@@ -2507,10 +2507,6 @@ const IDCard: React.FC<IDCardProps> = ({
                       }
                     })()}
                     <div className="border-b border-white/5 pb-2">
-                      <span className="font-code-sm text-[8px] text-[#a855f7] uppercase tracking-widest block font-bold mb-0.5">PHONE NUMBER</span>
-                      <span className="text-white text-sm block font-code-sm">{previewCandidate.phone || "N/A"}</span>
-                    </div>
-                    <div className="border-b border-white/5 pb-2">
                       <span className="font-code-sm text-[8px] text-[#a855f7] uppercase tracking-widest block font-bold mb-0.5">SUBMISSION DATE</span>
                       <span className="text-white/60 block font-code-sm">
                         {previewCandidate.submittedAt ? new Date(previewCandidate.submittedAt).toLocaleDateString() : "N/A"}

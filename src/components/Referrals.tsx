@@ -1338,8 +1338,8 @@ const Referrals: React.FC<ReferralsProps> = ({
 
         {/* Candidate Detail Inspector Modal */}
         {inspectingCandidate && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-            <div className="glass-panel p-8 rounded-2xl max-w-lg w-full text-left space-y-6 border border-purple-500/30 shadow-[0_0_50px_rgba(0,0,0,0.8)]">
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
+            <div className="glass-panel p-6 md:p-8 rounded-2xl max-w-lg w-full text-left space-y-6 border border-purple-500/30 shadow-[0_0_50px_rgba(168,85,247,0.3)] relative my-auto max-h-[90vh] overflow-y-auto custom-scrollbar">
               <div className="flex justify-between items-start border-b border-purple-500/20 pb-4">
                 <div>
                   <h3 className="font-display-lg text-2xl text-white font-extrabold">

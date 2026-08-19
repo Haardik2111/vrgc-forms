@@ -16,7 +16,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activePage, onPageChange, isAuthorize
     { id: 'referrals', label: 'Referrals', icon: 'share', public: false },
     { id: 'idcard', label: 'ID Card Form', icon: 'badge', public: false },
     { id: 'payments', label: 'Payments & Dues', icon: 'payments', public: false },
-    { id: 'tickets', label: 'Tickets', icon: 'confirmation_number', public: false },
   ];
 
   const menuItems = isAuthorized ? allMenuItems : allMenuItems.filter((item) => item.public);

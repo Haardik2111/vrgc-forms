@@ -337,10 +337,6 @@ function AppContent() {
               <span className="material-symbols-outlined text-xl">payments</span>
               <span className="font-label-caps text-[9px]">PAYMENTS</span>
             </button>
-            <button onClick={() => handlePageChange('tickets')} className={`flex flex-col items-center gap-1 ${activePage === 'tickets' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
-              <span className="material-symbols-outlined text-xl">confirmation_number</span>
-              <span className="font-label-caps text-[9px]">TICKETS</span>
-            </button>
           </>
         )}
       </nav>
