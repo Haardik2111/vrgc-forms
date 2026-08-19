@@ -312,10 +312,39 @@ const Referrals: React.FC<ReferralsProps> = ({
     }
   };
 
+  const [isEmailManuallyEdited, setIsEmailManuallyEdited] = useState<boolean>(false);
+
+  // Helper to compute candidate VIT Email from Name and Registration Number
+  const computeAutoEmail = (candidateName: string, regNo: string) => {
+    const firstName = candidateName.trim().split(/\s+/)[0]?.toLowerCase().replace(/[^a-z0-9]/g, '') || '';
+    const cleanRegNo = regNo.trim().toLowerCase();
+    
+    if (firstName && cleanRegNo) {
+      return `${firstName}.${cleanRegNo}@vitbhopal.ac.in`;
+    }
+    return '';
+  };
+
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newName = e.target.value;
+    setName(newName);
+    if (errors.name) setErrors(prev => ({ ...prev, name: null }));
+
+    if (!isEmailManuallyEdited) {
+      const autoEmail = computeAutoEmail(newName, registrationNumber);
+      setEmail(autoEmail);
+    }
+  };
+
   const handleRegNoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
     setRegistrationNumber(val);
     if (errors.registrationNumber) setErrors(prev => ({ ...prev, registrationNumber: null }));
+
+    if (!isEmailManuallyEdited) {
+      const autoEmail = computeAutoEmail(name, val);
+      setEmail(autoEmail);
+    }
   };
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -326,6 +355,7 @@ const Referrals: React.FC<ReferralsProps> = ({
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setEmail(e.target.value);
+    setIsEmailManuallyEdited(true);
     if (errors.email) setErrors(prev => ({ ...prev, email: null }));
   };
 
@@ -388,6 +418,7 @@ const Referrals: React.FC<ReferralsProps> = ({
       setRegistrationNumber('');
       setEmail('');
       setPhone('');
+      setIsEmailManuallyEdited(false);
       setTargetTeam('Technical');
       setActiveTab('my_ops');
     }, 1500);
@@ -956,7 +987,7 @@ const Referrals: React.FC<ReferralsProps> = ({
                         <input
                           required
                           value={name}
-                          onChange={(e) => setName(e.target.value)}
+                          onChange={handleNameChange}
                           className="w-full bg-transparent border-b-2 border-purple-500/30 pl-8 pr-3 py-3 text-white text-base focus:outline-none focus:border-purple-500"
                           placeholder="Candidate Legal Name"
                           type="text"
@@ -978,7 +1009,7 @@ const Referrals: React.FC<ReferralsProps> = ({
                           value={registrationNumber}
                           onChange={handleRegNoChange}
                           className="w-full bg-transparent border-b-2 border-purple-500/30 pl-8 pr-3 py-3 text-purple-300 font-code-sm uppercase text-base focus:outline-none focus:border-purple-500"
-                          placeholder="e.g. 24BCG10082"
+                          placeholder="e.g. 24XXX10000"
                           type="text"
                         />
                       </div>
@@ -988,9 +1019,14 @@ const Referrals: React.FC<ReferralsProps> = ({
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label className="block font-label-caps text-purple-300 mb-2 tracking-widest text-xs font-bold">
-                        EMAIL ADDRESS
-                      </label>
+                      <div className="flex justify-between items-center mb-2">
+                        <label className="block font-label-caps text-purple-300 tracking-widest text-xs font-bold">
+                          EMAIL ADDRESS
+                        </label>
+                        <span className="text-[10px] text-purple-400/80 font-mono">
+                          (Auto-generated, editable)
+                        </span>
+                      </div>
                       <div className="relative">
                         <span className="material-symbols-outlined absolute left-0 bottom-3 text-slate-500">
                           alternate_email
@@ -1000,7 +1036,7 @@ const Referrals: React.FC<ReferralsProps> = ({
                           value={email}
                           onChange={handleEmailChange}
                           className="w-full bg-transparent border-b-2 border-purple-500/30 pl-8 pr-3 py-3 text-white font-code-sm text-base focus:outline-none focus:border-purple-500"
-                          placeholder="e.g. name.24xx@vitbhopal.ac.in"
+                          placeholder="e.g. name.24XXX10000@vitbhopal.ac.in"
                           type="email"
                         />
                       </div>

@@ -12,7 +12,7 @@ import Lobby25MemberEntry from '@/components/Lobby25MemberEntry';
 import Lobby24MemberEntry from '@/components/Lobby24MemberEntry';
 import EventRegister from '@/components/EventRegister';
 import Footer from '@/components/Footer';
-import { useAuth } from '@/lib/auth-context';
+import { useAuth, SPECIAL_ACCESS_EMAILS } from '@/lib/auth-context';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { db } from '@/lib/firebase';
@@ -46,6 +46,9 @@ function AppContent() {
   // ── Maintenance mode — read from Firestore in real time ───────────────────
   const [maintenanceMode, setMaintenanceMode] = useState<boolean>(false);
   const [togglingMaintenance, setTogglingMaintenance] = useState<boolean>(false);
+
+  const isSpecialAccessUser = userEmail ? SPECIAL_ACCESS_EMAILS.map((e) => e.toLowerCase()).includes(userEmail.toLowerCase()) : false;
+  const showMaintenanceScreen = maintenanceMode && !isSpecialAccessUser && !isPaymentAdmin && !isAdmin;
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'config', 'maintenance'), (snap) => {
@@ -272,7 +275,7 @@ function AppContent() {
             isAuthorized ? <Lobby24MemberEntry onRedirect={() => handlePageChange('dashboard')} /> : renderRestrictedSignIn('Lobby 24')
           )}
           {activePage === 'referrals' && (
-            maintenanceMode ? <MaintenanceScreen section="Referrals" /> :
+            showMaintenanceScreen ? <MaintenanceScreen section="Referrals" /> :
             isAuthorized ? (
               <Referrals 
                 onRedirect={() => handlePageChange('dashboard')} 
@@ -284,7 +287,7 @@ function AppContent() {
             ) : renderRestrictedSignIn('Referrals')
           )}
           {activePage === 'idcard' && (
-            maintenanceMode ? <MaintenanceScreen section="ID Card Form" /> :
+            showMaintenanceScreen ? <MaintenanceScreen section="ID Card Form" /> :
             isAuthorized ? (
               <IDCard
                 onRedirect={() => handlePageChange('dashboard')}
@@ -297,7 +300,7 @@ function AppContent() {
             ) : renderRestrictedSignIn('ID Card Portal')
           )}
           {activePage === 'payments' && (
-            maintenanceMode ? <MaintenanceScreen section="Payments & Dues" /> :
+            showMaintenanceScreen ? <MaintenanceScreen section="Payments & Dues" /> :
             isAuthorized ? (
               <Payments
                 onRedirect={() => handlePageChange('dashboard')}

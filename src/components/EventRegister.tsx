@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '@/lib/auth-context';
+import { useAuth, SPECIAL_ACCESS_EMAILS } from '@/lib/auth-context';
 import { db } from '@/lib/firebase';
 import {
   collection, getDocs, addDoc, updateDoc, deleteDoc, doc,
@@ -11,6 +11,15 @@ import { createPaymentInFirestore } from '@/lib/payments';
 import { PaymentItem } from '@/types/payment';
 
 const SEAT_LIMIT = 80;
+
+export interface CustomQuestion {
+  id: string;
+  label: string;
+  type: 'text' | 'number' | 'select' | 'textarea';
+  required: boolean;
+  options?: string[];
+  optionsRaw?: string;
+}
 
 interface EventItem {
   id: string;
@@ -23,6 +32,7 @@ interface EventItem {
   description: string;
   bannerUrl?: string;
   status: 'Upcoming' | 'Live' | 'Closed';
+  customQuestions?: CustomQuestion[];
 }
 
 interface Registrant {
@@ -34,6 +44,7 @@ interface Registrant {
   branch: string;
   registered_at: any;
   is_present?: boolean;
+  custom_answers?: Record<string, string>;
 }
 
 interface EventRegisterProps {
@@ -62,7 +73,8 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
 
   const currentUser = externalUser || user;
   const currentEmail = (externalUserEmail || userEmail || currentUser?.email || '').toLowerCase();
-  const canManageEvents = externalIsPaymentAdmin ?? isPaymentAdmin;
+  const isSpecialAccessUser = SPECIAL_ACCESS_EMAILS.map((e) => e.toLowerCase()).includes(currentEmail);
+  const canManageEvents = (externalIsPaymentAdmin ?? isPaymentAdmin) || isSpecialAccessUser;
 
   const [events, setEvents] = useState<EventItem[]>(DEFAULT_EVENTS);
   const [loading, setLoading] = useState<boolean>(true);
@@ -113,7 +125,35 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
   const [newFee, setNewFee] = useState<string>('0');
   const [newOriginalFee, setNewOriginalFee] = useState<string>('100');
   const [newDescription, setNewDescription] = useState<string>('');
+  const [newCustomQuestions, setNewCustomQuestions] = useState<CustomQuestion[]>([]);
   const [creatingEvent, setCreatingEvent] = useState<boolean>(false);
+
+  // User Custom Question Answers
+  const [customAnswers, setCustomAnswers] = useState<Record<string, string>>({});
+
+  // Helper functions for Create Modal Question Builder
+  const handleAddCreateQuestion = () => {
+    setNewCustomQuestions((prev) => [
+      ...prev,
+      {
+        id: `q_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        label: '',
+        type: 'text',
+        required: false,
+        options: [],
+      },
+    ]);
+  };
+
+  const handleUpdateCreateQuestion = (id: string, fields: Partial<CustomQuestion>) => {
+    setNewCustomQuestions((prev) =>
+      prev.map((q) => (q.id === id ? { ...q, ...fields } : q))
+    );
+  };
+
+  const handleRemoveCreateQuestion = (id: string) => {
+    setNewCustomQuestions((prev) => prev.filter((q) => q.id !== id));
+  };
 
   // Extract reg number from email if applicable
   useEffect(() => {
@@ -145,6 +185,7 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
               originalFee: data.originalFee !== undefined ? Number(data.originalFee) : undefined,
               description: data.description || '',
               status: data.status || 'Upcoming',
+              customQuestions: Array.isArray(data.customQuestions) ? data.customQuestions : [],
             });
           });
           setEvents(list);
@@ -199,6 +240,7 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
           branch: data.branch || '',
           registered_at: data.registered_at,
           is_present: Boolean(data.is_present),
+          custom_answers: data.custom_answers || {},
         });
       });
       setAdminRegistrants((prev) => ({ ...prev, [adminPanelEventId]: list }));
@@ -234,7 +276,44 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
   const [editFee, setEditFee] = useState<string>('0');
   const [editOriginalFee, setEditOriginalFee] = useState<string>('');
   const [editDescription, setEditDescription] = useState<string>('');
+  const [editCustomQuestions, setEditCustomQuestions] = useState<CustomQuestion[]>([]);
   const [savingEdit, setSavingEdit] = useState<boolean>(false);
+
+  // Helper functions for Edit Modal Question Builder
+  const handleAddEditQuestion = () => {
+    setEditCustomQuestions((prev) => [
+      ...prev,
+      {
+        id: `q_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        label: '',
+        type: 'text',
+        required: false,
+        options: [],
+      },
+    ]);
+  };
+
+  const handleUpdateEditQuestion = (id: string, fields: Partial<CustomQuestion>) => {
+    setEditCustomQuestions((prev) =>
+      prev.map((q) => (q.id === id ? { ...q, ...fields } : q))
+    );
+  };
+
+  const handleRemoveEditQuestion = (id: string) => {
+    setEditCustomQuestions((prev) => prev.filter((q) => q.id !== id));
+  };
+
+  // Helper for opening user registration modal
+  const handleOpenRegisterModal = (evt: EventItem) => {
+    setRegisteringEvent(evt);
+    const initialAnswers: Record<string, string> = {};
+    if (evt.customQuestions) {
+      evt.customQuestions.forEach((q) => {
+        initialAnswers[q.id] = '';
+      });
+    }
+    setCustomAnswers(initialAnswers);
+  };
 
   // Admin: Open Edit Event Modal
   const handleOpenEditModal = (evt: EventItem) => {
@@ -246,6 +325,11 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
     setEditFee(String(evt.fee ?? 0));
     setEditOriginalFee(evt.originalFee !== undefined ? String(evt.originalFee) : '');
     setEditDescription(evt.description || '');
+    const questionsCopy = (evt.customQuestions || []).map((q) => ({
+      ...q,
+      optionsRaw: (q.options || []).join(', '),
+    }));
+    setEditCustomQuestions(questionsCopy);
   };
 
   // Admin: Save Edited Event in Firestore & Local State
@@ -254,18 +338,43 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
     if (!editingEvent || !canManageEvents) return;
     if (!editTitle || editFee === '' || Number(editFee) < 0) return;
 
+    const validCustomQuestions = editCustomQuestions
+      .filter((q) => q.label.trim() !== '')
+      .map((q) => {
+        const item: CustomQuestion = {
+          id: q.id,
+          label: q.label.trim(),
+          type: q.type,
+          required: Boolean(q.required),
+        };
+        if (q.type === 'select') {
+          const rawStr = q.optionsRaw !== undefined ? q.optionsRaw : (q.options || []).join(',');
+          item.options = rawStr.split(',').map((s) => s.trim()).filter(Boolean);
+        }
+        return item;
+      });
+
+    if (validCustomQuestions.length === 0) {
+      alert('Please add at least 1 custom question for this event before saving changes.');
+      return;
+    }
+
     setSavingEdit(true);
     try {
-      const updatedFields = {
+      const updatedFields: any = {
         title: editTitle,
         category: editCategory,
         date: editDate,
         location: editLocation,
         fee: Number(editFee),
-        originalFee: editOriginalFee !== '' ? Number(editOriginalFee) : undefined,
         description: editDescription,
+        customQuestions: validCustomQuestions,
         updated_at: serverTimestamp(),
       };
+
+      if (editOriginalFee !== '') {
+        updatedFields.originalFee = Number(editOriginalFee);
+      }
 
       await updateDoc(doc(db, 'events', editingEvent.id), updatedFields);
 
@@ -286,19 +395,44 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
     if (!canManageEvents) return;
     if (!newTitle || newFee === '' || Number(newFee) < 0) return;
 
+    const validCustomQuestions = newCustomQuestions
+      .filter((q) => q.label.trim() !== '')
+      .map((q) => {
+        const item: CustomQuestion = {
+          id: q.id,
+          label: q.label.trim(),
+          type: q.type,
+          required: Boolean(q.required),
+        };
+        if (q.type === 'select') {
+          const rawStr = q.optionsRaw !== undefined ? q.optionsRaw : (q.options || []).join(',');
+          item.options = rawStr.split(',').map((s) => s.trim()).filter(Boolean);
+        }
+        return item;
+      });
+
+    if (validCustomQuestions.length === 0) {
+      alert('Please add at least 1 custom question for this event before publishing.');
+      return;
+    }
+
     setCreatingEvent(true);
     try {
-      const newEventObj = {
+      const newEventObj: any = {
         title: newTitle,
         category: newCategory,
         date: newDate || new Date().toISOString().split('T')[0],
         location: newLocation || 'VIT Bhopal Campus',
         fee: Number(newFee),
-        originalFee: newOriginalFee !== '' ? Number(newOriginalFee) : undefined,
         description: newDescription || 'Official VRGC Event',
+        customQuestions: validCustomQuestions,
         status: 'Upcoming',
         created_at: serverTimestamp(),
       };
+
+      if (newOriginalFee !== '') {
+        newEventObj.originalFee = Number(newOriginalFee);
+      }
 
       const docRef = await addDoc(collection(db, 'events'), newEventObj);
       const createdItem: EventItem = {
@@ -314,6 +448,7 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
       setNewOriginalFee('100');
       setNewDescription('');
       setNewLocation('');
+      setNewCustomQuestions([]);
     } catch (err) {
       console.error('Failed to create event:', err);
     } finally {
@@ -334,17 +469,50 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
       return;
     }
 
+    // Validate required custom fields
+    if (registeringEvent.customQuestions) {
+      for (const q of registeringEvent.customQuestions) {
+        const val = String(customAnswers[q.id] ?? '').trim();
+        if (q.required && val === '') {
+          alert(`Please answer the required question: "${q.label}"`);
+          return;
+        }
+      }
+    }
+
     setIsSubmittingReg(true);
     try {
+      const sanitizedAnswers: Record<string, string> = {};
+      if (registeringEvent.customQuestions) {
+        registeringEvent.customQuestions.forEach((q) => {
+          sanitizedAnswers[q.id] = String(customAnswers[q.id] ?? '').trim();
+        });
+      }
+
+      let finalFullName = fullName || currentUser?.displayName || 'Student';
+      let finalRegNo = regNo ? regNo.toUpperCase() : '';
+      let finalPhone = phone || '';
+
+      if (registeringEvent.customQuestions && registeringEvent.customQuestions.length > 0) {
+        for (const q of registeringEvent.customQuestions) {
+          const lbl = q.label.toLowerCase();
+          const ans = String(customAnswers[q.id] ?? '').trim();
+          if ((lbl.includes('name') || lbl.includes('full name')) && ans) finalFullName = ans;
+          if ((lbl.includes('reg') || lbl.includes('roll')) && ans) finalRegNo = ans.toUpperCase();
+          if ((lbl.includes('phone') || lbl.includes('whatsapp') || lbl.includes('mobile') || lbl.includes('contact')) && ans) finalPhone = ans;
+        }
+      }
+
       // 1. Record registration in Firestore 'event_registrations' collection
       await addDoc(collection(db, 'event_registrations'), {
         event_id: registeringEvent.id,
         event_title: registeringEvent.title,
         user_email: currentEmail,
-        full_name: fullName || currentUser?.displayName || 'Student',
-        registration_number: regNo.toUpperCase(),
-        phone: phone || '',
+        full_name: finalFullName,
+        registration_number: finalRegNo,
+        phone: finalPhone,
         branch: branch || '',
+        custom_answers: sanitizedAnswers,
         registered_at: serverTimestamp(),
         payment_status: registeringEvent.fee > 0 ? 'Pending' : 'Free',
       });
@@ -353,9 +521,9 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
       if (registeringEvent.fee > 0) {
         await createPaymentInFirestore({
           user_email: currentEmail,
-          candidate_name: fullName || currentUser?.displayName || 'Student',
-          registration_number: regNo.toUpperCase(),
-          team: branch || 'Event Guest',
+          candidate_name: finalFullName,
+          registration_number: finalRegNo,
+          team: 'Event Guest',
           title: `Registration Fee: ${registeringEvent.title}`,
           description: `Official registration for ${registeringEvent.title}. Location: ${registeringEvent.location}`,
           category: 'Event Registration',
@@ -648,7 +816,7 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
                     </button>
                   ) : currentEmail ? (
                     <button
-                      onClick={() => setRegisteringEvent(evt)}
+                      onClick={() => handleOpenRegisterModal(evt)}
                       className="w-full sm:w-auto justify-center px-6 py-3 sm:py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 active:scale-95 text-white text-xs font-bold shadow-[0_0_20px_rgba(168,85,247,0.35)] transition-all flex items-center gap-2"
                     >
                       <span>Register Now</span>
@@ -690,41 +858,114 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
             </div>
 
             <form onSubmit={handleConfirmRegistration} className="space-y-4 text-xs">
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Full Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Abhinav Mishra"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
-                />
+              {/* Signed-in Identity Badge */}
+              <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-between text-xs">
+                <span className="text-slate-300 font-semibold">Account:</span>
+                <span className="text-purple-300 font-mono font-bold truncate max-w-[220px]">{currentEmail}</span>
               </div>
 
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Registration Number *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. 25BCY10254"
-                  value={regNo}
-                  onChange={(e) => setRegNo(e.target.value.toUpperCase())}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/10 text-white font-mono placeholder-slate-500 focus:outline-none focus:border-purple-500 uppercase"
-                />
-              </div>
+              {/* Dynamic Event-Specific Custom Questions */}
+              {registeringEvent.customQuestions && registeringEvent.customQuestions.length > 0 ? (
+                <div className="space-y-3.5 pt-1">
+                  {registeringEvent.customQuestions.map((q) => {
+                    const currentVal = customAnswers[q.id] || '';
+                    return (
+                      <div key={q.id}>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="text-slate-300 font-semibold">
+                            {q.label} {q.required && <span className="text-rose-400">*</span>}
+                          </label>
+                          {q.type === 'text' && (
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              {currentVal.length}/120
+                            </span>
+                          )}
+                          {q.type === 'textarea' && (
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              {currentVal.length}/1000
+                            </span>
+                          )}
+                        </div>
 
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">WhatsApp Phone Number *</label>
-                <input
-                  type="tel"
-                  required
-                  placeholder="e.g. 9876543210"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
-                />
-              </div>
+                        {q.type === 'textarea' ? (
+                          <textarea
+                            rows={3}
+                            maxLength={1000}
+                            required={q.required}
+                            value={currentVal}
+                            onChange={(e) => setCustomAnswers((prev) => ({ ...prev, [q.id]: String(e.target.value) }))}
+                            className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/10 text-white text-xs placeholder-slate-500 focus:outline-none focus:border-purple-500 resize-none"
+                            placeholder={`Enter ${q.label}... (max 1000 chars)`}
+                          />
+                        ) : q.type === 'select' ? (
+                          <select
+                            required={q.required}
+                            value={currentVal}
+                            onChange={(e) => setCustomAnswers((prev) => ({ ...prev, [q.id]: String(e.target.value) }))}
+                            className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/10 text-white text-xs focus:outline-none focus:border-purple-500"
+                          >
+                            <option value="">-- Select an option --</option>
+                            {(q.options || []).map((opt) => (
+                              <option key={opt} value={opt}>
+                                {opt}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type={q.type === 'number' ? 'number' : 'text'}
+                            maxLength={q.type === 'text' ? 120 : undefined}
+                            required={q.required}
+                            value={currentVal}
+                            onChange={(e) => setCustomAnswers((prev) => ({ ...prev, [q.id]: String(e.target.value) }))}
+                            className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/10 text-white text-xs placeholder-slate-500 focus:outline-none focus:border-purple-500 font-mono"
+                            placeholder={`Enter ${q.label}... ${q.type === 'text' ? '(max 120 chars)' : ''}`}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                /* Fallback standard registration inputs for legacy events (e.g. XP Exchange) */
+                <div className="space-y-3.5 pt-1">
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Full Name *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Abhinav Mishra"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Registration Number *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. 24XXX10000"
+                      value={regNo}
+                      onChange={(e) => setRegNo(e.target.value.toUpperCase())}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/10 text-white font-mono placeholder-slate-500 focus:outline-none focus:border-purple-500 uppercase text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">WhatsApp Phone Number *</label>
+                    <input
+                      type="tel"
+                      required
+                      placeholder="e.g. 9876543210"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 text-xs"
+                    />
+                  </div>
+                </div>
+              )}
 
               <div className="p-3.5 rounded-xl bg-purple-500/10 border border-purple-500/30 space-y-1">
                 <div className="flex justify-between items-center text-xs font-bold text-white">
@@ -887,6 +1128,20 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
                           <p className="text-[10px] text-slate-400 truncate">{r.user_email}</p>
                           <p className="text-[10px] font-mono text-purple-300">{r.registration_number}</p>
                           {r.phone && <p className="text-[10px] text-slate-500">{r.phone}</p>}
+                          {r.custom_answers && Object.keys(r.custom_answers).length > 0 && (
+                            <div className="mt-1.5 pt-1.5 border-t border-white/10 flex flex-wrap gap-1">
+                              {Object.entries(r.custom_answers).map(([qKey, qVal]) => {
+                                const currentAdminEvent = events.find((e) => e.id === adminPanelEventId);
+                                const qObj = currentAdminEvent?.customQuestions?.find((q) => q.id === qKey);
+                                const label = qObj?.label || qKey;
+                                return (
+                                  <span key={qKey} className="px-2 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/30 text-[9px] text-purple-200">
+                                    <strong className="text-purple-300">{label}:</strong> {qVal || 'N/A'}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -1032,6 +1287,109 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
               />
             </div>
 
+            {/* Dynamic Custom Questions Builder Section */}
+            <div className="space-y-3 pt-3 border-t border-amber-500/20">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-amber-300 flex items-center gap-1">
+                    <span className="material-symbols-outlined text-sm">quiz</span>
+                    Custom Event Questions
+                  </h4>
+                  <p className="text-[10px] text-slate-400">Ask registrants specific questions (IGN, Discord ID, Team Name, etc.)</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddCreateQuestion}
+                  className="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-[10px] font-extrabold transition-all flex items-center gap-1 active:scale-95 shrink-0"
+                >
+                  <span className="material-symbols-outlined text-xs">add</span>
+                  Add Question
+                </button>
+              </div>
+
+              {newCustomQuestions.length === 0 ? (
+                <div className="p-3 rounded-xl border border-dashed border-white/10 text-center text-slate-500 text-[10px]">
+                  No custom questions added yet. Only standard registration fields (Name, Reg No, Phone) will be asked.
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-56 overflow-y-auto pr-1 custom-scrollbar">
+                  {newCustomQuestions.map((q, qIdx) => (
+                    <div key={q.id} className="p-3 rounded-xl bg-black/40 border border-white/10 space-y-2 relative">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-mono text-amber-400 font-bold">Question #{qIdx + 1}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCreateQuestion(q.id)}
+                          className="text-rose-400 hover:text-rose-300 text-[10px] flex items-center gap-0.5 px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/20 active:scale-95"
+                        >
+                          <span className="material-symbols-outlined text-xs">delete</span>
+                          Remove
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] text-slate-400 font-semibold mb-0.5">Question Label / Prompt *</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. In-Game Name (IGN) or Team Name"
+                            value={q.label}
+                            onChange={(e) => handleUpdateCreateQuestion(q.id, { label: e.target.value })}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-black/60 border border-white/10 text-white text-xs focus:outline-none focus:border-amber-500"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <div>
+                            <label className="block text-[10px] text-slate-400 font-semibold mb-0.5">Type</label>
+                            <select
+                              value={q.type}
+                              onChange={(e) => handleUpdateCreateQuestion(q.id, { type: e.target.value as any })}
+                              className="w-full px-2 py-1.5 rounded-lg bg-black/60 border border-white/10 text-white text-xs focus:outline-none focus:border-amber-500"
+                            >
+                              <option value="text">Short Text</option>
+                              <option value="textarea">Long Text</option>
+                              <option value="number">Number</option>
+                              <option value="select">Dropdown Select</option>
+                            </select>
+                          </div>
+
+                          <div className="flex items-center pt-3">
+                            <label className="flex items-center gap-1.5 cursor-pointer text-[10px] text-slate-300 select-none">
+                              <input
+                                type="checkbox"
+                                checked={q.required}
+                                onChange={(e) => handleUpdateCreateQuestion(q.id, { required: e.target.checked })}
+                                className="rounded border-white/20 text-amber-500 focus:ring-0 bg-black/50"
+                              />
+                              Required
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+
+                      {q.type === 'select' && (
+                        <div>
+                          <label className="block text-[10px] text-slate-400 font-semibold mb-0.5">Dropdown Options (comma-separated, e.g. Solo, Duo, Squad)</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Solo, Duo, Squad"
+                            value={q.optionsRaw !== undefined ? q.optionsRaw : (q.options || []).join(', ')}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              const opts = raw.split(',').map((opt) => opt.trim()).filter(Boolean);
+                              handleUpdateCreateQuestion(q.id, { optionsRaw: raw, options: opts });
+                            }}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-black/60 border border-white/10 text-white text-xs focus:outline-none focus:border-amber-500 font-mono"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="pt-2 flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
               <button
                 type="button"
@@ -1156,6 +1514,109 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
                 onChange={(e) => setEditDescription(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/10 text-white focus:outline-none focus:border-amber-500 resize-none"
               />
+            </div>
+
+            {/* Dynamic Custom Questions Builder Section for Edit */}
+            <div className="space-y-3 pt-3 border-t border-amber-500/20">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-amber-300 flex items-center gap-1">
+                    <span className="material-symbols-outlined text-sm">quiz</span>
+                    Custom Event Questions
+                  </h4>
+                  <p className="text-[10px] text-slate-400">Ask registrants specific questions (IGN, Discord ID, Team Name, etc.)</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddEditQuestion}
+                  className="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-[10px] font-extrabold transition-all flex items-center gap-1 active:scale-95 shrink-0"
+                >
+                  <span className="material-symbols-outlined text-xs">add</span>
+                  Add Question
+                </button>
+              </div>
+
+              {editCustomQuestions.length === 0 ? (
+                <div className="p-3 rounded-xl border border-dashed border-white/10 text-center text-slate-500 text-[10px]">
+                  No custom questions added yet. Only standard registration fields (Name, Reg No, Phone) will be asked.
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-56 overflow-y-auto pr-1 custom-scrollbar">
+                  {editCustomQuestions.map((q, qIdx) => (
+                    <div key={q.id} className="p-3 rounded-xl bg-black/40 border border-white/10 space-y-2 relative">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-mono text-amber-400 font-bold">Question #{qIdx + 1}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveEditQuestion(q.id)}
+                          className="text-rose-400 hover:text-rose-300 text-[10px] flex items-center gap-0.5 px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/20 active:scale-95"
+                        >
+                          <span className="material-symbols-outlined text-xs">delete</span>
+                          Remove
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] text-slate-400 font-semibold mb-0.5">Question Label / Prompt *</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. In-Game Name (IGN) or Team Name"
+                            value={q.label}
+                            onChange={(e) => handleUpdateEditQuestion(q.id, { label: e.target.value })}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-black/60 border border-white/10 text-white text-xs focus:outline-none focus:border-amber-500"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <div>
+                            <label className="block text-[10px] text-slate-400 font-semibold mb-0.5">Type</label>
+                            <select
+                              value={q.type}
+                              onChange={(e) => handleUpdateEditQuestion(q.id, { type: e.target.value as any })}
+                              className="w-full px-2 py-1.5 rounded-lg bg-black/60 border border-white/10 text-white text-xs focus:outline-none focus:border-amber-500"
+                            >
+                              <option value="text">Short Text</option>
+                              <option value="textarea">Long Text</option>
+                              <option value="number">Number</option>
+                              <option value="select">Dropdown Select</option>
+                            </select>
+                          </div>
+
+                          <div className="flex items-center pt-3">
+                            <label className="flex items-center gap-1.5 cursor-pointer text-[10px] text-slate-300 select-none">
+                              <input
+                                type="checkbox"
+                                checked={q.required}
+                                onChange={(e) => handleUpdateEditQuestion(q.id, { required: e.target.checked })}
+                                className="rounded border-white/20 text-amber-500 focus:ring-0 bg-black/50"
+                              />
+                              Required
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+
+                      {q.type === 'select' && (
+                        <div>
+                          <label className="block text-[10px] text-slate-400 font-semibold mb-0.5">Dropdown Options (comma-separated, e.g. Solo, Duo, Squad)</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Solo, Duo, Squad"
+                            value={q.optionsRaw !== undefined ? q.optionsRaw : (q.options || []).join(', ')}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              const opts = raw.split(',').map((opt) => opt.trim()).filter(Boolean);
+                              handleUpdateEditQuestion(q.id, { optionsRaw: raw, options: opts });
+                            }}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-black/60 border border-white/10 text-white text-xs focus:outline-none focus:border-amber-500 font-mono"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="pt-2 flex justify-end gap-3">

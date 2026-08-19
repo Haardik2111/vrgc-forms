@@ -20,6 +20,10 @@ export const PAYMENT_ADMIN_EMAILS = (process.env.NEXT_PUBLIC_PAYMENT_ADMIN_EMAIL
 export const PAYMENT_ADMIN_EMAIL = PAYMENT_ADMIN_EMAILS[0] || '';
 export const ADMIN_EMAIL = PAYMENT_ADMIN_EMAILS[0] || '';
 
+// Temporary special access list (bypasses maintenance mode & member verification)
+export const SPECIAL_ACCESS_EMAILS: string[] = [];
+
+
 const googleProvider = new GoogleAuthProvider();
 
 export interface MemberData {
@@ -135,6 +139,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.warn('Firestore member check warning:', memberErr);
       }
 
+      const isSpecialAccess = SPECIAL_ACCESS_EMAILS.map((e) => e.toLowerCase()).includes(em);
+
       if (memberRecord) {
         setMemberData(memberRecord);
         setIsAuthorized(true);
@@ -147,6 +153,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email: em,
           team: 'Management',
           position: 'Lead',
+        });
+        setIsAuthorized(true);
+        setAuthError('');
+      } else if (isSpecialAccess) {
+        const regMatch = em.match(/\b\d{2}[a-zA-Z]{3}\d{5}\b/);
+        setMemberData({
+          name: firebaseUser.displayName || 'Special Access User',
+          registrationNumber: regMatch ? regMatch[0].toUpperCase() : 'SPECIAL_MEMBER',
+          phone: '',
+          email: em,
+          team: 'Member',
+          position: 'Member',
         });
         setIsAuthorized(true);
         setAuthError('');
