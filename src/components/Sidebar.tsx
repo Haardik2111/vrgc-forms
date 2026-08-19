@@ -11,7 +11,7 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ activePage, onPageChange, isAuthorized = true }) => {
   const allMenuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', public: true },
+    { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', public: false },
     { id: 'register', label: 'Event Register', icon: 'how_to_reg', public: true },
     { id: 'referrals', label: 'Referrals', icon: 'share', public: false },
     { id: 'idcard', label: 'ID Card Form', icon: 'badge', public: false },
