@@ -125,12 +125,11 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
     }
   }, [currentEmail]);
 
-  // Load events from Firestore
+  // Real-time listener: watch 'events' collection for live updates (including registration status Live/Closed)
   useEffect(() => {
-    const fetchEvents = async () => {
-      try {
-        const eventsCol = collection(db, 'events');
-        const snap = await getDocs(eventsCol);
+    const unsub = onSnapshot(
+      collection(db, 'events'),
+      (snap) => {
         if (!snap.empty) {
           const list: EventItem[] = [];
           snap.forEach((docSnap) => {
@@ -148,15 +147,18 @@ export default function EventRegister({ externalUser, externalUserEmail, externa
             });
           });
           setEvents(list);
+        } else {
+          setEvents(DEFAULT_EVENTS);
         }
-      } catch (err) {
-        console.warn('Events fetch fallback to default:', err);
-      } finally {
+        setLoading(false);
+      },
+      (err) => {
+        console.warn('Events real-time listener fallback:', err);
         setLoading(false);
       }
-    };
+    );
 
-    fetchEvents();
+    return () => unsub();
   }, []);
 
   // Real-time listener: watch all event_registrations and derive counts + current user's registrations
