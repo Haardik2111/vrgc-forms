@@ -78,18 +78,21 @@ function AppContent() {
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get('tab');
 
-      // Non-member users default directly to Event Register
-      if (user && !isAuthorized) {
-        setActivePage('register');
-        return;
-      }
-      
       if (path && ['register', 'referrals', 'idcard', 'payments', 'dashboard', 'batch24', 'batch25'].includes(path)) {
-        setActivePage(path);
+        if (!isAuthorized && path === 'dashboard') {
+          setActivePage('register');
+        } else {
+          setActivePage(path);
+        }
       } else if (tabParam && ['dashboard', 'register', 'referrals', 'idcard', 'payments', 'batch24', 'batch25'].includes(tabParam)) {
-        setActivePage(tabParam);
-      } else if (user && !isAuthorized) {
-        setActivePage('register');
+        if (!isAuthorized && tabParam === 'dashboard') {
+          setActivePage('register');
+        } else {
+          setActivePage(tabParam);
+        }
+      } else {
+        // Members / admins default to 'dashboard', non-members default to 'register'
+        setActivePage(isAuthorized ? 'dashboard' : 'register');
       }
     }
   }, [user, isAuthorized]);
