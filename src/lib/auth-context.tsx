@@ -21,7 +21,9 @@ export const PAYMENT_ADMIN_EMAIL = PAYMENT_ADMIN_EMAILS[0] || '';
 export const ADMIN_EMAIL = PAYMENT_ADMIN_EMAILS[0] || '';
 
 // Temporary special access list (bypasses maintenance mode & member verification)
-export const SPECIAL_ACCESS_EMAILS: string[] = [];
+export const SPECIAL_ACCESS_EMAILS: string[] = [
+  'haardik.24bcg10051@vitbhopal.ac.in'
+];
 
 
 const googleProvider = new GoogleAuthProvider();
@@ -57,8 +59,8 @@ const AuthContext = createContext<AuthContextType>({
   memberData: null,
   authLoading: true,
   authError: '',
-  handleLogin: async () => {},
-  handleLogout: async () => {},
+  handleLogin: async () => { },
+  handleLogout: async () => { },
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -111,8 +113,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.warn('Firestore admin check fallback:', adminErr);
       }
 
-      const isPaymentAdminEmail = PAYMENT_ADMIN_EMAILS.includes(em);
-      const admin = isDbAdmin || isPaymentAdminEmail || em === PAYMENT_ADMIN_EMAIL || configAdmins.includes(em);
+      const isSpecialAccess = SPECIAL_ACCESS_EMAILS.map((e) => e.toLowerCase()).includes(em);
+      const isPaymentAdminEmail = PAYMENT_ADMIN_EMAILS.includes(em) || isSpecialAccess;
+      const admin = isDbAdmin || isPaymentAdminEmail || em === PAYMENT_ADMIN_EMAIL || configAdmins.includes(em) || isSpecialAccess;
       const paymentAdmin = isPaymentAdminEmail;
       setIsAdmin(admin);
       setIsPaymentAdmin(paymentAdmin);
@@ -138,8 +141,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (memberErr) {
         console.warn('Firestore member check warning:', memberErr);
       }
-
-      const isSpecialAccess = SPECIAL_ACCESS_EMAILS.map((e) => e.toLowerCase()).includes(em);
 
       if (memberRecord) {
         setMemberData(memberRecord);
