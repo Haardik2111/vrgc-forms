@@ -97,81 +97,126 @@ const Dashboard: React.FC<DashboardProps> = ({ onPageChange }) => {
           {/* Referral Program Card */}
           <button
             onClick={() => onPageChange('referrals')}
-            className="group relative flex flex-col items-start p-8 bg-[#1A1A1A] border border-[#333333] hover:border-purple-500 rounded-2xl glow-hover transition-all duration-300 text-left overflow-hidden h-[300px] w-full"
+            className="group relative flex flex-col items-start p-8 bg-gradient-to-b from-[#130728] via-[#0b0318] to-[#06010d] border border-purple-500/25 hover:border-purple-500/60 rounded-3xl transition-all duration-300 text-left overflow-hidden h-[320px] w-full shadow-[0_0_25px_rgba(168,85,247,0.08)] hover:shadow-[0_0_35px_rgba(168,85,247,0.25)] hover:-translate-y-1.5"
           >
-            <div className="absolute -right-4 -top-4 opacity-10 group-hover:opacity-20 transition-opacity">
-              <span className="material-symbols-outlined text-[150px] text-purple-400">share</span>
+            {/* Ambient Background Glow Halos */}
+            <div className="absolute -top-24 -right-24 w-48 h-48 bg-purple-600/20 rounded-full blur-3xl pointer-events-none group-hover:bg-purple-500/35 transition-all duration-500" />
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 via-fuchsia-500 to-pink-500 opacity-60 group-hover:opacity-100 transition-opacity" />
+
+            <div className="absolute -right-6 -bottom-6 opacity-10 group-hover:opacity-20 group-hover:scale-110 transition-all duration-500">
+              <span className="material-symbols-outlined text-[170px] text-purple-400">share</span>
             </div>
-            <div className="mb-auto z-10">
-              <div className="w-14 h-14 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mb-6">
-                <span className="material-symbols-outlined text-purple-400 text-3xl">loyalty</span>
+
+            {/* Badge Pill */}
+            <div className="flex items-center justify-between w-full mb-4 z-10">
+              <div className="w-14 h-14 rounded-2xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center shadow-[0_0_15px_rgba(168,85,247,0.2)] group-hover:scale-110 group-hover:border-purple-400 transition-all duration-300">
+                <span className="material-symbols-outlined text-purple-300 text-3xl group-hover:rotate-12 transition-transform">loyalty</span>
               </div>
-              <h3 className="font-display-lg text-xl text-white font-bold mb-2">
+              <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30 shadow-[0_0_10px_rgba(168,85,247,0.2)]">
+                Recruitment
+              </span>
+            </div>
+
+            <div className="mb-auto z-10 space-y-2">
+              <h3 className="font-display-lg text-xl text-white font-extrabold tracking-tight group-hover:text-purple-300 transition-colors">
                 Referral Program
               </h3>
-              <p className="text-slate-400 text-sm leading-relaxed">
-                Expand the VRGC network. Track affiliate status and manage reward milestones.
+              <p className="text-slate-400 text-xs leading-relaxed">
+                Expand the VRGC network. Track candidate referral statuses, inspect submitted dossiers, and earn recognition.
               </p>
             </div>
-            <div className="mt-4 w-full flex items-center justify-between z-10">
-              <span className="font-label-caps text-xs text-purple-400 font-bold group-hover:translate-x-2 transition-transform duration-300">
-                OPEN PROGRAM
+
+            <div className="mt-4 w-full flex items-center justify-between z-10 pt-4 border-t border-purple-500/15">
+              <span className="font-code-sm text-[11px] text-purple-300 font-extrabold tracking-widest uppercase flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                <span>OPEN PROGRAM</span>
               </span>
-              <span className="material-symbols-outlined text-white">arrow_forward</span>
+              <div className="w-8 h-8 rounded-full bg-purple-500/20 group-hover:bg-purple-600 border border-purple-500/40 flex items-center justify-center text-white transition-all shadow-[0_0_12px_rgba(168,85,247,0.3)]">
+                <span className="material-symbols-outlined text-base group-hover:translate-x-0.5 transition-transform">arrow_forward</span>
+              </div>
             </div>
           </button>
 
           {/* Payments & Dues Portal Card */}
           <button
             onClick={() => onPageChange('payments')}
-            className="group relative flex flex-col items-start p-8 bg-[#1A1A1A] border border-[#333333] hover:border-purple-500 rounded-2xl glow-hover transition-all duration-300 text-left overflow-hidden h-[300px] w-full"
+            className="group relative flex flex-col items-start p-8 bg-gradient-to-b from-[#130728] via-[#0b0318] to-[#06010d] border border-purple-500/25 hover:border-emerald-500/60 rounded-3xl transition-all duration-300 text-left overflow-hidden h-[320px] w-full shadow-[0_0_25px_rgba(168,85,247,0.08)] hover:shadow-[0_0_35px_rgba(16,185,129,0.2)] hover:-translate-y-1.5"
           >
-            <div className="absolute -right-4 -top-4 opacity-10 group-hover:opacity-20 transition-opacity">
-              <span className="material-symbols-outlined text-[150px] text-purple-400">payments</span>
+            {/* Ambient Background Glow Halos */}
+            <div className="absolute -top-24 -right-24 w-48 h-48 bg-emerald-600/15 rounded-full blur-3xl pointer-events-none group-hover:bg-emerald-500/30 transition-all duration-500" />
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 opacity-60 group-hover:opacity-100 transition-opacity" />
+
+            <div className="absolute -right-6 -bottom-6 opacity-10 group-hover:opacity-20 group-hover:scale-110 transition-all duration-500">
+              <span className="material-symbols-outlined text-[170px] text-emerald-400">payments</span>
             </div>
-            <div className="mb-auto z-10">
-              <div className="w-14 h-14 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mb-6">
-                <span className="material-symbols-outlined text-purple-400 text-3xl">payments</span>
+
+            {/* Badge Pill */}
+            <div className="flex items-center justify-between w-full mb-4 z-10">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shadow-[0_0_15px_rgba(16,185,129,0.2)] group-hover:scale-110 group-hover:border-emerald-400 transition-all duration-300">
+                <span className="material-symbols-outlined text-emerald-300 text-3xl group-hover:rotate-12 transition-transform">account_balance_wallet</span>
               </div>
-              <h3 className="font-display-lg text-xl text-white font-bold mb-2">
+              <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
+                Finance Desk
+              </span>
+            </div>
+
+            <div className="mb-auto z-10 space-y-2">
+              <h3 className="font-display-lg text-xl text-white font-extrabold tracking-tight group-hover:text-emerald-300 transition-colors">
                 Payments &amp; Dues
               </h3>
-              <p className="text-slate-400 text-sm leading-relaxed">
-                Manage club membership fees, payment receipts, active dues, and payment logs.
+              <p className="text-slate-400 text-xs leading-relaxed">
+                Manage club membership fees, active dues, automated Razorpay transactions, and view verified payment receipts.
               </p>
             </div>
-            <div className="mt-4 w-full flex items-center justify-between z-10">
-              <span className="font-label-caps text-xs text-purple-400 font-bold group-hover:translate-x-2 transition-transform duration-300">
-                PAY DUES
+
+            <div className="mt-4 w-full flex items-center justify-between z-10 pt-4 border-t border-emerald-500/15">
+              <span className="font-code-sm text-[11px] text-emerald-300 font-extrabold tracking-widest uppercase flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                <span>PAY DUES</span>
               </span>
-              <span className="material-symbols-outlined text-white">arrow_forward</span>
+              <div className="w-8 h-8 rounded-full bg-emerald-500/20 group-hover:bg-emerald-600 border border-emerald-500/40 flex items-center justify-center text-white transition-all shadow-[0_0_12px_rgba(16,185,129,0.3)]">
+                <span className="material-symbols-outlined text-base group-hover:translate-x-0.5 transition-transform">arrow_forward</span>
+              </div>
             </div>
           </button>
 
           {/* ID Card Portal Card */}
           <button
             onClick={() => onPageChange('idcard')}
-            className="group relative flex flex-col items-start p-8 bg-[#1A1A1A] border border-[#333333] hover:border-purple-500 rounded-2xl glow-hover transition-all duration-300 text-left overflow-hidden h-[300px] w-full"
+            className="group relative flex flex-col items-start p-8 bg-gradient-to-b from-[#130728] via-[#0b0318] to-[#06010d] border border-purple-500/25 hover:border-amber-500/60 rounded-3xl transition-all duration-300 text-left overflow-hidden h-[320px] w-full shadow-[0_0_25px_rgba(168,85,247,0.08)] hover:shadow-[0_0_35px_rgba(245,158,11,0.2)] hover:-translate-y-1.5"
           >
-            <div className="absolute -right-4 -top-4 opacity-10 group-hover:opacity-20 transition-opacity">
-              <span className="material-symbols-outlined text-[150px] text-purple-400">badge</span>
+            {/* Ambient Background Glow Halos */}
+            <div className="absolute -top-24 -right-24 w-48 h-48 bg-amber-600/15 rounded-full blur-3xl pointer-events-none group-hover:bg-amber-500/30 transition-all duration-500" />
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 via-orange-500 to-yellow-500 opacity-60 group-hover:opacity-100 transition-opacity" />
+
+            <div className="absolute -right-6 -bottom-6 opacity-10 group-hover:opacity-20 group-hover:scale-110 transition-all duration-500">
+              <span className="material-symbols-outlined text-[170px] text-amber-400">badge</span>
             </div>
-            <div className="mb-auto z-10">
-              <div className="w-14 h-14 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mb-6">
-                <span className="material-symbols-outlined text-purple-400 text-3xl">badge</span>
+
+            {/* Badge Pill */}
+            <div className="flex items-center justify-between w-full mb-4 z-10">
+              <div className="w-14 h-14 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shadow-[0_0_15px_rgba(245,158,11,0.2)] group-hover:scale-110 group-hover:border-amber-400 transition-all duration-300">
+                <span className="material-symbols-outlined text-amber-300 text-3xl group-hover:rotate-12 transition-transform">badge</span>
               </div>
-              <h3 className="font-display-lg text-xl text-white font-bold mb-2">
+              <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-[0_0_10px_rgba(245,158,11,0.2)]">
+                Identity Pass
+              </span>
+            </div>
+
+            <div className="mb-auto z-10 space-y-2">
+              <h3 className="font-display-lg text-xl text-white font-extrabold tracking-tight group-hover:text-amber-300 transition-colors">
                 Digital ID Card
               </h3>
-              <p className="text-slate-400 text-sm leading-relaxed">
-                Claim your VRGC Digital ID credentials. Submit profile photo and download generated pass.
+              <p className="text-slate-400 text-xs leading-relaxed">
+                Claim your VRGC Digital ID credentials. Submit official profile photo and generate high-res ID pass.
               </p>
             </div>
-            <div className="mt-4 w-full flex items-center justify-between z-10">
-              <span className="font-label-caps text-xs text-purple-400 font-bold group-hover:translate-x-2 transition-transform duration-300">
-                GENERATE CARD
+
+            <div className="mt-4 w-full flex items-center justify-between z-10 pt-4 border-t border-amber-500/15">
+              <span className="font-code-sm text-[11px] text-amber-300 font-extrabold tracking-widest uppercase flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                <span>GENERATE CARD</span>
               </span>
-              <span className="material-symbols-outlined text-white">arrow_forward</span>
+              <div className="w-8 h-8 rounded-full bg-amber-500/20 group-hover:bg-amber-600 border border-amber-500/40 flex items-center justify-center text-white transition-all shadow-[0_0_12px_rgba(245,158,11,0.3)]">
+                <span className="material-symbols-outlined text-base group-hover:translate-x-0.5 transition-transform">arrow_forward</span>
+              </div>
             </div>
           </button>
         </div>

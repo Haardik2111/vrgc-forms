@@ -6,14 +6,12 @@ import Sidebar from '@/components/Sidebar';
 import Dashboard from '@/components/Dashboard';
 import FacultyDashboard from '@/components/FacultyDashboard';
 import MembersRoster from '@/components/MembersRoster';
-import PlannedEvents from '@/components/PlannedEvents';
 import IDCard from '@/components/IDCard';
 import Referrals from '@/components/Referrals';
 import Tickets from '@/components/Tickets';
 import Payments from '@/components/Payments';
 import Lobby25MemberEntry from '@/components/Lobby25MemberEntry';
 import Lobby24MemberEntry from '@/components/Lobby24MemberEntry';
-import EventRegister from '@/components/EventRegister';
 import Footer from '@/components/Footer';
 import MaintenanceModal, {
   MaintenanceConfigState,
@@ -144,29 +142,20 @@ function AppContent() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // Parse initial tab from clean URL path (e.g. /register, /referrals, /idcard, /payments, /members, /planned_events)
+  // Parse initial tab from clean URL path (e.g. /referrals, /idcard, /payments, /members, /planned_events)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const path = window.location.pathname.replace(/^\//, '');
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get('tab');
-      const validPaths = ['register', 'referrals', 'idcard', 'payments', 'dashboard', 'batch24', 'batch25', 'members', 'planned_events'];
+      const validPaths = ['referrals', 'idcard', 'payments', 'dashboard', 'batch24', 'batch25', 'members'];
 
       if (path && validPaths.includes(path)) {
-        if (!isAuthorized && path === 'dashboard') {
-          setActivePage('register');
-        } else {
-          setActivePage(path);
-        }
+        setActivePage(path);
       } else if (tabParam && validPaths.includes(tabParam)) {
-        if (!isAuthorized && tabParam === 'dashboard') {
-          setActivePage('register');
-        } else {
-          setActivePage(tabParam);
-        }
+        setActivePage(tabParam);
       } else {
-        // Members / admins / faculty default to 'dashboard', non-members default to 'register'
-        setActivePage(isAuthorized ? 'dashboard' : 'register');
+        setActivePage('dashboard');
       }
     }
   }, [user, isAuthorized]);
@@ -188,8 +177,6 @@ function AppContent() {
     switch (activePage) {
       case 'dashboard': return isFaculty ? 'Faculty Dashboard' : 'Dashboard';
       case 'members': return 'Members Roster';
-      case 'planned_events': return 'Planned Future Events';
-      case 'register': return 'Event Register';
       case 'batch25': return 'Lobby 25';
       case 'batch24': return 'Lobby 24';
       case 'referrals': return 'Referrals';
@@ -246,8 +233,8 @@ function AppContent() {
     );
   }
 
-  // ── 2. Access denied (only if user signed in with non-VIT account and is not Faculty/Admin) ──
-  if (authError && !userEmail.endsWith('@vitbhopal.ac.in') && !isAdmin && !isFaculty) {
+  // ── 2. Access denied screen (shown when non-member / unauthorized user signs in) ──
+  if (authError && !isAuthorized) {
     return (
       <div className="min-h-screen bg-[#05010a] flex items-center justify-center px-4">
         <div className="max-w-md w-full bg-[#0e0518]/80 border border-rose-500/30 rounded-2xl p-8 backdrop-blur-xl shadow-[0_0_60px_rgba(244,63,94,0.1)] flex flex-col items-center gap-6 text-center">
@@ -317,44 +304,7 @@ function AppContent() {
         onLogin={handleLogin}
       />
 
-      {/* Admin maintenance control bar — visible to payment admin & root admins */}
-      {isPaymentAdmin && (
-        <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-2.5 bg-[#0b0317] border-b border-purple-500/25 gap-2.5 text-xs select-none">
-          <div className="flex items-center gap-2.5">
-            <span
-              className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                lockedSectionsCount > 0
-                  ? 'bg-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.6)] animate-pulse'
-                  : 'bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.5)]'
-              }`}
-            />
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-slate-300 font-medium">Portal Maintenance Mode:</span>
-              {maintenanceConfig.all ? (
-                <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40">
-                  ALL CATEGORIES LOCKED
-                </span>
-              ) : lockedSectionsCount > 0 ? (
-                <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40">
-                  {lockedSectionsCount} Section(s) Under Maintenance
-                </span>
-              ) : (
-                <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40">
-                  All Systems Operational
-                </span>
-              )}
-            </div>
-          </div>
 
-          <button
-            onClick={() => setIsMaintenanceModalOpen(true)}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-[0_0_15px_rgba(168,85,247,0.3)] transition-all cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-sm">tune</span>
-            <span>Configure Maintenance Mode</span>
-          </button>
-        </div>
-      )}
 
       {/* Admin Notice when currently viewing a category that is locked for members */}
       {isPaymentAdmin && isSectionUnderMaintenanceForAdmin(activePage) && (
@@ -383,15 +333,8 @@ function AppContent() {
                 facultyName={memberData?.name}
                 facultyEmail={userEmail}
               />
-            ) : isAuthorized ? (
-              <Dashboard onPageChange={handlePageChange} />
             ) : (
-              <EventRegister
-                onRedirect={() => handlePageChange('register')}
-                externalUser={user}
-                externalUserEmail={userEmail}
-                externalIsPaymentAdmin={isPaymentAdmin}
-              />
+              <Dashboard onPageChange={handlePageChange} />
             )
           )}
 
@@ -405,41 +348,6 @@ function AppContent() {
               <MembersRoster onRedirect={() => handlePageChange('dashboard')} />
             ) : (
               renderRestrictedSignIn('Members Roster')
-            )
-          )}
-
-          {activePage === 'planned_events' && (
-            isSectionLocked('planned_events') ? (
-              <MaintenanceScreen
-                section="Planned Future Events"
-                onBack={() => handlePageChange('dashboard')}
-              />
-            ) : isAuthorized ? (
-              <PlannedEvents
-                isAdmin={isAdmin}
-                isFaculty={isFaculty}
-                userEmail={userEmail}
-                userName={memberData?.name || user?.displayName || 'User'}
-                onRedirect={() => handlePageChange('dashboard')}
-              />
-            ) : (
-              renderRestrictedSignIn('Planned Future Events')
-            )
-          )}
-
-          {activePage === 'register' && (
-            isSectionLocked('register') ? (
-              <MaintenanceScreen
-                section="Event Registration"
-                onBack={() => handlePageChange('dashboard')}
-              />
-            ) : (
-              <EventRegister
-                onRedirect={() => handlePageChange('dashboard')}
-                externalUser={user}
-                externalUserEmail={userEmail}
-                externalIsPaymentAdmin={isPaymentAdmin}
-              />
             )
           )}
 
@@ -556,42 +464,44 @@ function AppContent() {
               <span className="material-symbols-outlined text-xl">payments</span>
               <span className="font-label-caps text-[9px]">PAYMENTS</span>
             </button>
-            <button onClick={() => handlePageChange('planned_events')} className={`flex flex-col items-center gap-1 ${activePage === 'planned_events' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
-              <span className="material-symbols-outlined text-xl">event_upcoming</span>
-              <span className="font-label-caps text-[9px]">EVENTS</span>
-            </button>
           </>
         ) : (
           <>
-            {isAuthorized && (
-              <button onClick={() => handlePageChange('dashboard')} className={`flex flex-col items-center gap-1 ${activePage === 'dashboard' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
-                <span className="material-symbols-outlined text-xl">dashboard</span>
-                <span className="font-label-caps text-[9px]">HOME</span>
-              </button>
-            )}
-            <button onClick={() => handlePageChange('register')} className={`flex flex-col items-center gap-1 ${activePage === 'register' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
-              <span className="material-symbols-outlined text-xl">how_to_reg</span>
-              <span className="font-label-caps text-[9px]">REGISTER</span>
+            <button onClick={() => handlePageChange('dashboard')} className={`flex flex-col items-center gap-1 ${activePage === 'dashboard' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
+              <span className="material-symbols-outlined text-xl">dashboard</span>
+              <span className="font-label-caps text-[9px]">HOME</span>
             </button>
-            {isAuthorized && (
-              <>
-                <button onClick={() => handlePageChange('referrals')} className={`flex flex-col items-center gap-1 ${activePage === 'referrals' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
-                  <span className="material-symbols-outlined text-xl">share</span>
-                  <span className="font-label-caps text-[9px]">REFER</span>
-                </button>
-                <button onClick={() => handlePageChange('idcard')} className={`flex flex-col items-center gap-1 ${activePage === 'idcard' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
-                  <span className="material-symbols-outlined text-xl">badge</span>
-                  <span className="font-label-caps text-[9px]">ID CARD</span>
-                </button>
-                <button onClick={() => handlePageChange('payments')} className={`flex flex-col items-center gap-1 ${activePage === 'payments' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
-                  <span className="material-symbols-outlined text-xl">payments</span>
-                  <span className="font-label-caps text-[9px]">PAYMENTS</span>
-                </button>
-              </>
-            )}
+            <button onClick={() => handlePageChange('referrals')} className={`flex flex-col items-center gap-1 ${activePage === 'referrals' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
+              <span className="material-symbols-outlined text-xl">share</span>
+              <span className="font-label-caps text-[9px]">REFER</span>
+            </button>
+            <button onClick={() => handlePageChange('idcard')} className={`flex flex-col items-center gap-1 ${activePage === 'idcard' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
+              <span className="material-symbols-outlined text-xl">badge</span>
+              <span className="font-label-caps text-[9px]">ID CARD</span>
+            </button>
+            <button onClick={() => handlePageChange('payments')} className={`flex flex-col items-center gap-1 ${activePage === 'payments' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
+              <span className="material-symbols-outlined text-xl">payments</span>
+              <span className="font-label-caps text-[9px]">PAYMENTS</span>
+            </button>
           </>
         )}
       </nav>
+
+      {/* Floating Maintenance Toolset FAB Logo — bottom right (Payment Admin) */}
+      {isPaymentAdmin && (
+        <button
+          onClick={() => setIsMaintenanceModalOpen(true)}
+          title="Configure Maintenance Mode"
+          className="fixed bottom-24 md:bottom-14 right-6 z-50 p-3.5 rounded-full bg-gradient-to-r from-purple-600 via-fuchsia-600 to-purple-700 hover:from-purple-500 hover:to-fuchsia-500 text-white shadow-[0_0_25px_rgba(168,85,247,0.5)] border border-purple-400/40 transition-all duration-300 hover:scale-110 active:scale-95 flex items-center justify-center group cursor-pointer"
+        >
+          <span className="material-symbols-outlined text-xl group-hover:rotate-45 transition-transform duration-300">
+            construction
+          </span>
+          <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-300 whitespace-nowrap text-xs font-bold font-mono pl-0 group-hover:pl-2">
+            Maintenance Desk
+          </span>
+        </button>
+      )}
 
       {/* Toast */}
       {toast && (

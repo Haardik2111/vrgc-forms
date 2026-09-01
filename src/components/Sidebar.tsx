@@ -17,29 +17,25 @@ const Sidebar: React.FC<SidebarProps> = ({
   isFaculty = false,
   isAuthorized = true,
 }) => {
-  // Faculty POV menu items (Only these 4 pages)
+  // Faculty POV menu items
   const facultyMenuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
     { id: 'members', label: 'Members Roster', icon: 'groups' },
     { id: 'payments', label: 'Payments View', icon: 'payments' },
-    { id: 'planned_events', label: 'Planned Events', icon: 'event_upcoming' },
   ];
 
   // Standard member menu items
   const standardMenuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', public: false },
-    { id: 'register', label: 'Event Register', icon: 'how_to_reg', public: true },
-    { id: 'referrals', label: 'Referrals', icon: 'share', public: false },
-    { id: 'idcard', label: 'ID Card Form', icon: 'badge', public: false },
-    { id: 'payments', label: 'Payments & Dues', icon: 'payments', public: false },
+    { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
+    { id: 'referrals', label: 'Referrals', icon: 'share' },
+    { id: 'idcard', label: 'ID Card Form', icon: 'badge' },
+    { id: 'payments', label: 'Payments & Dues', icon: 'payments' },
   ];
 
   // Admin menu items: Full access to both student portal and faculty governance
   const adminMenuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
-    { id: 'register', label: 'Event Register', icon: 'how_to_reg' },
     { id: 'members', label: 'Members Roster', icon: 'groups' },
-    { id: 'planned_events', label: 'Planned Events', icon: 'event_upcoming' },
     { id: 'payments', label: 'Payments & Dues', icon: 'payments' },
     { id: 'referrals', label: 'Referrals', icon: 'share' },
     { id: 'idcard', label: 'ID Card Form', icon: 'badge' },
@@ -49,9 +45,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     ? facultyMenuItems
     : isAdmin
     ? adminMenuItems
-    : isAuthorized
-    ? standardMenuItems
-    : standardMenuItems.filter((item) => item.public);
+    : standardMenuItems;
 
   return (
     <aside className="h-[calc(100vh-76px)] w-64 hidden md:flex flex-col p-4 bg-[#090314] border-r border-purple-500/20 sticky top-[76px] select-none">

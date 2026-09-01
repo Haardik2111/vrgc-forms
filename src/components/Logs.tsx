@@ -76,10 +76,11 @@ const AdminLogsPanel: React.FC<AdminLogsPanelProps> = ({ isOpen, onClose }) => {
   useEffect(() => {
     if (!isOpen) return;
     setLoading(true);
-    const q = query(collection(db, 'admin_logs'), orderBy('timestamp', 'desc'), limit(200));
+    const q = query(collection(db, 'admin_logs'), orderBy('timestamp', 'desc'), limit(15));
     const unsub = onSnapshot(q,
       (snap) => {
-        setLogs(snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<AdminLog, 'id'>) })));
+        const validLogs = snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<AdminLog, 'id'>) }));
+        setLogs(validLogs);
         setLoading(false);
       },
       (err) => { console.error('[AdminLogsPanel]', err); setLoading(false); }

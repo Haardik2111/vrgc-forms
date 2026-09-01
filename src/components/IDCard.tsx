@@ -114,6 +114,9 @@ const IDCard: React.FC<IDCardProps> = ({
   const [loadingData, setLoadingData] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedTeam, setSelectedTeam] = useState<string>('All');
+  const [selectedStatus, setSelectedStatus] = useState<string>('All');
+  const [isTeamDropdownOpen, setIsTeamDropdownOpen] = useState<boolean>(false);
+  const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState<boolean>(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [previewCandidate, setPreviewCandidate] = useState<CandidateSubmission | null>(null);
   const [totalMembers, setTotalMembers] = useState<number>(0);
@@ -228,16 +231,49 @@ const IDCard: React.FC<IDCardProps> = ({
     return () => unsub();
   }, [isAdmin]);
 
-  // Real-time listener for admin activity logs
+  // Real-time listener for admin activity logs with automatic top-15 retention
   useEffect(() => {
     if (!isAdmin) return;
     try {
-      const logsQuery = query(collection(db, 'admin_logs'), orderBy('timestamp', 'desc'), limit(100));
-      const unsubscribe = onSnapshot(logsQuery, (snapshot) => {
+      const logsQuery = query(collection(db, 'admin_logs'), orderBy('timestamp', 'desc'), limit(50));
+      const unsubscribe = onSnapshot(logsQuery, async (snapshot) => {
         const logsList: AdminActivityLog[] = [];
-        snapshot.forEach(docSnap => {
-          logsList.push({ id: docSnap.id, ...docSnap.data() } as AdminActivityLog);
+        const userMail = (currentUser?.email || '').toLowerCase().trim();
+        const canDelete = CONFIG.LOG_DELETE_ADMIN_EMAILS.includes(userMail);
+
+        snapshot.docs.forEach((docSnap, index) => {
+          const data = docSnap.data();
+          let parsedTimestamp = new Date().toISOString();
+
+          if (data.timestamp?.toDate) {
+            parsedTimestamp = data.timestamp.toDate().toISOString();
+          } else if (data.timestamp?.seconds) {
+            parsedTimestamp = new Date(data.timestamp.seconds * 1000).toISOString();
+          } else if (typeof data.timestamp === 'string' || typeof data.timestamp === 'number') {
+            const t = new Date(data.timestamp).getTime();
+            parsedTimestamp = isNaN(t) ? String(data.timestamp) : new Date(t).toISOString();
+          }
+
+          const logEntry: AdminActivityLog = {
+            id: docSnap.id,
+            action: data.action || 'ACTIVITY',
+            performedBy: data.performedBy,
+            adminEmail: data.adminEmail,
+            targetEmail: data.targetEmail,
+            targetName: data.targetName,
+            targetRegNo: data.targetRegNo,
+            details: data.details,
+            timestamp: parsedTimestamp,
+          };
+
+          if (index < 15) {
+            logsList.push(logEntry);
+          } else if (canDelete) {
+            // Auto-purge any logs beyond top 15 from Firestore
+            deleteDoc(doc(db, 'admin_logs', docSnap.id)).catch(() => {});
+          }
         });
+
         setAdminLogs(logsList);
       }, (error) => {
         console.warn('Real-time admin logs listener notice:', error);
@@ -246,7 +282,7 @@ const IDCard: React.FC<IDCardProps> = ({
     } catch (e) {
       console.warn('Could not query admin_logs:', e);
     }
-  }, [isAdmin]);
+  }, [isAdmin, currentUser]);
 
   // Inline log writer — keeps everything self-contained in this component
   const logAdminAction = useCallback(async (
@@ -289,6 +325,48 @@ const IDCard: React.FC<IDCardProps> = ({
       console.error('Failed to delete log entry:', err);
     }
   }, [isAdmin, currentUser]);
+
+  // Purge activity logs older than 15 days
+  const [isPurgingLogs, setIsPurgingLogs] = useState<boolean>(false);
+  const handlePurgeOldLogs = useCallback(async (days = 15) => {
+    const userMail = (currentUser?.email || '').toLowerCase();
+    const canDelete = CONFIG.LOG_DELETE_ADMIN_EMAILS.includes(userMail);
+    if (!db || !isAdmin || !canDelete) return;
+
+    const cutoffTime = Date.now() - (days * 24 * 60 * 60 * 1000);
+    const oldLogs = adminLogs.filter(l => {
+      const t = new Date(l.timestamp).getTime();
+      return !isNaN(t) && t < cutoffTime;
+    });
+
+    if (oldLogs.length === 0) {
+      alert(`No activity logs older than ${days} days found.`);
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to permanently delete ${oldLogs.length} activity logs older than ${days} days?`)) {
+      return;
+    }
+
+    setIsPurgingLogs(true);
+    try {
+      let deletedCount = 0;
+      for (const logItem of oldLogs) {
+        if (logItem.id) {
+          await deleteDoc(doc(db, 'admin_logs', logItem.id));
+          deletedCount++;
+        }
+      }
+      setAdminLogs(prev => prev.filter(l => !oldLogs.some(ol => ol.id === l.id)));
+      setSyncToastMessage(`Successfully purged ${deletedCount} logs older than ${days} days.`);
+      setTimeout(() => setSyncToastMessage(null), 4000);
+    } catch (err) {
+      console.error('Error purging old logs:', err);
+      alert('Failed to complete bulk log deletion.');
+    } finally {
+      setIsPurgingLogs(false);
+    }
+  }, [isAdmin, currentUser, adminLogs]);
 
   // Performance optimization: Pagination / Windowing states (Massive TBT & LCP boost)
   const [dossierPageLimit, setDossierPageLimit] = useState<number>(12);
@@ -804,9 +882,15 @@ const IDCard: React.FC<IDCardProps> = ({
         matchesTeam = c.team && c.team.toLowerCase() === selectedTeam.toLowerCase();
       }
 
-      return matchesSearch && matchesTeam;
+      let matchesStatus = true;
+      if (selectedStatus !== 'All') {
+        const cStatus = (c.status || 'Pending').toLowerCase();
+        matchesStatus = cStatus === selectedStatus.toLowerCase();
+      }
+
+      return matchesSearch && matchesTeam && matchesStatus;
     });
-  }, [candidates, searchQuery, selectedTeam]);
+  }, [candidates, searchQuery, selectedTeam, selectedStatus]);
 
   const visibleCandidates = useMemo(() => {
     return filteredCandidates.slice(0, dossierPageLimit);
@@ -1565,53 +1649,153 @@ const IDCard: React.FC<IDCardProps> = ({
             {/* DOSSIERS SUB-TAB */}
             {adminSectionTab === 'dossiers' && (
               <div className="space-y-6">
-                <div className="glass-panel p-3.5 sm:p-4 rounded-xl border border-white/5 bg-white/5 flex flex-col md:flex-row md:items-center gap-3 sm:gap-4">
+                <div className="glass-panel p-3.5 sm:p-4 rounded-2xl border border-purple-500/25 bg-[#090214]/90 flex flex-col md:flex-row md:items-center gap-3 sm:gap-4 shadow-xl relative z-30">
+                  {/* Search Input */}
                   <div className="relative flex-1 w-full">
-                    <span className="material-symbols-outlined absolute left-3 top-2.5 text-outline text-sm">search</span>
+                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-purple-400 text-base">search</span>
                     <input
                       type="text"
-                      placeholder="Search candidate name, registration number, or email..."
+                      placeholder="Search candidate name, reg number, or email..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full bg-black/30 border border-outline-variant/30 rounded-lg pl-9 pr-4 py-2 text-xs text-white focus:outline-none focus:border-primary placeholder:text-white/25 transition-all duration-300"
+                      className="w-full bg-[#05010a] border border-purple-500/30 rounded-xl pl-9 pr-8 py-2 text-xs text-white focus:outline-none focus:border-purple-400 placeholder:text-slate-500 font-mono transition-all"
                     />
+                    {searchQuery && (
+                      <button
+                        onClick={() => setSearchQuery('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs p-1"
+                      >
+                        <span className="material-symbols-outlined text-sm">close</span>
+                      </button>
+                    )}
                   </div>
 
-                  <div className="flex items-center justify-between md:justify-end gap-3 shrink-0 w-full md:w-auto">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <label className="text-[10px] font-label-caps text-outline tracking-wider font-bold shrink-0">TEAM:</label>
-                      <select
-                        value={selectedTeam}
-                        onChange={(e) => setSelectedTeam(e.target.value)}
-                        className="bg-black/50 border border-outline-variant/30 text-white rounded-lg px-3 py-1.5 text-xs focus:ring-0 focus:border-primary cursor-pointer hover:bg-black/80 font-label-caps shrink-0"
+                  {/* Filter Selects & View Mode Toggle */}
+                  <div className="flex items-center justify-between md:justify-end gap-2.5 shrink-0 w-full md:w-auto flex-wrap sm:flex-nowrap">
+                    {/* Team Filter Dropdown */}
+                    <div className="relative shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsTeamDropdownOpen(!isTeamDropdownOpen);
+                          setIsStatusDropdownOpen(false);
+                        }}
+                        className="px-3 py-2 rounded-xl bg-[#070210] border border-purple-500/30 hover:border-purple-400 text-xs font-bold font-mono text-purple-200 flex items-center gap-2 transition-all cursor-pointer shadow-sm"
                       >
-                        <option value="All">All Teams</option>
-                        <option value="Design">Design</option>
-                        <option value="Education">Education</option>
-                        <option value="Esports (Mobile)">Esports (Mobile)</option>
-                        <option value="Esports (PC)">Esports (PC)</option>
-                        <option value="PR">PR</option>
-                        <option value="Social Media">Social Media</option>
-                        <option value="Technical">Technical</option>
-                        <option value="Management">Management</option>
-                      </select>
+                        <span className="text-[10px] text-purple-400 font-black">TEAM:</span>
+                        <span className="truncate max-w-[110px] text-white">{selectedTeam}</span>
+                        <span className={`material-symbols-outlined text-xs text-purple-400 transition-transform ${isTeamDropdownOpen ? 'rotate-180' : ''}`}>
+                          expand_more
+                        </span>
+                      </button>
+
+                      {isTeamDropdownOpen && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setIsTeamDropdownOpen(false)} />
+                          <div className="absolute right-0 top-full mt-2 z-50 bg-[#0d041c] border border-purple-500/50 rounded-2xl p-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.95)] w-52 space-y-1 text-left animate-in fade-in duration-100">
+                            {[
+                              'All',
+                              'Technical',
+                              'Design',
+                              'Education',
+                              'Esports (PC)',
+                              'Esports (Mobile)',
+                              'PR',
+                              'Social Media',
+                              'Management'
+                            ].map((tm) => (
+                              <button
+                                key={tm}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedTeam(tm);
+                                  setIsTeamDropdownOpen(false);
+                                }}
+                                className={`w-full px-3 py-2 rounded-xl text-xs font-mono font-bold flex items-center justify-between transition-colors cursor-pointer ${
+                                  selectedTeam === tm
+                                    ? 'bg-purple-600/35 text-white border border-purple-400/40'
+                                    : 'text-slate-300 hover:text-white hover:bg-white/5'
+                                }`}
+                              >
+                                <span>{tm === 'All' ? 'All Teams' : tm}</span>
+                                {selectedTeam === tm && (
+                                  <span className="material-symbols-outlined text-xs text-purple-300">check</span>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
                     </div>
 
-                    {/* 3D Card View Push Button Switch (Logo Only) */}
+                    {/* Status Filter Dropdown */}
+                    <div className="relative shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsStatusDropdownOpen(!isStatusDropdownOpen);
+                          setIsTeamDropdownOpen(false);
+                        }}
+                        className="px-3 py-2 rounded-xl bg-[#070210] border border-purple-500/30 hover:border-purple-400 text-xs font-bold font-mono text-purple-200 flex items-center gap-2 transition-all cursor-pointer shadow-sm"
+                      >
+                        <span className="text-[10px] text-purple-400 font-black">STATUS:</span>
+                        <span className="text-white">{selectedStatus}</span>
+                        <span className={`material-symbols-outlined text-xs text-purple-400 transition-transform ${isStatusDropdownOpen ? 'rotate-180' : ''}`}>
+                          expand_more
+                        </span>
+                      </button>
+
+                      {isStatusDropdownOpen && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setIsStatusDropdownOpen(false)} />
+                          <div className="absolute right-0 top-full mt-2 z-50 bg-[#0d041c] border border-purple-500/50 rounded-2xl p-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.95)] w-44 space-y-1 text-left animate-in fade-in duration-100">
+                            {[
+                              { label: 'All Statuses', value: 'All', icon: 'list' },
+                              { label: 'Approved', value: 'Approved', icon: 'verified', color: 'text-emerald-300' },
+                              { label: 'Pending', value: 'Pending', icon: 'hourglass_empty', color: 'text-amber-300' },
+                            ].map((st) => (
+                              <button
+                                key={st.value}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedStatus(st.value);
+                                  setIsStatusDropdownOpen(false);
+                                }}
+                                className={`w-full px-3 py-2 rounded-xl text-xs font-mono font-bold flex items-center justify-between transition-colors cursor-pointer ${
+                                  selectedStatus === st.value
+                                    ? 'bg-purple-600/35 text-white border border-purple-400/40'
+                                    : `${st.color || 'text-slate-300'} hover:text-white hover:bg-white/5`
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className="material-symbols-outlined text-sm">{st.icon}</span>
+                                  <span>{st.label}</span>
+                                </div>
+                                {selectedStatus === st.value && (
+                                  <span className="material-symbols-outlined text-xs text-purple-300">check</span>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* 3D Card View Switch */}
                     <button
                       type="button"
                       onClick={() => setAdminViewMode(prev => prev === 'cards' ? 'list' : 'cards')}
-                      className="p-2 rounded-lg bg-black/40 border border-white/10 text-white/80 hover:text-white hover:border-primary/50 transition-all duration-300 flex items-center justify-center shrink-0 active:scale-95"
+                      className="p-2 rounded-xl bg-[#070210] border border-purple-500/30 text-purple-300 hover:text-white hover:border-purple-400 transition-all duration-200 flex items-center justify-center shrink-0 active:scale-95 cursor-pointer"
                       title={adminViewMode === 'cards' ? 'Switch to List View' : 'Switch to 3D Cards View'}
                     >
-                      <span className="material-symbols-outlined text-lg">
+                      <span className="material-symbols-outlined text-base">
                         {adminViewMode === 'cards' ? 'format_list_bulleted' : 'style'}
                       </span>
                     </button>
                   </div>
                 </div>
 
-                <div className="glass-panel p-4 rounded-2xl relative space-y-4 pb-28 sm:pb-16">
+                <div className="glass-panel p-4 rounded-2xl relative space-y-4 pb-28 sm:pb-16 z-10">
                   <div className="space-y-4 relative z-10">
                     {loadingData ? (
                       <div className="py-12 text-center text-on-surface-variant font-code-sm animate-pulse">
