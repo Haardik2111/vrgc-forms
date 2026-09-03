@@ -18,6 +18,7 @@ import {
   deleteFacultyMember,
 } from '@/lib/faculty';
 import { FacultyMember } from '@/types/faculty';
+import { CONFIG } from '@/lib/config';
 
 export interface AdminRecord {
   id: string;
@@ -93,7 +94,11 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
         const fallbackName = email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
         const name = (data.name && data.name !== 'Admin' && data.name !== 'Administrator') ? data.name : fallbackName;
         const role = data.role || 'Admin';
-        const isSuperAdmin = !!(data.role === 'super_admin' || data.isSuperAdmin);
+        const isSuperAdmin = !!(
+          data.role === 'super_admin' ||
+          data.isSuperAdmin ||
+          (CONFIG.SUPER_ADMIN_EMAILS || []).some((se) => se.toLowerCase() === email)
+        );
         const addedBy = data.addedBy || '';
         const createdAt = data.createdAt || data.created_at || '';
 
@@ -103,7 +108,7 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
             id: d.id,
             email,
             name,
-            role,
+            role: isSuperAdmin ? 'Super Administrator' : role,
             isSuperAdmin,
             addedBy,
             createdAt,
@@ -115,15 +120,40 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
               id: d.id,
               email,
               name: name !== fallbackName ? name : existing.name,
-              role,
+              role: (isSuperAdmin || existing.isSuperAdmin) ? 'Super Administrator' : role,
               isSuperAdmin: isSuperAdmin || existing.isSuperAdmin,
               addedBy: addedBy || existing.addedBy,
               createdAt: existing.createdAt || createdAt,
             });
           } else {
             duplicateDocIdsToDelete.push(d.id);
-            if (isSuperAdmin) existing.isSuperAdmin = true;
+            if (isSuperAdmin) {
+              existing.isSuperAdmin = true;
+              existing.role = 'Super Administrator';
+            }
           }
+        }
+      });
+
+      // Also ensure all environment/config Super Admins are present and marked as Super Administrator
+      (CONFIG.SUPER_ADMIN_EMAILS || []).forEach((superEmail) => {
+        const cleanSuper = superEmail.toLowerCase().trim();
+        if (!cleanSuper) return;
+        const existing = adminMap.get(cleanSuper);
+        if (existing) {
+          existing.isSuperAdmin = true;
+          existing.role = 'Super Administrator';
+        } else {
+          const fallbackName = cleanSuper.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+          adminMap.set(cleanSuper, {
+            id: cleanSuper,
+            email: cleanSuper,
+            name: fallbackName,
+            role: 'Super Administrator',
+            isSuperAdmin: true,
+            addedBy: 'System Config',
+            createdAt: '',
+          });
         }
       });
 

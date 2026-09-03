@@ -676,9 +676,9 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
       const docId = (editingMember?.id || cleanEmail).toLowerCase();
       const nowIso = new Date().toISOString();
 
-      // Save to `members` collection only — `id_cards` is exclusively for self-submitted ID card dossiers
+      // Save to `members` collection using unique cleanEmail key
       await setDoc(
-        doc(db, 'members', docId),
+        doc(db, 'members', cleanEmail),
         {
           name: cleanName,
           registrationNumber: cleanReg,
@@ -691,22 +691,13 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
         { merge: true }
       );
 
-      // If the stored Firestore doc ID differs from the email (e.g. reg number used as key),
-      // also write by email key so lookups by email always find the latest data
+      // If editing a member whose original doc ID was not cleanEmail (e.g. name or regNo), delete the legacy doc to prevent duplicates
       if (docId !== cleanEmail) {
-        await setDoc(
-          doc(db, 'members', cleanEmail),
-          {
-            name: cleanName,
-            registrationNumber: cleanReg,
-            email: cleanEmail,
-            phone: cleanPhone,
-            team: cleanDomain,
-            position: cleanPosition,
-            updatedAt: nowIso,
-          },
-          { merge: true }
-        );
+        try {
+          await deleteDoc(doc(db, 'members', docId));
+        } catch (delErr) {
+          console.warn('Legacy doc cleanup notice:', delErr);
+        }
       }
 
       // Immediate local state update so the card refreshes without waiting for loadAllMembers
