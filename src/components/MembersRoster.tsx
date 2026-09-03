@@ -529,9 +529,10 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
     setSavingImport(true);
     setImportError('');
     try {
-      // 1. Process new items
+      // 1. Process new items using Registration Number as document key
       for (const item of newEntriesToImport) {
-        const docId = (item.email || item.registrationNumber || `${Date.now()}-${Math.random()}`).toLowerCase();
+        const cleanReg = (item.registrationNumber || '').trim().toUpperCase();
+        const docId = cleanReg || (item.email || '').toLowerCase().trim() || `${Date.now()}-${Math.random()}`;
         await setDoc(
           doc(db, 'members', docId),
           {
@@ -552,7 +553,8 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
         if (clash.decision === 'keep') continue;
 
         const targetData = clash.decision === 'manual' && clash.manualEdits ? clash.manualEdits : clash.incoming;
-        const docId = (clash.existing.id || clash.existing.email || targetData.email).toLowerCase();
+        const cleanReg = (targetData.registrationNumber || clash.existing.registrationNumber || '').trim().toUpperCase();
+        const docId = clash.existing.id || cleanReg || (targetData.email || clash.existing.email || '').toLowerCase().trim();
 
         await setDoc(
           doc(db, 'members', docId),
@@ -673,12 +675,13 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
 
     setSavingMember(true);
     try {
-      const docId = (editingMember?.id || cleanEmail).toLowerCase();
+      // Primary document key is the member's Registration Number (or existing doc ID)
+      const targetDocId = (editingMember?.id || cleanReg || cleanEmail).trim();
       const nowIso = new Date().toISOString();
 
-      // Save to `members` collection using unique cleanEmail key
+      // Modify the existing member document in Firestore directly
       await setDoc(
-        doc(db, 'members', cleanEmail),
+        doc(db, 'members', targetDocId),
         {
           name: cleanName,
           registrationNumber: cleanReg,
@@ -691,12 +694,21 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
         { merge: true }
       );
 
-      // If editing a member whose original doc ID was not cleanEmail (e.g. name or regNo), delete the legacy doc to prevent duplicates
-      if (docId !== cleanEmail) {
+      // If a separate document keyed by email existed (e.g. from an accidental duplicate write), clean it up
+      if (cleanEmail && cleanEmail !== targetDocId.toLowerCase() && cleanEmail !== targetDocId) {
         try {
-          await deleteDoc(doc(db, 'members', docId));
+          await deleteDoc(doc(db, 'members', cleanEmail));
         } catch (delErr) {
-          console.warn('Legacy doc cleanup notice:', delErr);
+          // ignore if doc doesn't exist
+        }
+      }
+
+      // If editing a member whose doc ID changed from an old ID, delete the old doc
+      if (editingMember?.id && editingMember.id !== targetDocId) {
+        try {
+          await deleteDoc(doc(db, 'members', editingMember.id));
+        } catch (delErr) {
+          // ignore
         }
       }
 
@@ -709,12 +721,13 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
       const isLd = posLower.includes('lead') || posLower.includes('head');
 
       setMembers((prev) => {
-        const found = prev.some((m) => m.email.toLowerCase() === cleanEmail);
+        const found = prev.some((m) => m.registrationNumber === cleanReg || m.email.toLowerCase() === cleanEmail);
         if (found) {
           return prev.map((m) =>
-            m.email.toLowerCase() === cleanEmail
+            m.registrationNumber === cleanReg || m.email.toLowerCase() === cleanEmail
               ? {
                   ...m,
+                  id: targetDocId,
                   name: cleanName,
                   registrationNumber: cleanReg,
                   phone: cleanPhone,
@@ -730,7 +743,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
         } else {
           return [
             {
-              id: docId,
+              id: targetDocId,
               name: cleanName,
               registrationNumber: cleanReg,
               email: cleanEmail,
@@ -764,16 +777,15 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
     if (!deleteConfirmMember) return;
     setDeletingMember(true);
     try {
-      const cleanEmail = deleteConfirmMember.email.toLowerCase().trim();
-      const docId = (deleteConfirmMember.id || cleanEmail).toLowerCase();
+      const targetDocId = (deleteConfirmMember.id || deleteConfirmMember.registrationNumber || deleteConfirmMember.email).trim();
+      const cleanEmail = (deleteConfirmMember.email || '').toLowerCase().trim();
       
-      // Delete from `members` only — do NOT touch `id_cards` (that's the ID card portal collection)
-      await deleteDoc(doc(db, 'members', docId));
-      if (docId !== cleanEmail) {
+      await deleteDoc(doc(db, 'members', targetDocId));
+      if (cleanEmail && cleanEmail !== targetDocId) {
         try { await deleteDoc(doc(db, 'members', cleanEmail)); } catch {}
       }
 
-      setMembers((prev) => prev.filter((m) => m.email.toLowerCase() !== cleanEmail));
+      setMembers((prev) => prev.filter((m) => m.id !== targetDocId && m.email.toLowerCase() !== cleanEmail));
       setDeleteConfirmMember(null);
       await loadAllMembers();
     } catch (err) {
