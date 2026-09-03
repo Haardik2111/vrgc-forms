@@ -47,7 +47,7 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
   const [isAddAdminOpen, setIsAddAdminOpen] = useState<boolean>(false);
   const [newAdminEmail, setNewAdminEmail] = useState<string>('');
   const [newAdminName, setNewAdminName] = useState<string>('');
-  const [newAdminRole, setNewAdminRole] = useState<string>('Club Administrator');
+  const [newAdminRole, setNewAdminRole] = useState<'Admin' | 'Payment Admin' | 'Technical'>('Admin');
   const [submittingAdmin, setSubmittingAdmin] = useState<boolean>(false);
   const [adminError, setAdminError] = useState<string>('');
 
@@ -87,7 +87,7 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
           id: d.id,
           email: data.email || d.id,
           name: data.name || 'Administrator',
-          role: data.role || 'Club Administrator',
+          role: data.role || 'Admin',
           isSuperAdmin: !!(data.role === 'super_admin' || data.isSuperAdmin),
           addedBy: data.addedBy || '',
           createdAt: data.createdAt || data.created_at || '',
@@ -121,7 +121,7 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
     }
   }, [isOpen]);
 
-  // Handle Add Admin
+  // Handle Add Admin (writes to both `admins` and `roles` collections in Firebase)
   const handleAddAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
     setAdminError('');
@@ -133,22 +133,39 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
 
     setSubmittingAdmin(true);
     try {
+      const nowIso = new Date().toISOString();
+      // 1. Update `admins` collection
       await setDoc(
         doc(db, 'admins', cleanEmail),
         {
           id: cleanEmail,
           email: cleanEmail,
-          name: newAdminName.trim() || 'Club Administrator',
+          name: newAdminName.trim() || cleanEmail.split('@')[0],
           role: newAdminRole,
           addedBy: currentUserEmail,
-          createdAt: new Date().toISOString(),
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        },
+        { merge: true }
+      );
+
+      // 2. Update Firebase `roles` table
+      await setDoc(
+        doc(db, 'roles', cleanEmail),
+        {
+          id: cleanEmail,
+          email: cleanEmail,
+          name: newAdminName.trim() || cleanEmail.split('@')[0],
+          role: newAdminRole,
+          assignedBy: currentUserEmail,
+          updatedAt: nowIso,
         },
         { merge: true }
       );
 
       setNewAdminEmail('');
       setNewAdminName('');
-      setNewAdminRole('Club Administrator');
+      setNewAdminRole('Admin');
       setIsAddAdminOpen(false);
       await loadAdmins();
     } catch (err: any) {
@@ -159,10 +176,26 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
     }
   };
 
-  // Handle Drop Admin
+  // Handle Quick Change Admin Role
+  const handleUpdateAdminRole = async (adminEmail: string, newRole: 'Admin' | 'Payment Admin' | 'Technical') => {
+    try {
+      const cleanEmail = adminEmail.toLowerCase().trim();
+      const nowIso = new Date().toISOString();
+
+      await setDoc(doc(db, 'admins', cleanEmail), { role: newRole, updatedAt: nowIso }, { merge: true });
+      await setDoc(doc(db, 'roles', cleanEmail), { role: newRole, assignedBy: currentUserEmail, updatedAt: nowIso }, { merge: true });
+      await loadAdmins();
+    } catch (err) {
+      console.error('Error updating admin role:', err);
+    }
+  };
+
+  // Handle Drop Admin (removes from both `admins` and `roles` collections)
   const handleDropAdmin = async (adminId: string) => {
     try {
-      await deleteDoc(doc(db, 'admins', adminId.toLowerCase().trim()));
+      const cleanEmail = adminId.toLowerCase().trim();
+      await deleteDoc(doc(db, 'admins', cleanEmail));
+      await deleteDoc(doc(db, 'roles', cleanEmail));
       setDeleteConfirm(null);
       await loadAdmins();
     } catch (err) {
@@ -406,14 +439,12 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
                       <label className="block text-[10px] font-bold text-slate-400 mb-1">DESIGNATION / ROLE</label>
                       <select
                         value={newAdminRole}
-                        onChange={(e) => setNewAdminRole(e.target.value)}
+                        onChange={(e) => setNewAdminRole(e.target.value as any)}
                         className="w-full px-3 py-2 bg-[#1c1c1c] border border-[#333333] rounded-lg text-xs text-white focus:outline-none focus:border-purple-500"
                       >
-                        <option value="Club Administrator">Club Administrator</option>
-                        <option value="Payment Administrator">Payment Administrator</option>
-                        <option value="Technical Lead">Technical Lead</option>
-                        <option value="Executive Council">Executive Council</option>
-                        <option value="Student Coordinator">Student Coordinator</option>
+                        <option value="Admin">Admin</option>
+                        <option value="Payment Admin">Payment Admin</option>
+                        <option value="Technical">Technical</option>
                       </select>
                     </div>
                   </div>
@@ -438,13 +469,13 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
                 </form>
               )}
 
-              {/* Admins Table */}
-              <div className="border border-[#222222] rounded-xl overflow-hidden bg-[#111111]">
-                <table className="w-full text-left text-xs">
+              {/* Admins Table with mobile scroll */}
+              <div className="border border-[#222222] rounded-xl overflow-hidden bg-[#111111] overflow-x-auto custom-scrollbar">
+                <table className="w-full text-left text-xs min-w-[550px]">
                   <thead className="bg-[#181818] border-b border-[#222222] text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                     <tr>
                       <th className="p-3.5">Admin Member</th>
-                      <th className="p-3.5">Role / Designation</th>
+                      <th className="p-3.5">Role</th>
                       <th className="p-3.5">Authority Tier</th>
                       <th className="p-3.5">Added By</th>
                       <th className="p-3.5 text-right">Actions</th>
@@ -476,7 +507,20 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
                               <div className="text-[11px] text-slate-400 font-mono">{adm.email}</div>
                             </td>
                             <td className="p-3.5 text-slate-300">
-                              {adm.role || 'Club Administrator'}
+                              {adm.isSuperAdmin ? (
+                                <span className="font-bold text-purple-300">Super Admin</span>
+                              ) : (
+                                <select
+                                  value={adm.role === 'Payment Admin' || adm.role === 'Technical' ? adm.role : 'Admin'}
+                                  onChange={(e) => handleUpdateAdminRole(adm.email, e.target.value as any)}
+                                  className="px-2 py-1 bg-[#1a1a1a] border border-[#333333] rounded text-[11px] font-semibold text-white focus:outline-none focus:border-purple-500 cursor-pointer"
+                                  title="Change role in Firebase"
+                                >
+                                  <option value="Admin">Admin</option>
+                                  <option value="Payment Admin">Payment Admin</option>
+                                  <option value="Technical">Technical</option>
+                                </select>
+                              )}
                             </td>
                             <td className="p-3.5">
                               {adm.isSuperAdmin ? (
@@ -485,7 +529,7 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
                                 </span>
                               ) : (
                                 <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950/60 text-emerald-300 border border-emerald-600/40">
-                                  ADMIN
+                                  ACTIVE ADMIN
                                 </span>
                               )}
                             </td>

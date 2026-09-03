@@ -1,12 +1,12 @@
 "use client";
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
-
 import { User } from 'firebase/auth';
 
 interface NavbarProps {
   pageTitle?: string;
+  activePage?: string;
   userEmail?: string | null;
   user?: User | null;
   memberData?: { name?: string; fullName?: string; registrationNumber?: string; regNo?: string } | null;
@@ -16,9 +16,27 @@ interface NavbarProps {
   onLogout?: () => Promise<void> | void;
   onLogin?: () => Promise<void> | void;
   onOpenSuperAdminModal?: () => void;
+  onPageChange?: (pageId: string) => void;
+  onOpenMaintenanceModal?: () => void;
 }
 
-const Navbar: React.FC<NavbarProps> = ({ pageTitle = 'Dashboard', userEmail, user, memberData, isAdmin, isSuperAdmin, isFaculty, onLogout, onLogin, onOpenSuperAdminModal }) => {
+const Navbar: React.FC<NavbarProps> = ({
+  pageTitle = 'Dashboard',
+  activePage = 'dashboard',
+  userEmail,
+  user,
+  memberData,
+  isAdmin,
+  isSuperAdmin,
+  isFaculty,
+  onLogout,
+  onLogin,
+  onOpenSuperAdminModal,
+  onPageChange,
+  onOpenMaintenanceModal,
+}) => {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
   const extractRegNo = (emailAddress?: string | null) => {
     if (!emailAddress) return null;
     const match = emailAddress.match(/\b\d{2}[a-zA-Z]{3}\d{5}\b/);
@@ -30,112 +48,295 @@ const Navbar: React.FC<NavbarProps> = ({ pageTitle = 'Dashboard', userEmail, use
   const firstName = rawName.trim().split(' ')[0];
   const photoUrl = user?.photoURL || null;
 
+  const handleMobileNavClick = (pageId: string) => {
+    setIsMobileMenuOpen(false);
+    if (onPageChange) {
+      onPageChange(pageId);
+    }
+  };
+
   return (
-    <header className="bg-black/85 backdrop-blur-2xl flex justify-between items-center w-full px-3.5 sm:px-6 md:px-12 py-3 sm:py-5 sticky top-0 z-50 border-b border-[#a855f7]/20 shadow-[0_5px_30px_rgba(168,85,247,0.05)] select-none">
-      {/* Background cyber grid effect in nav */}
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.002)_1px,transparent_1px)] bg-[size:100%_4px] pointer-events-none opacity-45"></div>
+    <>
+      <header className="bg-black/90 backdrop-blur-2xl flex justify-between items-center w-full px-3 sm:px-6 md:px-12 py-2.5 sm:py-4 sticky top-0 z-50 border-b border-[#a855f7]/20 shadow-[0_5px_30px_rgba(0,0,0,0.7)] select-none">
+        {/* Background subtle scan line */}
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.002)_1px,transparent_1px)] bg-[size:100%_4px] pointer-events-none opacity-45"></div>
 
-      <div className="flex items-center gap-3 sm:gap-6 relative z-10 min-w-0">
-        {/* Brand Group */}
-        <Link href="/" className="flex items-center gap-2 sm:gap-3 group cursor-pointer shrink-0">
-          <div className="relative">
-            <span className="font-display-lg text-xs sm:text-base md:text-lg font-black tracking-wider sm:tracking-widest bg-gradient-to-r from-white via-white to-[#a855f7] bg-clip-text text-transparent group-hover:opacity-90 transition-opacity">
-              VRGC | Forms Portal
+        <div className="flex items-center gap-2 sm:gap-6 relative z-10 min-w-0">
+          {/* Brand Group */}
+          <Link href="/" className="flex items-center gap-1.5 sm:gap-3 group cursor-pointer shrink-0">
+            <div className="relative">
+              <span className="text-xs sm:text-base md:text-lg font-black tracking-wider sm:tracking-widest text-white group-hover:text-purple-300 transition-colors">
+                VRGC <span className="text-purple-400">|</span> Forms
+              </span>
+            </div>
+          </Link>
+
+          {/* Current Active Console Tab Badge */}
+          <div className="hidden md:flex items-center gap-2 pl-4 border-l border-white/10">
+            <span className="material-symbols-outlined text-[13px] text-[#a855f7] animate-pulse">terminal</span>
+            <span className="font-code-sm text-[10px] text-white/50 tracking-wider">
+              [ <span className="text-white font-bold uppercase">{pageTitle}</span> ]
             </span>
-            <div className="absolute -bottom-1 left-0 w-full h-[2px] bg-gradient-to-r from-[#a855f7] to-[#cf5cff] scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left"></div>
           </div>
-        </Link>
-
-        {/* Current Active Console Tab Badge */}
-        <div className="hidden md:flex items-center gap-2 pl-4 border-l border-white/10">
-          <span className="material-symbols-outlined text-[13px] text-[#a855f7] animate-pulse">terminal</span>
-          <span className="font-code-sm text-[10px] text-white/50 tracking-wider">
-            [ <span className="text-white font-bold uppercase">{pageTitle}</span> ]
-          </span>
         </div>
-      </div>
 
-      {/* Right side: user info + status + auth buttons */}
-      <div className="flex items-center gap-2 sm:gap-3 relative z-10 shrink-0">
-        {/* Super Admin Badge */}
-        {isSuperAdmin && (
-          <button
-            onClick={onOpenSuperAdminModal}
-            className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[9px] font-black tracking-wider uppercase bg-purple-700 hover:bg-purple-600 text-white border border-purple-500 shadow-[0_0_12px_rgba(147,51,234,0.35)] cursor-pointer transition-colors"
-            title="Open Super Admin Command Center"
-          >
-            <span className="material-symbols-outlined text-[12px]">admin_panel_settings</span>
-            SUPER ADMIN
-          </button>
-        )}
+        {/* Right side: user info + status + auth buttons */}
+        <div className="flex items-center gap-1.5 sm:gap-3 relative z-10 shrink-0">
+          
+          {/* Super Admin Badge - Visible on both Mobile and Desktop */}
+          {isSuperAdmin && (
+            <button
+              onClick={onOpenSuperAdminModal}
+              className="inline-flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-md text-[8px] sm:text-[9px] font-black tracking-wider uppercase bg-purple-700 hover:bg-purple-600 text-white border border-purple-500 shadow-[0_0_10px_rgba(147,51,234,0.35)] cursor-pointer transition-colors"
+              title="Open Super Admin Command Center"
+            >
+              <span className="material-symbols-outlined text-[11px] sm:text-[12px]">admin_panel_settings</span>
+              <span>SUPER ADMIN</span>
+            </button>
+          )}
 
-        {/* Admin Badge */}
-        {!isSuperAdmin && isAdmin && (
-          <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-[0_0_10px_rgba(245,158,11,0.2)]">
-            <span className="material-symbols-outlined text-[11px]">shield</span>
-            ADMIN
-          </span>
-        )}
+          {/* Admin Badge */}
+          {!isSuperAdmin && isAdmin && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-md text-[8px] sm:text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+              <span className="material-symbols-outlined text-[10px] sm:text-[11px]">shield</span>
+              ADMIN
+            </span>
+          )}
 
-        {/* Faculty Badge */}
-        {isFaculty && (
-          <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shadow-[0_0_10px_rgba(99,102,241,0.2)]">
-            <span className="material-symbols-outlined text-[11px]">school</span>
-            FACULTY
-          </span>
-        )}
+          {/* Faculty Badge */}
+          {isFaculty && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-md text-[8px] sm:text-[9px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
+              <span className="material-symbols-outlined text-[10px] sm:text-[11px]">school</span>
+              FACULTY
+            </span>
+          )}
 
-        {/* User First Name & Google Photo Pill (email & reg number hidden) */}
-        {userEmail && (
-          <div className="hidden md:flex items-center gap-2 bg-[#12081c]/80 rounded-full px-3 py-1 border border-purple-500/30 max-w-[200px]">
-            {photoUrl ? (
-              <img
-                src={photoUrl}
-                alt={firstName || 'User Avatar'}
-                className="w-6 h-6 rounded-full object-cover border border-purple-400/40 shrink-0"
-                referrerPolicy="no-referrer"
-              />
-            ) : (
-              <span className="material-symbols-outlined text-[15px] text-purple-400 shrink-0">account_circle</span>
+          {/* User First Name & Google Photo Pill (desktop) */}
+          {userEmail && (
+            <div className="hidden md:flex items-center gap-2 bg-[#12081c]/80 rounded-full px-3 py-1 border border-purple-500/30 max-w-[200px]">
+              {photoUrl ? (
+                <img
+                  src={photoUrl}
+                  alt={firstName || 'User Avatar'}
+                  className="w-5 h-5 rounded-full object-cover border border-purple-400/40 shrink-0"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <span className="material-symbols-outlined text-[14px] text-purple-400 shrink-0">account_circle</span>
+              )}
+              <span className="text-xs text-white font-extrabold truncate">{firstName}</span>
+            </div>
+          )}
+
+          {/* Active Status Heartbeat Pill */}
+          <div className="bg-[#12081c]/80 rounded-full px-2 sm:px-3 py-0.5 sm:py-1 border border-[#a855f7]/30 items-center gap-1 sm:gap-1.5 flex shadow-[0_0_10px_rgba(147,51,234,0.1)]">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-400"></span>
+            </span>
+            <span className="font-mono text-[7.5px] sm:text-[9px] text-white font-black tracking-widest uppercase">ACTIVE</span>
+          </div>
+
+          {/* Sign In Button (when logged out) */}
+          {onLogin && !userEmail && (
+            <button
+              onClick={onLogin}
+              title="Sign In with Google"
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-[10px] sm:text-[11px] font-bold shadow-[0_0_12px_rgba(147,51,234,0.4)] transition-all duration-200 cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[12px]">login</span>
+              <span>Sign In</span>
+            </button>
+          )}
+
+          {/* Mobile Menu Hamburger Button */}
+          {userEmail && (
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="md:hidden p-1.5 rounded-lg bg-[#1a1126] border border-purple-500/40 text-purple-300 hover:text-white transition-colors cursor-pointer"
+              title="Toggle Navigation Menu"
+              aria-label="Toggle Navigation Menu"
+            >
+              <span className="material-symbols-outlined text-lg block">
+                {isMobileMenuOpen ? 'close' : 'menu'}
+              </span>
+            </button>
+          )}
+
+          {/* Sign Out Button (desktop) */}
+          {onLogout && userEmail && (
+            <button
+              onClick={onLogout}
+              title="Sign Out"
+              className="hidden md:flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 text-[10px] font-bold transition-all duration-200 cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[13px]">logout</span>
+              <span>Sign Out</span>
+            </button>
+          )}
+        </div>
+      </header>
+
+      {/* Mobile Slide-down Navigation Drawer */}
+      {isMobileMenuOpen && userEmail && (
+        <div className="md:hidden fixed top-[49px] left-0 right-0 bg-[#0c0417]/98 backdrop-blur-2xl border-b border-purple-500/30 shadow-[0_15px_40px_rgba(0,0,0,0.8)] z-40 p-4 space-y-3 animate-in slide-in-from-top-2 duration-200 select-none max-h-[calc(100vh-60px)] overflow-y-auto custom-scrollbar">
+          
+          {/* User info strip on mobile */}
+          <div className="flex items-center justify-between pb-3 border-b border-purple-900/40">
+            <div className="flex items-center gap-2.5">
+              {photoUrl ? (
+                <img
+                  src={photoUrl}
+                  alt={firstName}
+                  className="w-8 h-8 rounded-full border border-purple-500/40 object-cover"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-purple-900 flex items-center justify-center text-white">
+                  <span className="material-symbols-outlined text-base">person</span>
+                </div>
+              )}
+              <div>
+                <div className="text-xs font-bold text-white leading-none">{rawName}</div>
+                <div className="text-[10px] text-purple-400 font-mono mt-0.5">{userEmail}</div>
+              </div>
+            </div>
+            {regNo && (
+              <span className="text-[9px] font-mono font-bold bg-[#1e132e] text-purple-300 border border-purple-800 px-2 py-0.5 rounded">
+                {regNo}
+              </span>
             )}
-            <span className="text-xs text-white font-extrabold truncate">{firstName}</span>
           </div>
-        )}
 
-        {/* Active Status Heartbeat Pill */}
-        <div className="bg-[#12081c]/80 rounded-full px-2.5 sm:px-3.5 py-1 sm:py-1.5 border border-[#a855f7]/30 items-center gap-1.5 flex shadow-[0_0_15px_rgba(168,85,247,0.1)]">
-          <span className="relative flex h-1.5 w-1.5 sm:h-2 sm:w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-1.5 w-1.5 sm:h-2 sm:w-2 bg-green-400"></span>
-          </span>
-          <span className="font-code-sm text-[8px] sm:text-[9px] text-white font-black tracking-widest uppercase">ACTIVE</span>
+          {/* Navigation Links */}
+          <div className="grid grid-cols-2 gap-2 text-xs font-bold">
+            <button
+              onClick={() => handleMobileNavClick('dashboard')}
+              className={`flex items-center gap-2 p-2.5 rounded-xl border text-left transition-colors cursor-pointer ${
+                activePage === 'dashboard'
+                  ? 'bg-purple-700 text-white border-purple-500'
+                  : 'bg-[#150a24] text-slate-300 border-purple-900/40 hover:bg-[#1f0f35]'
+              }`}
+            >
+              <span className="material-symbols-outlined text-base text-purple-300">dashboard</span>
+              <span>Dashboard</span>
+            </button>
+
+            <button
+              onClick={() => handleMobileNavClick('members')}
+              className={`flex items-center gap-2 p-2.5 rounded-xl border text-left transition-colors cursor-pointer ${
+                activePage === 'members'
+                  ? 'bg-purple-700 text-white border-purple-500'
+                  : 'bg-[#150a24] text-slate-300 border-purple-900/40 hover:bg-[#1f0f35]'
+              }`}
+            >
+              <span className="material-symbols-outlined text-base text-purple-300">groups</span>
+              <span>Members Roster</span>
+            </button>
+
+            <button
+              onClick={() => handleMobileNavClick('planned_events')}
+              className={`flex items-center gap-2 p-2.5 rounded-xl border text-left transition-colors cursor-pointer ${
+                activePage === 'planned_events'
+                  ? 'bg-purple-700 text-white border-purple-500'
+                  : 'bg-[#150a24] text-slate-300 border-purple-900/40 hover:bg-[#1f0f35]'
+              }`}
+            >
+              <span className="material-symbols-outlined text-base text-purple-300">event_upcoming</span>
+              <span>Planned Events</span>
+            </button>
+
+            <button
+              onClick={() => handleMobileNavClick('payments')}
+              className={`flex items-center gap-2 p-2.5 rounded-xl border text-left transition-colors cursor-pointer ${
+                activePage === 'payments'
+                  ? 'bg-purple-700 text-white border-purple-500'
+                  : 'bg-[#150a24] text-slate-300 border-purple-900/40 hover:bg-[#1f0f35]'
+              }`}
+            >
+              <span className="material-symbols-outlined text-base text-purple-300">payments</span>
+              <span>Payments</span>
+            </button>
+
+            <button
+              onClick={() => handleMobileNavClick('idcard')}
+              className={`flex items-center gap-2 p-2.5 rounded-xl border text-left transition-colors cursor-pointer ${
+                activePage === 'idcard'
+                  ? 'bg-purple-700 text-white border-purple-500'
+                  : 'bg-[#150a24] text-slate-300 border-purple-900/40 hover:bg-[#1f0f35]'
+              }`}
+            >
+              <span className="material-symbols-outlined text-base text-purple-300">badge</span>
+              <span>ID Card</span>
+            </button>
+
+            <button
+              onClick={() => handleMobileNavClick('referrals')}
+              className={`flex items-center gap-2 p-2.5 rounded-xl border text-left transition-colors cursor-pointer ${
+                activePage === 'referrals'
+                  ? 'bg-purple-700 text-white border-purple-500'
+                  : 'bg-[#150a24] text-slate-300 border-purple-900/40 hover:bg-[#1f0f35]'
+              }`}
+            >
+              <span className="material-symbols-outlined text-base text-purple-300">share</span>
+              <span>Referrals</span>
+            </button>
+          </div>
+
+          {/* Admin & Super Admin Action Triggers */}
+          {(isSuperAdmin || isAdmin) && (
+            <div className="pt-2 border-t border-purple-900/40 space-y-2">
+              {isSuperAdmin && onOpenSuperAdminModal && (
+                <button
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    onOpenSuperAdminModal();
+                  }}
+                  className="w-full flex items-center justify-between p-2.5 rounded-xl bg-purple-900/80 border border-purple-500 text-white text-xs font-bold shadow-[0_0_15px_rgba(147,51,234,0.3)] cursor-pointer"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-base">admin_panel_settings</span>
+                    <span>Super Admin Console</span>
+                  </span>
+                  <span className="material-symbols-outlined text-sm">chevron_right</span>
+                </button>
+              )}
+
+              {isAdmin && onOpenMaintenanceModal && (
+                <button
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    onOpenMaintenanceModal();
+                  }}
+                  className="w-full flex items-center justify-between p-2.5 rounded-xl bg-[#1e162b] border border-purple-700 text-purple-200 text-xs font-bold cursor-pointer"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-base">construction</span>
+                    <span>Maintenance Desk</span>
+                  </span>
+                  <span className="material-symbols-outlined text-sm">chevron_right</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Sign Out */}
+          {onLogout && (
+            <div className="pt-2 border-t border-purple-900/40">
+              <button
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  onLogout();
+                }}
+                className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl bg-rose-950/40 border border-rose-500/40 text-rose-400 text-xs font-bold cursor-pointer hover:bg-rose-950/60 transition-colors"
+              >
+                <span className="material-symbols-outlined text-sm">logout</span>
+                <span>Sign Out</span>
+              </button>
+            </div>
+          )}
         </div>
-
-        {/* Sign In Button (when logged out) */}
-        {onLogin && !userEmail && (
-          <button
-            onClick={onLogin}
-            title="Sign In with Google"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-bold shadow-[0_0_15px_rgba(168,85,247,0.4)] transition-all duration-200"
-          >
-            <span className="material-symbols-outlined text-[13px]">login</span>
-            <span>Sign In</span>
-          </button>
-        )}
-
-        {/* Sign Out Button (when logged in) */}
-        {onLogout && userEmail && (
-          <button
-            onClick={onLogout}
-            title="Sign Out"
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 text-[10px] font-bold transition-all duration-200"
-          >
-            <span className="material-symbols-outlined text-[13px]">logout</span>
-            <span className="hidden sm:inline">Sign Out</span>
-          </button>
-        )}
-      </div>
-    </header>
+      )}
+    </>
   );
 };
 

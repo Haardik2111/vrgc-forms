@@ -563,8 +563,8 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
   };
 
   return (
-    <div className="flex-grow min-h-screen bg-[#0a0a0a] p-4 md:p-8 text-left text-white select-none">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className="flex-grow min-h-screen bg-[#0a0a0a] p-3 sm:p-6 md:p-8 text-left text-white select-none">
+      <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8">
         
         {/* Hidden File Input for CSV/Excel */}
         <input

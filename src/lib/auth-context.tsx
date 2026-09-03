@@ -36,6 +36,7 @@ interface AuthContextType {
   isSuperAdmin: boolean;
   isAdmin: boolean;
   isPaymentAdmin: boolean;
+  userRole: 'Super Admin' | 'Admin' | 'Payment Admin' | 'Technical' | null;
   isFaculty: boolean;
   isAuthorized: boolean;
   memberData: MemberData | null;
@@ -51,6 +52,7 @@ const AuthContext = createContext<AuthContextType>({
   isSuperAdmin: false,
   isAdmin: false,
   isPaymentAdmin: false,
+  userRole: null,
   isFaculty: false,
   isAuthorized: false,
   memberData: null,
@@ -66,6 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isPaymentAdmin, setIsPaymentAdmin] = useState(false);
+  const [userRole, setUserRole] = useState<'Super Admin' | 'Admin' | 'Payment Admin' | 'Technical' | null>(null);
   const [isFaculty, setIsFaculty] = useState(false);
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [memberData, setMemberData] = useState<MemberData | null>(null);
@@ -80,6 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsSuperAdmin(false);
       setIsAdmin(false);
       setIsPaymentAdmin(false);
+      setUserRole(null);
       setIsFaculty(false);
       setIsAuthorized(false);
       setMemberData(null);
@@ -103,6 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsSuperAdmin(false);
         setIsAdmin(false);
         setIsPaymentAdmin(false);
+        setUserRole(null);
         setIsAuthorized(true);
         setMemberData({
           name: facultyRecord.name || firebaseUser.displayName || 'Faculty Member',
@@ -133,38 +138,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const superAdmin = isDbSuperAdmin || configSuperAdmins.includes(em);
       setIsSuperAdmin(superAdmin);
 
-      // 3. Check Admin status (Firestore 'admins' collection OR Config env / payment admin OR super admin)
+      // 3. Check Admin & Role status (Firestore 'admins' and 'roles' collections)
       const configAdmins = CONFIG.ADMIN_EMAILS.map((e) => e.toLowerCase());
       let isDbAdmin = false;
+      let assignedRole: 'Super Admin' | 'Admin' | 'Payment Admin' | 'Technical' | null = null;
 
       try {
-        // Direct doc check (doc id = email)
+        // Direct doc check in admins collection
         const adminDoc = await getDoc(doc(db, 'admins', em));
         if (adminDoc.exists()) {
           isDbAdmin = true;
           const adminDocData = adminDoc.data();
           if (adminDocData?.role === 'super_admin' || adminDocData?.isSuperAdmin) {
             setIsSuperAdmin(true);
+            assignedRole = 'Super Admin';
+          } else if (adminDocData?.role === 'Payment Admin') {
+            assignedRole = 'Payment Admin';
+          } else if (adminDocData?.role === 'Technical') {
+            assignedRole = 'Technical';
+          } else {
+            assignedRole = 'Admin';
           }
-        } else {
-          // Query check by 'email' field
-          const adminQuery = query(collection(db, 'admins'), where('email', '==', em));
-          const adminSnap = await getDocs(adminQuery);
-          if (!adminSnap.empty) {
-            isDbAdmin = true;
-            const firstData = adminSnap.docs[0].data();
-            if (firstData?.role === 'super_admin' || firstData?.isSuperAdmin) {
-              setIsSuperAdmin(true);
-            }
+        }
+
+        // Direct doc check in roles table
+        const roleDoc = await getDoc(doc(db, 'roles', em));
+        if (roleDoc.exists()) {
+          const roleData = roleDoc.data();
+          isDbAdmin = true;
+          if (roleData?.role === 'Payment Admin') {
+            assignedRole = 'Payment Admin';
+          } else if (roleData?.role === 'Technical') {
+            assignedRole = 'Technical';
+          } else if (roleData?.role === 'Admin') {
+            assignedRole = 'Admin';
           }
         }
       } catch (adminErr) {
-        console.warn('Firestore admin check fallback:', adminErr);
+        console.warn('Firestore admin/role check fallback:', adminErr);
       }
 
-      const isPaymentAdminEmail = PAYMENT_ADMIN_EMAILS.includes(em);
+      const isPaymentAdminEmail = PAYMENT_ADMIN_EMAILS.includes(em) || assignedRole === 'Payment Admin';
       const admin = superAdmin || isDbAdmin || isPaymentAdminEmail || em === PAYMENT_ADMIN_EMAIL || configAdmins.includes(em);
       const paymentAdmin = superAdmin || isPaymentAdminEmail;
+
+      if (superAdmin) assignedRole = 'Super Admin';
+      else if (!assignedRole && admin) assignedRole = 'Admin';
+
+      setUserRole(assignedRole);
       setIsAdmin(admin);
       setIsPaymentAdmin(paymentAdmin);
 
@@ -296,6 +317,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isSuperAdmin,
         isAdmin,
         isPaymentAdmin,
+        userRole,
         isFaculty,
         isAuthorized,
         memberData,
