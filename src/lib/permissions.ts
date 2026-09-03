@@ -45,6 +45,8 @@ export const DEFAULT_DOMAINS = [
   'Technical',
   'Design',
   'Education',
+  'Esports PC',
+  'Esports Mobile',
   'Esports (PC)',
   'Esports (Mobile)',
   'PR',
@@ -57,6 +59,7 @@ export const DEFAULT_DOMAINS = [
 export const DEFAULT_POSITIONS = [
   'Student Coordinator',
   'Co-President',
+  'President',
   'Lead',
   'Co-Lead',
   'Core Member',

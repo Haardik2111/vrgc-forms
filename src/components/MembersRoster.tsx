@@ -8,6 +8,8 @@ import * as XLSX from 'xlsx';
 import {
   ClubMetadata,
   DEFAULT_CLUB_METADATA,
+  DEFAULT_DOMAINS,
+  DEFAULT_POSITIONS,
   fetchClubMetadata,
   saveClubMetadata,
   fetchPermissionsConfig,
@@ -348,6 +350,67 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
     });
   }, [members, searchQuery, selectedTeam, selectedPosition]);
 
+  // Dynamic available domains combining member's current domain, Firestore metadata, and system defaults
+  const availableDomains = useMemo(() => {
+    const list: string[] = [];
+    const seen = new Set<string>();
+
+    const addDomain = (d?: string) => {
+      if (!d) return;
+      const trimmed = d.trim();
+      if (!trimmed) return;
+      const lower = trimmed.toLowerCase();
+      if (!seen.has(lower)) {
+        seen.add(lower);
+        list.push(trimmed);
+      }
+    };
+
+    // 1. Current member's domain if editing (preserves "Esports PC", "PR • Esports PC", etc.)
+    if (memberFormData.team) {
+      memberFormData.team.split(/[•,;]/).map((s) => s.trim()).filter(Boolean).forEach(addDomain);
+      addDomain(memberFormData.team);
+    }
+
+    // 2. Club Metadata domains from Firestore
+    (clubMetadata.domains || []).forEach(addDomain);
+
+    // 3. System DEFAULT_DOMAINS
+    DEFAULT_DOMAINS.forEach(addDomain);
+
+    return list;
+  }, [clubMetadata.domains, memberFormData.team]);
+
+  // Dynamic available positions combining member's current position, Firestore metadata, and system defaults
+  const availablePositions = useMemo(() => {
+    const list: string[] = [];
+    const seen = new Set<string>();
+
+    const addPos = (p?: string) => {
+      if (!p) return;
+      const trimmed = p.trim();
+      if (!trimmed) return;
+      const lower = trimmed.toLowerCase();
+      if (!seen.has(lower)) {
+        seen.add(lower);
+        list.push(trimmed);
+      }
+    };
+
+    // 1. Current member's position if editing (preserves "Student Coordinator", "Co-President", "Co-Lead", etc.)
+    if (memberFormData.position) {
+      addPos(memberFormData.position);
+    }
+
+    // 2. Club Metadata positions from Firestore
+    (clubMetadata.positions || []).forEach(addPos);
+
+    // 3. System DEFAULT_POSITIONS
+    DEFAULT_POSITIONS.forEach(addPos);
+
+    return list;
+  }, [clubMetadata.positions, memberFormData.position]);
+
   // ─── CSV / XLSX Import Logic ────────────────────────────────────────────────
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -511,12 +574,12 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
     if (member) {
       setEditingMember(member);
       setMemberFormData({
-        name: member.name,
-        registrationNumber: member.registrationNumber,
-        email: member.email,
+        name: member.name || '',
+        registrationNumber: member.registrationNumber || '',
+        email: member.email || '',
         phone: member.phone || '',
-        team: member.team || clubMetadata.domains[0] || 'Technical',
-        position: member.position || clubMetadata.positions[0] || 'Member',
+        team: member.team || (member.teams && member.teams[0]) || 'Technical',
+        position: member.position || 'Core Member',
       });
     } else {
       setEditingMember(null);
@@ -526,7 +589,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
         email: '',
         phone: '',
         team: clubMetadata.domains[0] || 'Technical',
-        position: clubMetadata.positions[0] || 'Member',
+        position: clubMetadata.positions[0] || 'Core Member',
       });
     }
     setMemberModalOpen(true);
@@ -1499,7 +1562,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
                     onChange={(e) => setMemberFormData({ ...memberFormData, team: e.target.value })}
                     className="w-full px-3 py-2 bg-[#1c1c1c] border border-[#333333] rounded-lg text-xs text-white focus:outline-none focus:border-purple-500 cursor-pointer"
                   >
-                    {clubMetadata.domains.map((dom) => (
+                    {availableDomains.map((dom) => (
                       <option key={dom} value={dom}>
                         {dom}
                       </option>
@@ -1530,7 +1593,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
                     onChange={(e) => setMemberFormData({ ...memberFormData, position: e.target.value })}
                     className="w-full px-3 py-2 bg-[#1c1c1c] border border-[#333333] rounded-lg text-xs text-white focus:outline-none focus:border-purple-500 cursor-pointer"
                   >
-                    {clubMetadata.positions.map((pos) => (
+                    {availablePositions.map((pos) => (
                       <option key={pos} value={pos}>
                         {pos}
                       </option>
