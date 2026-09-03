@@ -120,8 +120,8 @@ interface MembersRosterProps {
 }
 
 const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: propIsAdmin }) => {
-  const { isAdmin: authIsAdmin, isSuperAdmin, userRole } = useAuth();
-  const canManage = !!(propIsAdmin || authIsAdmin || isSuperAdmin);
+  const { isSuperAdmin, userRole } = useAuth();
+  const canManage = isSuperAdmin || (propIsAdmin ?? false);
 
   const [members, setMembers] = useState<RosterMember[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
