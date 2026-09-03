@@ -21,24 +21,28 @@ const Sidebar: React.FC<SidebarProps> = ({
   const facultyMenuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
     { id: 'members', label: 'Members Roster', icon: 'groups' },
+    { id: 'planned_events', label: 'Planned Events', icon: 'event_upcoming' },
     { id: 'payments', label: 'Payments View', icon: 'payments' },
   ];
 
-  // Standard member menu items
+  // Standard member menu items (Roster & Planned Events now visible to all!)
   const standardMenuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
-    { id: 'referrals', label: 'Referrals', icon: 'share' },
+    { id: 'members', label: 'Members Roster', icon: 'groups' },
+    { id: 'planned_events', label: 'Planned Events', icon: 'event_upcoming' },
     { id: 'idcard', label: 'ID Card Form', icon: 'badge' },
     { id: 'payments', label: 'Payments & Dues', icon: 'payments' },
+    { id: 'referrals', label: 'Referrals', icon: 'share' },
   ];
 
   // Admin menu items: Full access to both student portal and faculty governance
   const adminMenuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
     { id: 'members', label: 'Members Roster', icon: 'groups' },
+    { id: 'planned_events', label: 'Planned Events', icon: 'event_upcoming' },
     { id: 'payments', label: 'Payments & Dues', icon: 'payments' },
-    { id: 'referrals', label: 'Referrals', icon: 'share' },
     { id: 'idcard', label: 'ID Card Form', icon: 'badge' },
+    { id: 'referrals', label: 'Referrals', icon: 'share' },
   ];
 
   const menuItems = isFaculty

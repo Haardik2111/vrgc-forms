@@ -11,12 +11,14 @@ interface NavbarProps {
   user?: User | null;
   memberData?: { name?: string; fullName?: string; registrationNumber?: string; regNo?: string } | null;
   isAdmin?: boolean;
+  isSuperAdmin?: boolean;
   isFaculty?: boolean;
   onLogout?: () => Promise<void> | void;
   onLogin?: () => Promise<void> | void;
+  onOpenSuperAdminModal?: () => void;
 }
 
-const Navbar: React.FC<NavbarProps> = ({ pageTitle = 'Dashboard', userEmail, user, memberData, isAdmin, isFaculty, onLogout, onLogin }) => {
+const Navbar: React.FC<NavbarProps> = ({ pageTitle = 'Dashboard', userEmail, user, memberData, isAdmin, isSuperAdmin, isFaculty, onLogout, onLogin, onOpenSuperAdminModal }) => {
   const extractRegNo = (emailAddress?: string | null) => {
     if (!emailAddress) return null;
     const match = emailAddress.match(/\b\d{2}[a-zA-Z]{3}\d{5}\b/);
@@ -55,9 +57,21 @@ const Navbar: React.FC<NavbarProps> = ({ pageTitle = 'Dashboard', userEmail, use
 
       {/* Right side: user info + status + auth buttons */}
       <div className="flex items-center gap-2 sm:gap-3 relative z-10 shrink-0">
+        {/* Super Admin Badge */}
+        {isSuperAdmin && (
+          <button
+            onClick={onOpenSuperAdminModal}
+            className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[9px] font-black tracking-wider uppercase bg-purple-700 hover:bg-purple-600 text-white border border-purple-500 shadow-[0_0_12px_rgba(147,51,234,0.35)] cursor-pointer transition-colors"
+            title="Open Super Admin Command Center"
+          >
+            <span className="material-symbols-outlined text-[12px]">admin_panel_settings</span>
+            SUPER ADMIN
+          </button>
+        )}
+
         {/* Admin Badge */}
-        {isAdmin && (
-          <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-[0_0_10px_rgba(245,158,11,0.2)]">
+        {!isSuperAdmin && isAdmin && (
+          <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-[0_0_10px_rgba(245,158,11,0.2)]">
             <span className="material-symbols-outlined text-[11px]">shield</span>
             ADMIN
           </span>

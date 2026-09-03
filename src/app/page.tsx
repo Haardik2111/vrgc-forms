@@ -17,6 +17,8 @@ import MaintenanceModal, {
   MaintenanceConfigState,
   MAINTENANCE_CATEGORIES,
 } from '@/components/MaintenanceModal';
+import PlannedEvents from '@/components/PlannedEvents';
+import SuperAdminManagementModal from '@/components/SuperAdminManagementModal';
 import { useAuth } from '@/lib/auth-context';
 import { auth, db } from '@/lib/firebase';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
@@ -64,6 +66,7 @@ function AppContent() {
   const {
     user,
     userEmail,
+    isSuperAdmin,
     isAdmin,
     isPaymentAdmin,
     isFaculty,
@@ -78,6 +81,7 @@ function AppContent() {
   const [activePage, setActivePage] = useState<string>('dashboard');
   const [toast, setToast] = useState<string | null>(null);
   const [toastKey, setToastKey] = useState<number>(0);
+  const [isSuperAdminModalOpen, setIsSuperAdminModalOpen] = useState<boolean>(false);
 
   // ── Maintenance mode — read from Firestore in real time ───────────────────
   const [maintenanceConfig, setMaintenanceConfig] = useState<MaintenanceConfigState & { enabled?: boolean }>({
@@ -123,7 +127,11 @@ function AppContent() {
 
   const isSectionLocked = (sectionKey: string): boolean => {
     // Admins bypass lock to inspect/test freely
-    if (isAdmin || isPaymentAdmin) return false;
+    if (isAdmin || isPaymentAdmin || isSuperAdmin) return false;
+    // Lobby forms are not locked by category maintenance
+    if (sectionKey === 'batch24' || sectionKey === 'batch25') {
+      return !!(maintenanceConfig.all || maintenanceConfig.enabled);
+    }
     if (maintenanceConfig.all || maintenanceConfig.enabled) return true;
     return !!maintenanceConfig.sections?.[sectionKey];
   };
@@ -148,7 +156,7 @@ function AppContent() {
       const path = window.location.pathname.replace(/^\//, '');
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get('tab');
-      const validPaths = ['referrals', 'idcard', 'payments', 'dashboard', 'batch24', 'batch25', 'members'];
+      const validPaths = ['referrals', 'idcard', 'payments', 'dashboard', 'batch24', 'batch25', 'members', 'planned_events'];
 
       if (path && validPaths.includes(path)) {
         setActivePage(path);
@@ -177,6 +185,7 @@ function AppContent() {
     switch (activePage) {
       case 'dashboard': return isFaculty ? 'Faculty Dashboard' : 'Dashboard';
       case 'members': return 'Members Roster';
+      case 'planned_events': return 'Planned Events';
       case 'batch25': return 'Lobby 25';
       case 'batch24': return 'Lobby 24';
       case 'referrals': return 'Referrals';
@@ -187,13 +196,107 @@ function AppContent() {
     }
   };
 
-  // ── Global loading screen ──────────────────────────────────────────────
+  // ── Global loading screen (Modern Outlined VRGC with Laser Shimmer) ────────
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-[#05010a] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
-          <span className="text-purple-300 text-sm font-semibold tracking-widest uppercase">Authenticating…</span>
+      <div className="min-h-screen bg-[#06020c] flex flex-col items-center justify-center p-6 relative overflow-hidden select-none">
+        {/* Subtle background tech grid */}
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(147,51,234,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(147,51,234,0.03)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col items-center gap-8 max-w-md w-full">
+          {/* Centered Modern Outline VRGC Typography with Shimmer Effect */}
+          <div className="relative flex items-center justify-center">
+            {/* Ambient Solid Glow under logo */}
+            <div className="absolute -inset-4 bg-purple-600/15 rounded-3xl blur-2xl pointer-events-none" />
+
+            {/* SVG Modern Outlined VRGC with Laser Sweep */}
+            <div className="relative w-72 h-24 sm:w-88 sm:h-28 flex items-center justify-center">
+              <svg viewBox="0 0 320 100" className="w-full h-full overflow-visible">
+                <defs>
+                  {/* Laser Shimmer Gradient that sweeps across the letters */}
+                  <linearGradient id="vrgcShimmer" x1="-100%" y1="0%" x2="200%" y2="0%">
+                    <stop offset="0%" stopColor="#9333ea" stopOpacity="0.4" />
+                    <stop offset="35%" stopColor="#a855f7" stopOpacity="0.8" />
+                    <stop offset="50%" stopColor="#ffffff" stopOpacity="1" />
+                    <stop offset="65%" stopColor="#a855f7" stopOpacity="0.8" />
+                    <stop offset="100%" stopColor="#9333ea" stopOpacity="0.4" />
+                    <animate
+                      attributeName="x1"
+                      from="-100%"
+                      to="100%"
+                      dur="2.2s"
+                      repeatCount="indefinite"
+                    />
+                    <animate
+                      attributeName="x2"
+                      from="0%"
+                      to="200%"
+                      dur="2.2s"
+                      repeatCount="indefinite"
+                    />
+                  </linearGradient>
+
+                  {/* Outer Glow Filter */}
+                  <filter id="neonGlow" x="-20%" y="-20%" width="140%" height="140%">
+                    <feDropShadow dx="0" dy="0" stdDeviation="4" floodColor="#a855f7" floodOpacity="0.7" />
+                  </filter>
+                </defs>
+
+                {/* Base Dark Neon Outline */}
+                <text
+                  x="50%"
+                  y="68%"
+                  textAnchor="middle"
+                  fill="none"
+                  stroke="#3b0764"
+                  strokeWidth="6"
+                  strokeLinejoin="round"
+                  fontFamily="system-ui, -apple-system, sans-serif"
+                  fontWeight="900"
+                  fontSize="78"
+                  letterSpacing="10"
+                >
+                  VRGC
+                </text>
+
+                {/* Shimmering Animated Foreground Stroke */}
+                <text
+                  x="50%"
+                  y="68%"
+                  textAnchor="middle"
+                  fill="none"
+                  stroke="url(#vrgcShimmer)"
+                  strokeWidth="3.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  filter="url(#neonGlow)"
+                  fontFamily="system-ui, -apple-system, sans-serif"
+                  fontWeight="900"
+                  fontSize="78"
+                  letterSpacing="10"
+                >
+                  VRGC
+                </text>
+              </svg>
+            </div>
+          </div>
+
+          {/* Loading Track & Details */}
+          <div className="w-56 sm:w-64 space-y-3 text-center">
+            {/* Shimmering Progress Bar */}
+            <div className="w-full h-1 bg-[#1a0f2b] rounded-full overflow-hidden relative border border-purple-900/50">
+              <div className="h-full bg-purple-500 rounded-full w-1/3 animate-shimmer-laser shadow-[0_0_10px_#a855f7]" />
+            </div>
+
+            <div className="space-y-1">
+              <span className="font-label-caps text-[11px] font-black text-white tracking-[0.25em] block">
+                VIRTUAL REALITY &amp; GAMING CLUB
+              </span>
+              <span className="font-mono text-[9px] text-purple-400 font-semibold tracking-widest block uppercase animate-pulse">
+                INITIALIZING PROTOCOLS...
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -299,12 +402,12 @@ function AppContent() {
         user={user}
         memberData={memberData}
         isAdmin={isAdmin}
+        isSuperAdmin={isSuperAdmin}
         isFaculty={isFaculty}
         onLogout={handleLogout}
         onLogin={handleLogin}
+        onOpenSuperAdminModal={() => setIsSuperAdminModalOpen(true)}
       />
-
-
 
       {/* Admin Notice when currently viewing a category that is locked for members */}
       {isPaymentAdmin && isSectionUnderMaintenanceForAdmin(activePage) && (
@@ -334,7 +437,10 @@ function AppContent() {
                 facultyEmail={userEmail}
               />
             ) : (
-              <Dashboard onPageChange={handlePageChange} />
+              <Dashboard
+                onPageChange={handlePageChange}
+                onOpenSuperAdminModal={() => setIsSuperAdminModalOpen(true)}
+              />
             )
           )}
 
@@ -344,15 +450,33 @@ function AppContent() {
                 section="Members Roster"
                 onBack={() => handlePageChange('dashboard')}
               />
-            ) : isAuthorized ? (
-              <MembersRoster onRedirect={() => handlePageChange('dashboard')} />
             ) : (
-              renderRestrictedSignIn('Members Roster')
+              <MembersRoster
+                onRedirect={() => handlePageChange('dashboard')}
+                isAdmin={isAdmin || isSuperAdmin}
+              />
+            )
+          )}
+
+          {activePage === 'planned_events' && (
+            isSectionLocked('planned_events') ? (
+              <MaintenanceScreen
+                section="Planned Events"
+                onBack={() => handlePageChange('dashboard')}
+              />
+            ) : (
+              <PlannedEvents
+                onRedirect={() => handlePageChange('dashboard')}
+                isAdmin={isAdmin || isSuperAdmin}
+                isFaculty={isFaculty}
+                userEmail={userEmail}
+                userName={memberData?.name || user?.displayName || undefined}
+              />
             )
           )}
 
           {activePage === 'batch25' && (
-            isSectionLocked('batch25') ? (
+            maintenanceConfig.all || maintenanceConfig.enabled ? (
               <MaintenanceScreen
                 section="Lobby 25 Member Entry"
                 onBack={() => handlePageChange('dashboard')}
@@ -365,7 +489,7 @@ function AppContent() {
           )}
 
           {activePage === 'batch24' && (
-            isSectionLocked('batch24') ? (
+            maintenanceConfig.all || maintenanceConfig.enabled ? (
               <MaintenanceScreen
                 section="Lobby 24 Member Entry"
                 onBack={() => handlePageChange('dashboard')}
@@ -448,6 +572,15 @@ function AppContent() {
         saving={savingMaintenance}
       />
 
+      {/* Super Admin Command Center Modal */}
+      {isSuperAdmin && (
+        <SuperAdminManagementModal
+          isOpen={isSuperAdminModalOpen}
+          onClose={() => setIsSuperAdminModalOpen(false)}
+          currentUserEmail={userEmail}
+        />
+      )}
+
       {/* Mobile Bottom Nav */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[#0e0518]/95 backdrop-blur-lg border-t border-purple-500/30 flex justify-around py-3 z-50 select-none">
         {isFaculty ? (
@@ -460,6 +593,10 @@ function AppContent() {
               <span className="material-symbols-outlined text-xl">groups</span>
               <span className="font-label-caps text-[9px]">ROSTER</span>
             </button>
+            <button onClick={() => handlePageChange('planned_events')} className={`flex flex-col items-center gap-1 ${activePage === 'planned_events' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
+              <span className="material-symbols-outlined text-xl">event_upcoming</span>
+              <span className="font-label-caps text-[9px]">EVENTS</span>
+            </button>
             <button onClick={() => handlePageChange('payments')} className={`flex flex-col items-center gap-1 ${activePage === 'payments' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
               <span className="material-symbols-outlined text-xl">payments</span>
               <span className="font-label-caps text-[9px]">PAYMENTS</span>
@@ -471,9 +608,13 @@ function AppContent() {
               <span className="material-symbols-outlined text-xl">dashboard</span>
               <span className="font-label-caps text-[9px]">HOME</span>
             </button>
-            <button onClick={() => handlePageChange('referrals')} className={`flex flex-col items-center gap-1 ${activePage === 'referrals' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
-              <span className="material-symbols-outlined text-xl">share</span>
-              <span className="font-label-caps text-[9px]">REFER</span>
+            <button onClick={() => handlePageChange('members')} className={`flex flex-col items-center gap-1 ${activePage === 'members' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
+              <span className="material-symbols-outlined text-xl">groups</span>
+              <span className="font-label-caps text-[9px]">ROSTER</span>
+            </button>
+            <button onClick={() => handlePageChange('planned_events')} className={`flex flex-col items-center gap-1 ${activePage === 'planned_events' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
+              <span className="material-symbols-outlined text-xl">event_upcoming</span>
+              <span className="font-label-caps text-[9px]">EVENTS</span>
             </button>
             <button onClick={() => handlePageChange('idcard')} className={`flex flex-col items-center gap-1 ${activePage === 'idcard' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
               <span className="material-symbols-outlined text-xl">badge</span>

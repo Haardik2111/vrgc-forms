@@ -337,6 +337,16 @@
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* VRGC Modern Loading Shimmer Keyframes */
+@keyframes shimmerLaser {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+
+.animate-shimmer-laser {
+  animation: shimmerLaser 1.8s infinite ease-in-out;
+}
+
 /* ═══════════════════════════════════════ */
 /* ═══ MOBILE: Pause heavy animations  ═══ */
 /* ═══════════════════════════════════════ */
