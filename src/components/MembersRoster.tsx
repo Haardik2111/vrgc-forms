@@ -676,7 +676,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
       const docId = (editingMember?.id || cleanEmail).toLowerCase();
       const nowIso = new Date().toISOString();
 
-      // 1. Save to `members` collection
+      // Save to `members` collection only — `id_cards` is exclusively for self-submitted ID card dossiers
       await setDoc(
         doc(db, 'members', docId),
         {
@@ -691,7 +691,8 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
         { merge: true }
       );
 
-      // If document ID in Firestore is different from cleanEmail, keep both synchronized
+      // If the stored Firestore doc ID differs from the email (e.g. reg number used as key),
+      // also write by email key so lookups by email always find the latest data
       if (docId !== cleanEmail) {
         await setDoc(
           doc(db, 'members', cleanEmail),
@@ -708,27 +709,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
         );
       }
 
-      // 2. Synchronize to `id_cards` collection so the updated domain & role persist everywhere
-      try {
-        await setDoc(
-          doc(db, 'id_cards', cleanEmail),
-          {
-            name: cleanName,
-            regNo: cleanReg,
-            registrationNumber: cleanReg,
-            email: cleanEmail,
-            phone: cleanPhone,
-            team: cleanDomain,
-            position: cleanPosition,
-            updatedAt: nowIso,
-          },
-          { merge: true }
-        );
-      } catch (idErr) {
-        console.warn('id_cards sync warning:', idErr);
-      }
-
-      // 3. Immediate local state update for instantaneous card refresh
+      // Immediate local state update so the card refreshes without waiting for loadAllMembers
       const assignedTeams = extractMemberTeams(cleanDomain);
       const posLower = cleanPosition.toLowerCase();
       const teamLower = cleanDomain.toLowerCase();
@@ -795,14 +776,10 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
       const cleanEmail = deleteConfirmMember.email.toLowerCase().trim();
       const docId = (deleteConfirmMember.id || cleanEmail).toLowerCase();
       
+      // Delete from `members` only — do NOT touch `id_cards` (that's the ID card portal collection)
       await deleteDoc(doc(db, 'members', docId));
       if (docId !== cleanEmail) {
-        await deleteDoc(doc(db, 'members', cleanEmail));
-      }
-      try {
-        await deleteDoc(doc(db, 'id_cards', cleanEmail));
-      } catch (idErr) {
-        console.warn('id_cards delete warning:', idErr);
+        try { await deleteDoc(doc(db, 'members', cleanEmail)); } catch {}
       }
 
       setMembers((prev) => prev.filter((m) => m.email.toLowerCase() !== cleanEmail));
