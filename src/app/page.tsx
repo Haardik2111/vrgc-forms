@@ -554,7 +554,7 @@ function AppContent() {
             ) : (
               <MembersRoster
                 onRedirect={() => handlePageChange('dashboard')}
-                isAdmin={isAdmin || isSuperAdmin}
+                isAdmin={getPagePermission('members').canEdit}
               />
             )
           )}
@@ -568,14 +568,13 @@ function AppContent() {
             ) : (
               <PlannedEvents
                 onRedirect={() => handlePageChange('dashboard')}
-                isAdmin={isAdmin || isSuperAdmin}
+                isAdmin={getPagePermission('planned_events').canEdit}
                 isFaculty={isFaculty}
                 userEmail={userEmail}
                 userName={memberData?.name || user?.displayName || undefined}
               />
             )
           )}
-
 
           {activePage === 'referrals' && getPagePermission('referrals').canView && (
             isSectionLocked('referrals') ? (
@@ -588,7 +587,7 @@ function AppContent() {
                 onRedirect={() => handlePageChange('dashboard')}
                 externalUser={user}
                 externalMemberData={memberData}
-                externalIsAdmin={isAdmin}
+                externalIsAdmin={getPagePermission('referrals').canEdit}
                 externalIsAuthorized={isAuthorized}
               />
             ) : (
@@ -607,7 +606,7 @@ function AppContent() {
                 onRedirect={() => handlePageChange('dashboard')}
                 externalUser={user}
                 externalMemberData={memberData}
-                externalIsAdmin={isAdmin}
+                externalIsAdmin={getPagePermission('idcard').canEdit}
                 externalIsAuthorized={isAuthorized}
                 onLogout={handleLogout}
               />
@@ -627,7 +626,7 @@ function AppContent() {
                 onRedirect={() => handlePageChange('dashboard')}
                 externalUser={user}
                 externalUserEmail={userEmail}
-                externalIsAdmin={isPaymentAdmin}
+                externalIsAdmin={getPagePermission('payments').canEdit}
                 externalIsFaculty={isFaculty}
               />
             ) : (

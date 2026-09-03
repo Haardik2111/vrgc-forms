@@ -868,7 +868,7 @@ const Referrals: React.FC<ReferralsProps> = ({
   const userStats = userRankIndex !== -1 ? leaderboard[userRankIndex] : null;
   const userRank = userRankIndex !== -1 ? `#${userRankIndex + 1}` : 'UNRANKED';
   const userXP = userStats ? userStats.totalXP : 0;
-  const isMasterAdmin = currentUser ? adminEmails.includes((currentUser.email || '').toLowerCase()) : false;
+  const isMasterAdmin = externalIsAdmin !== undefined ? externalIsAdmin : (currentUser ? adminEmails.includes((currentUser.email || '').toLowerCase()) : false);
 
   if (authLoading) {
     return (

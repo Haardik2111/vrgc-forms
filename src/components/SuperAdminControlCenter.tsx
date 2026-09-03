@@ -745,24 +745,63 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                   <span>Granular Page Access &amp; Control Matrix</span>
                 </h2>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Control viewability, write privileges, and maintenance override per role and user tier.
+                  Configure page visibility, admin desk write privileges, and maintenance overrides per role.
                 </p>
               </div>
 
               <div className="flex items-center gap-3">
                 {permissionsSuccess && (
-                  <span className="text-xs text-emerald-400 font-bold bg-emerald-950/60 border border-emerald-600/40 px-3 py-1.5 rounded-xl animate-fade-in">
+                  <span className="text-xs text-emerald-400 font-bold bg-[#052e16] border border-emerald-600 px-3 py-1.5 rounded-xl animate-fade-in">
                     {permissionsSuccess}
                   </span>
                 )}
                 <button
                   onClick={handleSavePermissions}
                   disabled={savingPermissions}
-                  className="px-5 py-2.5 bg-purple-700 hover:bg-purple-600 disabled:opacity-50 text-white text-xs font-black tracking-wider uppercase rounded-xl transition-all shadow-[0_0_15px_rgba(147,51,234,0.35)] cursor-pointer flex items-center gap-2"
+                  className="px-5 py-2.5 bg-purple-700 hover:bg-purple-600 disabled:opacity-50 text-white text-xs font-black tracking-wider uppercase rounded-xl transition-all cursor-pointer flex items-center gap-2"
                 >
                   {savingPermissions && <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
                   Save Permissions Matrix
                 </button>
+              </div>
+            </div>
+
+            {/* How Permissions Work Explanatory Card */}
+            <div className="p-4 bg-[#090214] border border-[#2b1442] rounded-2xl space-y-3">
+              <div className="flex items-center gap-2 text-xs font-black text-purple-300 uppercase tracking-wider">
+                <span className="material-symbols-outlined text-purple-400 text-base">info</span>
+                <span>How Portal Permissions &amp; Admin Desks Work</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+                <div className="p-3 bg-[#140b24] border border-[#2b1442] rounded-xl space-y-1">
+                  <div className="flex items-center gap-1.5 text-white font-bold text-xs">
+                    <span className="w-2 h-2 rounded-full bg-white" />
+                    <span>VIEW (Page Access)</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    Controls whether this role can see the page in the navigation bar and open it. If <span className="text-rose-400 font-bold">unchecked</span>, the portal displays a locked Access Denied screen.
+                  </p>
+                </div>
+
+                <div className="p-3 bg-[#140b24] border border-[#2b1442] rounded-xl space-y-1">
+                  <div className="flex items-center gap-1.5 text-emerald-300 font-bold text-xs">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                    <span>EDIT (Admin Desk &amp; Actions)</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    Controls whether this role sees the <span className="text-emerald-400 font-bold">Admin Desk / Dashboard</span> (approving admissions, reviewing ID dossiers, managing rosters, audit logs). If <span className="text-amber-400 font-bold">unchecked</span>, the Admin Desk is completely hidden and the user only sees regular member forms.
+                  </p>
+                </div>
+
+                <div className="p-3 bg-[#140b24] border border-[#2b1442] rounded-xl space-y-1">
+                  <div className="flex items-center gap-1.5 text-amber-300 font-bold text-xs">
+                    <span className="w-2 h-2 rounded-full bg-amber-400" />
+                    <span>BYPASS (Maintenance Override)</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    Allows this specific role or tier to access and use the portal even when the page is actively placed under Maintenance Mode by administrators.
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -773,10 +812,14 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                   <tr>
                     <th className="p-4 w-52">Role / Access Tier</th>
                     {ALL_PAGE_IDS.map((p) => (
-                      <th key={p.id} className="p-3 text-center">
+                      <th
+                        key={p.id}
+                        className="p-3 text-center"
+                        title={`Configure access for ${p.label}. Hover over checkboxes below to customize View, Edit/Admin Desk, and Maintenance Bypass.`}
+                      >
                         <div className="flex flex-col items-center gap-0.5">
                           <span className="material-symbols-outlined text-sm text-purple-400">{p.icon}</span>
-                          <span className="font-extrabold">{p.label}</span>
+                          <span className="font-extrabold text-white">{p.label}</span>
                         </div>
                       </th>
                     ))}
@@ -785,7 +828,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                 <tbody className="divide-y divide-[#1e0f33]">
 
                   {/* Row: Members Tier */}
-                  <tr className="bg-[#0e071c]/50 hover:bg-[#150a29] transition-colors">
+                  <tr className="bg-[#0e071c] hover:bg-[#150a29] transition-colors">
                     <td className="p-4">
                       <div className="font-black text-white flex items-center gap-2">
                         <span className="w-2.5 h-2.5 rounded-full bg-cyan-400" />
@@ -798,7 +841,10 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                       return (
                         <td key={p.id} className="p-3 text-center">
                           <div className="flex flex-col items-center gap-1.5">
-                            <label className="flex items-center gap-1 cursor-pointer text-[10px]" title="Can View Page">
+                            <label
+                              className="flex items-center gap-1 cursor-pointer text-[10px]"
+                              title={`VIEW: When checked, Chapter Members can view the ${p.label} portal.`}
+                            >
                               <input
                                 type="checkbox"
                                 checked={perm.canView}
@@ -807,7 +853,10 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                               />
                               <span className={perm.canView ? 'text-white font-bold' : 'text-slate-500'}>View</span>
                             </label>
-                            <label className="flex items-center gap-1 cursor-pointer text-[10px]" title="Can Edit / Add">
+                            <label
+                              className="flex items-center gap-1 cursor-pointer text-[10px]"
+                              title={`EDIT (ADMIN DESK): When checked, Chapter Members get Admin Desk access on ${p.label}. Turn OFF to restrict to regular member submissions.`}
+                            >
                               <input
                                 type="checkbox"
                                 checked={perm.canEdit}
@@ -816,7 +865,10 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                               />
                               <span className={perm.canEdit ? 'text-emerald-400 font-bold' : 'text-slate-500'}>Edit</span>
                             </label>
-                            <label className="flex items-center gap-1 cursor-pointer text-[10px]" title="Can Bypass Scheduled Maintenance">
+                            <label
+                              className="flex items-center gap-1 cursor-pointer text-[10px]"
+                              title={`BYPASS: When checked, Chapter Members can access ${p.label} during maintenance.`}
+                            >
                               <input
                                 type="checkbox"
                                 checked={perm.bypassMaintenance}
@@ -832,7 +884,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                   </tr>
 
                   {/* Row: Faculty Tier */}
-                  <tr className="bg-[#0e071c]/50 hover:bg-[#150a29] transition-colors">
+                  <tr className="bg-[#0e071c] hover:bg-[#150a29] transition-colors">
                     <td className="p-4">
                       <div className="font-black text-white flex items-center gap-2">
                         <span className="w-2.5 h-2.5 rounded-full bg-indigo-400" />
@@ -845,7 +897,10 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                       return (
                         <td key={p.id} className="p-3 text-center">
                           <div className="flex flex-col items-center gap-1.5">
-                            <label className="flex items-center gap-1 cursor-pointer text-[10px]">
+                            <label
+                              className="flex items-center gap-1 cursor-pointer text-[10px]"
+                              title={`VIEW: When checked, Faculty can view the ${p.label} portal.`}
+                            >
                               <input
                                 type="checkbox"
                                 checked={perm.canView}
@@ -854,7 +909,10 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                               />
                               <span className={perm.canView ? 'text-white font-bold' : 'text-slate-500'}>View</span>
                             </label>
-                            <label className="flex items-center gap-1 cursor-pointer text-[10px]">
+                            <label
+                              className="flex items-center gap-1 cursor-pointer text-[10px]"
+                              title={`EDIT (ADMIN DESK): When checked, Faculty get Admin Desk & management access on ${p.label}.`}
+                            >
                               <input
                                 type="checkbox"
                                 checked={perm.canEdit}
@@ -863,7 +921,10 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                               />
                               <span className={perm.canEdit ? 'text-emerald-400 font-bold' : 'text-slate-500'}>Edit</span>
                             </label>
-                            <label className="flex items-center gap-1 cursor-pointer text-[10px]">
+                            <label
+                              className="flex items-center gap-1 cursor-pointer text-[10px]"
+                              title={`BYPASS: When checked, Faculty can access ${p.label} during maintenance.`}
+                            >
                               <input
                                 type="checkbox"
                                 checked={perm.bypassMaintenance}
@@ -895,42 +956,51 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                         return (
                           <td key={p.id} className="p-3 text-center">
                             <div className="flex flex-col items-center gap-1.5">
-                              <label className="flex items-center gap-1 cursor-pointer text-[10px]">
+                              <label
+                                className="flex items-center gap-1 cursor-pointer text-[10px]"
+                                title={`VIEW: When checked, ${roleName} can view and access the ${p.label} portal.`}
+                              >
                                 <input
-                                type="checkbox"
-                                checked={perm.canView}
-                                onChange={() => handleToggleRolePermission(roleName, p.id, 'canView')}
-                                className="accent-purple-600 rounded cursor-pointer"
-                              />
-                              <span className={perm.canView ? 'text-white font-bold' : 'text-slate-500'}>View</span>
-                            </label>
-                            <label className="flex items-center gap-1 cursor-pointer text-[10px]">
-                              <input
-                                type="checkbox"
-                                checked={perm.canEdit}
-                                onChange={() => handleToggleRolePermission(roleName, p.id, 'canEdit')}
-                                className="accent-purple-600 rounded cursor-pointer"
-                              />
-                              <span className={perm.canEdit ? 'text-emerald-400 font-bold' : 'text-slate-500'}>Edit</span>
-                            </label>
-                            <label className="flex items-center gap-1 cursor-pointer text-[10px]">
-                              <input
-                                type="checkbox"
-                                checked={perm.bypassMaintenance}
-                                onChange={() => handleToggleRolePermission(roleName, p.id, 'bypassMaintenance')}
-                                className="accent-amber-500 rounded cursor-pointer"
-                              />
-                              <span className={perm.bypassMaintenance ? 'text-amber-300 font-bold' : 'text-slate-600'}>Bypass</span>
-                            </label>
-                          </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                                  type="checkbox"
+                                  checked={perm.canView}
+                                  onChange={() => handleToggleRolePermission(roleName, p.id, 'canView')}
+                                  className="accent-purple-600 rounded cursor-pointer"
+                                />
+                                <span className={perm.canView ? 'text-white font-bold' : 'text-slate-500'}>View</span>
+                              </label>
+                              <label
+                                className="flex items-center gap-1 cursor-pointer text-[10px]"
+                                title={`EDIT (ADMIN DESK): When checked, ${roleName} gets Admin Desk & write authority on ${p.label}. When unchecked, Admin Desk is hidden and locked.`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={perm.canEdit}
+                                  onChange={() => handleToggleRolePermission(roleName, p.id, 'canEdit')}
+                                  className="accent-purple-600 rounded cursor-pointer"
+                                />
+                                <span className={perm.canEdit ? 'text-emerald-400 font-bold' : 'text-slate-500'}>Edit</span>
+                              </label>
+                              <label
+                                className="flex items-center gap-1 cursor-pointer text-[10px]"
+                                title={`BYPASS: When checked, ${roleName} can access ${p.label} during maintenance mode.`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={perm.bypassMaintenance}
+                                  onChange={() => handleToggleRolePermission(roleName, p.id, 'bypassMaintenance')}
+                                  className="accent-amber-500 rounded cursor-pointer"
+                                />
+                                <span className={perm.bypassMaintenance ? 'text-amber-300 font-bold' : 'text-slate-600'}>Bypass</span>
+                              </label>
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
           {/* Sub-section: Metadata Delegation Permissions */}
           <div className="p-5 bg-[#0e071a] border border-[#261238] rounded-2xl space-y-3">

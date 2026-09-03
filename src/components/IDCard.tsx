@@ -174,7 +174,7 @@ const IDCard: React.FC<IDCardProps> = ({
       setCurrentUser(userToUse);
 
       const configAdmins = CONFIG.ADMIN_EMAILS.map(e => e.toLowerCase());
-      const adminStatus = configAdmins.includes(lowerEmail) || (externalIsAdmin ?? false);
+      const adminStatus = externalIsAdmin !== undefined ? externalIsAdmin : configAdmins.includes(lowerEmail);
       setIsAdmin(adminStatus);
 
       if (externalIsAuthorized !== undefined) {
