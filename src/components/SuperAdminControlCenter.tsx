@@ -15,7 +15,7 @@ import {
   createDefaultPagePermissionsMap,
 } from '@/lib/permissions';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, deleteDoc, query, where } from 'firebase/firestore';
 import { fetchAllFaculty, deleteFacultyMember, createFacultyMember, updateFacultyMember } from '@/lib/faculty';
 import { FacultyMember } from '@/types/faculty';
 
@@ -106,22 +106,61 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
 
       // 3. Admins
       const snap = await getDocs(collection(db, 'admins'));
-      const adminList: AdminRecord[] = [];
+      const adminMap = new Map<string, AdminRecord>();
+      const duplicateDocIdsToDelete: string[] = [];
+
       snap.forEach((d) => {
         const data = d.data();
         const email = (data.email || d.id).toLowerCase().trim();
+        if (!email) return;
+
         const fallbackName = email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
-        adminList.push({
-          id: d.id,
-          email,
-          name: (data.name && data.name !== 'Admin' && data.name !== 'Administrator') ? data.name : fallbackName,
-          role: data.role || 'Admin',
-          isSuperAdmin: !!(data.role === 'super_admin' || data.isSuperAdmin),
-          addedBy: data.addedBy || '',
-          createdAt: data.createdAt || data.created_at || '',
-        });
+        const name = (data.name && data.name !== 'Admin' && data.name !== 'Administrator') ? data.name : fallbackName;
+        const role = data.role || 'Admin';
+        const isSuperAdmin = !!(data.role === 'super_admin' || data.isSuperAdmin);
+        const addedBy = data.addedBy || '';
+        const createdAt = data.createdAt || data.created_at || '';
+
+        const existing = adminMap.get(email);
+        if (!existing) {
+          adminMap.set(email, {
+            id: d.id,
+            email,
+            name,
+            role,
+            isSuperAdmin,
+            addedBy,
+            createdAt,
+          });
+        } else {
+          // Duplicate document detected for the same email in Firestore!
+          if (existing.role === 'Admin' && role !== 'Admin') {
+            // Found a more specific role (e.g. Technical / Payment Admin), replace the generic Admin one
+            duplicateDocIdsToDelete.push(existing.id);
+            adminMap.set(email, {
+              id: d.id,
+              email,
+              name: name !== fallbackName ? name : existing.name,
+              role,
+              isSuperAdmin: isSuperAdmin || existing.isSuperAdmin,
+              addedBy: addedBy || existing.addedBy,
+              createdAt: existing.createdAt || createdAt,
+            });
+          } else {
+            duplicateDocIdsToDelete.push(d.id);
+            if (isSuperAdmin) existing.isSuperAdmin = true;
+          }
+        }
       });
-      setAdmins(adminList);
+
+      // Automatically purge duplicate records from Firestore
+      if (duplicateDocIdsToDelete.length > 0) {
+        duplicateDocIdsToDelete.forEach((dupId) => {
+          deleteDoc(doc(db, 'admins', dupId)).catch(console.warn);
+        });
+      }
+
+      setAdmins(Array.from(adminMap.values()));
 
       // 4. Faculty
       const faculties = await fetchAllFaculty();
@@ -334,8 +373,23 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
         prev.map((a) => (a.email.toLowerCase() === cleanEmail ? { ...a, role: newRole } : a))
       );
 
-      await setDoc(doc(db, 'admins', cleanEmail), { role: newRole, updatedAt: nowIso }, { merge: true });
-      await setDoc(doc(db, 'roles', cleanEmail), { role: newRole, assignedBy: currentUserEmail, updatedAt: nowIso }, { merge: true });
+      // Save to canonical document ID in admins and roles
+      await setDoc(doc(db, 'admins', cleanEmail), { id: cleanEmail, email: cleanEmail, role: newRole, updatedAt: nowIso }, { merge: true });
+      await setDoc(doc(db, 'roles', cleanEmail), { id: cleanEmail, email: cleanEmail, role: newRole, assignedBy: currentUserEmail, updatedAt: nowIso }, { merge: true });
+
+      // Clean up any other duplicate documents in admins collection with matching email but different doc ID
+      try {
+        const q = query(collection(db, 'admins'), where('email', '==', cleanEmail));
+        const dupSnap = await getDocs(q);
+        for (const dupDoc of dupSnap.docs) {
+          if (dupDoc.id !== cleanEmail) {
+            await deleteDoc(doc(db, 'admins', dupDoc.id));
+          }
+        }
+      } catch (cleanupErr) {
+        console.warn('Duplicate admin cleanup error:', cleanupErr);
+      }
+
       await loadAllData();
     } catch (err) {
       console.error('Error updating admin role:', err);
@@ -347,6 +401,18 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
       const cleanEmail = adminEmail.toLowerCase().trim();
       await deleteDoc(doc(db, 'admins', cleanEmail));
       await deleteDoc(doc(db, 'roles', cleanEmail));
+
+      // Also delete any other documents matching email
+      try {
+        const q = query(collection(db, 'admins'), where('email', '==', cleanEmail));
+        const dupSnap = await getDocs(q);
+        for (const dupDoc of dupSnap.docs) {
+          await deleteDoc(doc(db, 'admins', dupDoc.id));
+        }
+      } catch (cleanupErr) {
+        console.warn('Duplicate admin deletion error:', cleanupErr);
+      }
+
       setDeleteConfirm(null);
       await loadAllData();
     } catch (err) {
