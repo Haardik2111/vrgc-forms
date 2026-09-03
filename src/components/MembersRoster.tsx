@@ -218,30 +218,41 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
           const email = (data.email || data.Email || docSnap.id || '').toLowerCase().trim();
           if (email && email.includes('@')) {
             const existing = membersMap.get(email);
-            const pos = (data.position || existing?.position || 'Member').trim();
-            const rawTeam = (data.team || existing?.team || 'General').trim();
-            const posLower = pos.toLowerCase();
-            const teamLower = rawTeam.toLowerCase();
+            if (existing) {
+              // Existing record in `members` collection is the source of truth!
+              if (!existing.avatarUrl && (data.photoUrl || data.avatarUrl)) {
+                existing.avatarUrl = data.photoUrl || data.avatarUrl;
+              }
+              if (!existing.phone && data.phone) {
+                existing.phone = data.phone;
+              }
+            } else {
+              // Only add from id_cards if not already in members collection
+              const pos = (data.position || data.role || 'Member').trim();
+              const rawTeam = (data.team || data.domain || 'General').trim();
+              const posLower = pos.toLowerCase();
+              const teamLower = rawTeam.toLowerCase();
 
-            const isCoPres = (posLower.includes('president') || teamLower.includes('president')) && !posLower.includes('vice');
-            const isCoord = posLower.includes('student coordinator') || teamLower.includes('student coordinator') || (posLower.includes('coordinator') && !posLower.includes('event'));
-            const isLd = posLower.includes('lead') || posLower.includes('head');
-            const assignedTeams = extractMemberTeams(rawTeam);
+              const isCoPres = (posLower.includes('president') || teamLower.includes('president')) && !posLower.includes('vice');
+              const isCoord = posLower.includes('student coordinator') || teamLower.includes('student coordinator') || (posLower.includes('coordinator') && !posLower.includes('event'));
+              const isLd = posLower.includes('lead') || posLower.includes('head');
+              const assignedTeams = extractMemberTeams(rawTeam);
 
-            membersMap.set(email, {
-              id: existing?.id || docSnap.id,
-              name: data.name || data.fullName || existing?.name || 'Member',
-              registrationNumber: (data.regNo || data.registrationNumber || existing?.registrationNumber || '').toUpperCase(),
-              email,
-              phone: data.phone || existing?.phone || '',
-              team: assignedTeams.join(' • '),
-              teams: assignedTeams,
-              position: pos || 'Member',
-              avatarUrl: data.photoUrl || data.avatarUrl || existing?.avatarUrl || `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(data.name || email)}`,
-              isCoPresident: isCoPres,
-              isCoordinator: isCoord,
-              isLead: isLd,
-            });
+              membersMap.set(email, {
+                id: docSnap.id,
+                name: data.name || data.fullName || 'Member',
+                registrationNumber: (data.regNo || data.registrationNumber || '').toUpperCase(),
+                email,
+                phone: data.phone || '',
+                team: assignedTeams.join(' • '),
+                teams: assignedTeams,
+                position: pos || 'Member',
+                avatarUrl: data.photoUrl || data.avatarUrl || `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(data.name || email)}`,
+                isCoPresident: isCoPres,
+                isCoordinator: isCoord,
+                isLead: isLd,
+              });
+            }
           }
         });
       } catch (idErr) {
@@ -663,19 +674,107 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
     setSavingMember(true);
     try {
       const docId = (editingMember?.id || cleanEmail).toLowerCase();
+      const nowIso = new Date().toISOString();
+
+      // 1. Save to `members` collection
       await setDoc(
         doc(db, 'members', docId),
         {
           name: cleanName,
           registrationNumber: cleanReg,
           email: cleanEmail,
-          phone: cleanPhone, // Optional
+          phone: cleanPhone,
           team: cleanDomain,
           position: cleanPosition,
-          updatedAt: new Date().toISOString(),
+          updatedAt: nowIso,
         },
         { merge: true }
       );
+
+      // If document ID in Firestore is different from cleanEmail, keep both synchronized
+      if (docId !== cleanEmail) {
+        await setDoc(
+          doc(db, 'members', cleanEmail),
+          {
+            name: cleanName,
+            registrationNumber: cleanReg,
+            email: cleanEmail,
+            phone: cleanPhone,
+            team: cleanDomain,
+            position: cleanPosition,
+            updatedAt: nowIso,
+          },
+          { merge: true }
+        );
+      }
+
+      // 2. Synchronize to `id_cards` collection so the updated domain & role persist everywhere
+      try {
+        await setDoc(
+          doc(db, 'id_cards', cleanEmail),
+          {
+            name: cleanName,
+            regNo: cleanReg,
+            registrationNumber: cleanReg,
+            email: cleanEmail,
+            phone: cleanPhone,
+            team: cleanDomain,
+            position: cleanPosition,
+            updatedAt: nowIso,
+          },
+          { merge: true }
+        );
+      } catch (idErr) {
+        console.warn('id_cards sync warning:', idErr);
+      }
+
+      // 3. Immediate local state update for instantaneous card refresh
+      const assignedTeams = extractMemberTeams(cleanDomain);
+      const posLower = cleanPosition.toLowerCase();
+      const teamLower = cleanDomain.toLowerCase();
+      const isCoPres = (posLower.includes('president') || teamLower.includes('president')) && !posLower.includes('vice');
+      const isCoord = posLower.includes('student coordinator') || teamLower.includes('student coordinator') || (posLower.includes('coordinator') && !posLower.includes('event'));
+      const isLd = posLower.includes('lead') || posLower.includes('head');
+
+      setMembers((prev) => {
+        const found = prev.some((m) => m.email.toLowerCase() === cleanEmail);
+        if (found) {
+          return prev.map((m) =>
+            m.email.toLowerCase() === cleanEmail
+              ? {
+                  ...m,
+                  name: cleanName,
+                  registrationNumber: cleanReg,
+                  phone: cleanPhone,
+                  team: assignedTeams.join(' • '),
+                  teams: assignedTeams,
+                  position: cleanPosition,
+                  isCoPresident: isCoPres,
+                  isCoordinator: isCoord,
+                  isLead: isLd,
+                }
+              : m
+          );
+        } else {
+          return [
+            {
+              id: docId,
+              name: cleanName,
+              registrationNumber: cleanReg,
+              email: cleanEmail,
+              phone: cleanPhone,
+              team: assignedTeams.join(' • '),
+              teams: assignedTeams,
+              position: cleanPosition,
+              avatarUrl: `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(cleanName || cleanEmail)}`,
+              isCoPresident: isCoPres,
+              isCoordinator: isCoord,
+              isLead: isLd,
+            },
+            ...prev,
+          ];
+        }
+      });
 
       setMemberModalOpen(false);
       setEditingMember(null);
@@ -693,8 +792,20 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
     if (!deleteConfirmMember) return;
     setDeletingMember(true);
     try {
-      const docId = (deleteConfirmMember.id || deleteConfirmMember.email).toLowerCase();
+      const cleanEmail = deleteConfirmMember.email.toLowerCase().trim();
+      const docId = (deleteConfirmMember.id || cleanEmail).toLowerCase();
+      
       await deleteDoc(doc(db, 'members', docId));
+      if (docId !== cleanEmail) {
+        await deleteDoc(doc(db, 'members', cleanEmail));
+      }
+      try {
+        await deleteDoc(doc(db, 'id_cards', cleanEmail));
+      } catch (idErr) {
+        console.warn('id_cards delete warning:', idErr);
+      }
+
+      setMembers((prev) => prev.filter((m) => m.email.toLowerCase() !== cleanEmail));
       setDeleteConfirmMember(null);
       await loadAllMembers();
     } catch (err) {
