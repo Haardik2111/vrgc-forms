@@ -178,8 +178,10 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
         const membersSnap = await getDocs(collection(db, 'members'));
         membersSnap.forEach((docSnap) => {
           const data = docSnap.data();
-          const email = (data.email || data.Email || docSnap.id || '').toLowerCase().trim();
-          if (email && email.includes('@')) {
+          const email = (data.email || data.Email || '').toLowerCase().trim();
+          const reg = (data.registrationNumber || data['Registration Number'] || data.regNo || docSnap.id || '').toUpperCase().trim();
+          const mapKey = email || reg;
+          if (mapKey) {
             const pos = (data.position || data.role || 'Member').trim();
             const rawTeam = (data.team || data.domain || 'VRGC Member').trim();
             const posLower = pos.toLowerCase();
@@ -189,17 +191,18 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
             const isCoord = posLower.includes('student coordinator') || teamLower.includes('student coordinator') || (posLower.includes('coordinator') && !posLower.includes('event'));
             const isLd = posLower.includes('lead') || posLower.includes('head');
             const assignedTeams = extractMemberTeams(rawTeam);
+            const memberPhoto = data.photoUrl || data.photoURL || data.avatarUrl || data.photo || data.image || data.avatar || '';
 
-            membersMap.set(email, {
+            membersMap.set(mapKey, {
               id: docSnap.id,
               name: data.name || data.Name || data.fullName || 'Member',
-              registrationNumber: (data.registrationNumber || data['Registration Number'] || data.regNo || '').toUpperCase(),
-              email,
+              registrationNumber: reg,
+              email: email || `${reg.toLowerCase()}@vitbhopal.ac.in`,
               phone: data.phone || data.Phone || '',
               team: assignedTeams.join(' • '),
               teams: assignedTeams,
               position: pos || 'Member',
-              avatarUrl: data.photoUrl || data.avatarUrl || `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(data.name || email)}`,
+              avatarUrl: memberPhoto,
               isCoPresident: isCoPres,
               isCoordinator: isCoord,
               isLead: isLd,
@@ -210,56 +213,68 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
         console.warn('Error fetching members collection:', mErr);
       }
 
-      // 2. Query `id_cards` collection
+      // 2. Query `id_cards` collection to enrich member photos & missing records
       try {
         const idCardsSnap = await getDocs(collection(db, 'id_cards'));
         idCardsSnap.forEach((docSnap) => {
           const data = docSnap.data();
-          const email = (data.email || data.Email || docSnap.id || '').toLowerCase().trim();
-          if (email && email.includes('@')) {
-            const existing = membersMap.get(email);
-            if (existing) {
-              // Existing record in `members` collection is the source of truth!
-              if (!existing.avatarUrl && (data.photoUrl || data.avatarUrl)) {
-                existing.avatarUrl = data.photoUrl || data.avatarUrl;
-              }
-              if (!existing.phone && data.phone) {
-                existing.phone = data.phone;
-              }
-            } else {
-              // Only add from id_cards if not already in members collection
-              const pos = (data.position || data.role || 'Member').trim();
-              const rawTeam = (data.team || data.domain || 'General').trim();
-              const posLower = pos.toLowerCase();
-              const teamLower = rawTeam.toLowerCase();
+          const email = (data.email || data.Email || '').toLowerCase().trim();
+          const reg = (data.regNo || data.registrationNumber || docSnap.id || '').toUpperCase().trim();
+          const idPhoto = data.photoUrl || data.photoURL || data.avatarUrl || data.photo || data.image || data.avatar || '';
 
-              const isCoPres = (posLower.includes('president') || teamLower.includes('president')) && !posLower.includes('vice');
-              const isCoord = posLower.includes('student coordinator') || teamLower.includes('student coordinator') || (posLower.includes('coordinator') && !posLower.includes('event'));
-              const isLd = posLower.includes('lead') || posLower.includes('head');
-              const assignedTeams = extractMemberTeams(rawTeam);
+          // Match member by email or registration number
+          let existing = email ? membersMap.get(email) : undefined;
+          if (!existing && reg) {
+            existing = membersMap.get(reg) || Array.from(membersMap.values()).find((m) => m.registrationNumber === reg);
+          }
 
-              membersMap.set(email, {
-                id: docSnap.id,
-                name: data.name || data.fullName || 'Member',
-                registrationNumber: (data.regNo || data.registrationNumber || '').toUpperCase(),
-                email,
-                phone: data.phone || '',
-                team: assignedTeams.join(' • '),
-                teams: assignedTeams,
-                position: pos || 'Member',
-                avatarUrl: data.photoUrl || data.avatarUrl || `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(data.name || email)}`,
-                isCoPresident: isCoPres,
-                isCoordinator: isCoord,
-                isLead: isLd,
-              });
+          if (existing) {
+            // Enrich member with ID card photo if available
+            if (idPhoto) {
+              existing.avatarUrl = idPhoto;
             }
+            if (!existing.phone && data.phone) {
+              existing.phone = data.phone;
+            }
+          } else {
+            // Add member from id_cards if not found in members collection
+            const pos = (data.position || data.role || 'Member').trim();
+            const rawTeam = (data.team || data.domain || 'General').trim();
+            const posLower = pos.toLowerCase();
+            const teamLower = rawTeam.toLowerCase();
+
+            const isCoPres = (posLower.includes('president') || teamLower.includes('president')) && !posLower.includes('vice');
+            const isCoord = posLower.includes('student coordinator') || teamLower.includes('student coordinator') || (posLower.includes('coordinator') && !posLower.includes('event'));
+            const isLd = posLower.includes('lead') || posLower.includes('head');
+            const assignedTeams = extractMemberTeams(rawTeam);
+            const mapKey = email || reg || docSnap.id;
+
+            membersMap.set(mapKey, {
+              id: docSnap.id,
+              name: data.name || data.fullName || 'Member',
+              registrationNumber: reg,
+              email: email || `${reg.toLowerCase()}@vitbhopal.ac.in`,
+              phone: data.phone || '',
+              team: assignedTeams.join(' • '),
+              teams: assignedTeams,
+              position: pos || 'Member',
+              avatarUrl: idPhoto,
+              isCoPresident: isCoPres,
+              isCoordinator: isCoord,
+              isLead: isLd,
+            });
           }
         });
       } catch (idErr) {
         console.warn('Error fetching id_cards collection:', idErr);
       }
 
-      const membersList = Array.from(membersMap.values());
+      // 3. Fallback any members without photos to personalized Dicebear avatar
+      const membersList = Array.from(membersMap.values()).map((m) => ({
+        ...m,
+        avatarUrl: m.avatarUrl || `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(m.name || m.email || m.registrationNumber)}`,
+      }));
+
       setMembers(membersList);
     } catch (err) {
       console.error('Failed to load roster:', err);
