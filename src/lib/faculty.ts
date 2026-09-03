@@ -175,6 +175,7 @@ export async function fetchAllFaculty(): Promise<FacultyMember[]> {
  * Add / Create a faculty member in Firestore.
  */
 export async function createFacultyMember(faculty: {
+  id?: string;
   email: string;
   name: string;
   facultyId: string;

@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { CONFIG } from '../lib/config';
 import { auth, googleProvider, db } from '../lib/firebase';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
-import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, getDocs } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, deleteDoc, doc, setDoc, onSnapshot, query, orderBy, getDocs } from 'firebase/firestore';
 
 interface ReferralsProps {
   onRedirect: () => void;
@@ -87,6 +87,10 @@ const Referrals: React.FC<ReferralsProps> = ({
   const [adminStatusFilter, setAdminStatusFilter] = useState<string>('All');
   const [showAdminFilters, setShowAdminFilters] = useState<boolean>(true);
   const [syncToastMessage, setSyncToastMessage] = useState<string | null>(null);
+
+  // Multi-selection & Bulk Status state
+  const [selectedReferralIds, setSelectedReferralIds] = useState<Set<string>>(new Set());
+  const [bulkUpdating, setBulkUpdating] = useState<boolean>(false);
 
   useEffect(() => {
     if (externalUser !== undefined) {
@@ -444,6 +448,39 @@ const Referrals: React.FC<ReferralsProps> = ({
     }, 1500);
   };
 
+  const getRefKey = (ref: ReferralRecord, idx?: number) => {
+    return ref.id || getRefVal(ref, 'Candidate Registration Number') || getRefVal(ref, 'candidateRegNo') || `ref-${idx}`;
+  };
+
+  const addAdmittedCandidateToMembers = async (candidate: ReferralRecord) => {
+    try {
+      const cName = getRefVal(candidate, 'Candidate Name') || getRefVal(candidate, 'candidateName') || 'Member';
+      const cReg = (getRefVal(candidate, 'Candidate Registration Number') || getRefVal(candidate, 'candidateRegNo') || '').toUpperCase().trim();
+      const cEmail = (getRefVal(candidate, 'Candidate Email') || getRefVal(candidate, 'candidateEmail') || '').toLowerCase().trim();
+      const cPhone = (getRefVal(candidate, 'Candidate Phone') || getRefVal(candidate, 'candidatePhone') || '').trim();
+      const cTeam = getRefVal(candidate, 'Target Team') || getRefVal(candidate, 'targetTeam') || 'Technical';
+
+      const docId = (cEmail || cReg || `admitted-${Date.now()}`).toLowerCase();
+      await setDoc(
+        doc(db, 'members', docId),
+        {
+          name: cName,
+          registrationNumber: cReg,
+          email: cEmail,
+          phone: cPhone,
+          team: cTeam,
+          position: 'Core Member', // As requested: role as core member in VRGC database
+          admittedFrom: 'referrals',
+          admittedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    } catch (memberErr) {
+      console.error('Error auto-adding admitted candidate to VRGC database:', memberErr);
+    }
+  };
+
   const executeStatusUpdate = async (docId?: string, candidateRegNo?: string, newStatus?: string) => {
     if (!candidateRegNo || !newStatus) return;
     setIsUpdatingStatus(candidateRegNo);
@@ -452,7 +489,22 @@ const Referrals: React.FC<ReferralsProps> = ({
         const docRef = doc(db, 'referrals', docId);
         await updateDoc(docRef, { status: newStatus });
       }
-      setSyncToastMessage(`Candidate dossier status updated to ${newStatus.toUpperCase()}`);
+
+      // If admitted, auto-add to members collection as Core Member
+      if (newStatus === 'Admitted') {
+        const candidate = referrals.find(
+          (r) => r.id === docId || (getRefVal(r, 'Candidate Registration Number') || getRefVal(r, 'candidateRegNo')) === candidateRegNo
+        );
+        if (candidate) {
+          await addAdmittedCandidateToMembers(candidate);
+        }
+      }
+
+      setSyncToastMessage(
+        newStatus === 'Admitted'
+          ? `Candidate ADMITTED & enrolled into VRGC Database as Core Member! 🎉`
+          : `Candidate dossier status updated to ${newStatus.toUpperCase()}`
+      );
       setTimeout(() => setSyncToastMessage(null), 4000);
     } catch (err) {
       console.error('Error updating status in Firestore:', err);
@@ -460,6 +512,62 @@ const Referrals: React.FC<ReferralsProps> = ({
       setIsUpdatingStatus(null);
       setPendingStatusChange(null);
     }
+  };
+
+  const handleApplyBulkStatus = async (targetStatus: string) => {
+    if (selectedReferralIds.size === 0) return;
+    setBulkUpdating(true);
+    try {
+      const activeList = getActiveAdminReferrals();
+      const targetRefs = activeList.filter((r, idx) => selectedReferralIds.has(getRefKey(r, idx)));
+
+      for (const ref of targetRefs) {
+        if (ref.id) {
+          const docRef = doc(db, 'referrals', ref.id);
+          await updateDoc(docRef, { status: targetStatus });
+        }
+        if (targetStatus === 'Admitted') {
+          await addAdmittedCandidateToMembers(ref);
+        }
+      }
+
+      setSyncToastMessage(
+        targetStatus === 'Admitted'
+          ? `Bulk enrolled ${targetRefs.length} candidate(s) into VRGC Database as Core Members! 🎉`
+          : `Bulk updated ${targetRefs.length} candidate(s) to ${targetStatus.toUpperCase()}!`
+      );
+      setTimeout(() => setSyncToastMessage(null), 4000);
+      setSelectedReferralIds(new Set());
+    } catch (err: any) {
+      console.error('Error in bulk status update:', err);
+      alert('Failed to update candidate statuses: ' + err.message);
+    } finally {
+      setBulkUpdating(false);
+    }
+  };
+
+  const handleToggleSelectAll = () => {
+    const activeList = getActiveAdminReferrals();
+    const allKeys = activeList.map((r, idx) => getRefKey(r, idx));
+    const allSelected = allKeys.length > 0 && allKeys.every((k) => selectedReferralIds.has(k));
+
+    if (allSelected) {
+      setSelectedReferralIds(new Set());
+    } else {
+      setSelectedReferralIds(new Set(allKeys));
+    }
+  };
+
+  const handleToggleSelectOne = (key: string) => {
+    setSelectedReferralIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
   };
 
   const executeDeleteReferral = async (docId?: string, candidateRegNo?: string) => {
@@ -1600,12 +1708,103 @@ const Referrals: React.FC<ReferralsProps> = ({
               </div>
             </div>
 
+            {/* Bulk Action Toolbar */}
+            {selectedReferralIds.size > 0 && (
+              <div className="p-3 sm:p-4 rounded-2xl bg-[#140b24] border border-purple-500 shadow-[0_0_30px_rgba(147,51,234,0.35)] flex flex-col md:flex-row md:items-center justify-between gap-3 animate-fade-in">
+                <div className="flex items-center gap-3">
+                  <span className="w-8 h-8 rounded-xl bg-purple-700 flex items-center justify-center text-white font-black text-xs font-mono">
+                    {selectedReferralIds.size}
+                  </span>
+                  <div>
+                    <div className="text-xs font-black text-white uppercase tracking-tight">
+                      {selectedReferralIds.size} Candidate(s) Selected
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      Bulk change candidate pipelines or admit into VRGC database
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedReferralIds(new Set())}
+                    className="text-[11px] text-purple-300 hover:text-white underline ml-2 cursor-pointer font-bold"
+                  >
+                    Deselect All
+                  </button>
+                </div>
+
+                {/* Quick Bulk Actions */}
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                  <button
+                    type="button"
+                    disabled={bulkUpdating}
+                    onClick={() => handleApplyBulkStatus('In Process')}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold font-mono bg-amber-950/80 border border-amber-500/60 text-amber-300 hover:bg-amber-900 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-sm">timelapse</span>
+                    Set In Process
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={bulkUpdating}
+                    onClick={() => handleApplyBulkStatus('Invited to Interview')}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold font-mono bg-purple-950/80 border border-purple-500/60 text-purple-300 hover:bg-purple-900 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-sm">event</span>
+                    Set Interview
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={bulkUpdating}
+                    onClick={() => handleApplyBulkStatus('Admitted')}
+                    className="px-3.5 py-1.5 rounded-xl text-xs font-black font-mono bg-emerald-700 hover:bg-emerald-600 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-sm">verified</span>
+                    Admit to Database
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={bulkUpdating}
+                    onClick={() => handleApplyBulkStatus('Rejected')}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold font-mono bg-rose-950/80 border border-rose-500/60 text-rose-300 hover:bg-rose-900 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-sm">cancel</span>
+                    Set Rejected
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={bulkUpdating}
+                    onClick={() => handleApplyBulkStatus('Pending')}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold font-mono bg-cyan-950/80 border border-cyan-500/60 text-cyan-300 hover:bg-cyan-900 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-sm">hourglass_empty</span>
+                    Set Pending
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Candidate Dossiers Table */}
             <div className="bg-[#090214]/95 border border-purple-500/30 rounded-2xl p-4 sm:p-5 shadow-[0_0_30px_rgba(0,0,0,0.6)] space-y-3">
               <div className="overflow-x-auto custom-scrollbar">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-purple-500/20 text-[10px] text-slate-400 uppercase tracking-widest font-black">
+                      <th className="py-2.5 px-3 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          checked={
+                            getActiveAdminReferrals().length > 0 &&
+                            getActiveAdminReferrals().every((r, i) => selectedReferralIds.has(getRefKey(r, i)))
+                          }
+                          onChange={handleToggleSelectAll}
+                          className="accent-purple-600 rounded cursor-pointer w-3.5 h-3.5"
+                          title="Select All / Deselect All Visible Candidates"
+                        />
+                      </th>
                       <th className="py-2.5 px-3 font-black text-left">CANDIDATE INFO</th>
                       <th className="py-2.5 px-3 font-black text-left">RECRUITER IDENT</th>
                       <th className="py-2.5 px-3 font-black text-left">DIVISION</th>
@@ -1615,6 +1814,8 @@ const Referrals: React.FC<ReferralsProps> = ({
                   <tbody>
                     {getActiveAdminReferrals().length > 0 ? (
                       getActiveAdminReferrals().map((ref, idx) => {
+                        const refKey = getRefKey(ref, idx);
+                        const isSelected = selectedReferralIds.has(refKey);
                         const cName = getRefVal(ref, "Candidate Name") || getRefVal(ref, "candidateName") || "Candidate Profile";
                         const cReg = getRefVal(ref, "Candidate Registration Number") || getRefVal(ref, "candidateRegNo") || "UNKNOWN";
                         const refName = getRefVal(ref, "Referrer Name") || getRefVal(ref, "referrerName") || "VRGC Recruiter";
@@ -1626,8 +1827,18 @@ const Referrals: React.FC<ReferralsProps> = ({
                           <tr 
                             key={cReg + idx}
                             onClick={() => setInspectingCandidate(ref)}
-                            className="border-b border-white/5 hover:bg-white/5 cursor-pointer transition-colors duration-150 group"
+                            className={`border-b border-white/5 cursor-pointer transition-colors duration-150 group ${
+                              isSelected ? 'bg-purple-950/60 border-l-4 border-l-purple-500' : 'hover:bg-white/5'
+                            }`}
                           >
+                            <td className="py-3 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => handleToggleSelectOne(refKey)}
+                                className="accent-purple-600 rounded cursor-pointer w-3.5 h-3.5"
+                              />
+                            </td>
                             <td className="py-3 px-3 text-left">
                               <div className="font-bold text-white text-xs group-hover:text-purple-300 transition-colors">{cName}</div>
                               <div className="text-[11px] text-purple-400 font-mono font-bold">{cReg}</div>
@@ -1734,7 +1945,7 @@ const Referrals: React.FC<ReferralsProps> = ({
                       })
                     ) : (
                       <tr>
-                        <td colSpan={4} className="py-12 text-center text-slate-500 text-xs italic">
+                        <td colSpan={5} className="py-12 text-center text-slate-500 text-xs italic">
                           No candidate referral records match the selected filters.
                         </td>
                       </tr>

@@ -5,6 +5,13 @@ import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc } from 'firebase
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
 import * as XLSX from 'xlsx';
+import {
+  ClubMetadata,
+  DEFAULT_CLUB_METADATA,
+  fetchClubMetadata,
+  saveClubMetadata,
+  fetchPermissionsConfig,
+} from '@/lib/permissions';
 
 export interface RosterMember {
   id: string;
@@ -111,7 +118,7 @@ interface MembersRosterProps {
 }
 
 const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: propIsAdmin }) => {
-  const { isAdmin: authIsAdmin, isSuperAdmin } = useAuth();
+  const { isAdmin: authIsAdmin, isSuperAdmin, userRole } = useAuth();
   const canManage = !!(propIsAdmin || authIsAdmin || isSuperAdmin);
 
   const [members, setMembers] = useState<RosterMember[]>([]);
@@ -120,6 +127,13 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
   const [selectedTeam, setSelectedTeam] = useState<string>('ALL');
   const [selectedPosition, setSelectedPosition] = useState<string>('ALL');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+
+  // Club metadata (domains & positions)
+  const [clubMetadata, setClubMetadata] = useState<ClubMetadata>(DEFAULT_CLUB_METADATA);
+  const [canManageMetadata, setCanManageMetadata] = useState<boolean>(false);
+  const [quickAddModalType, setQuickAddModalType] = useState<'domain' | 'position' | null>(null);
+  const [quickAddInput, setQuickAddInput] = useState<string>('');
+  const [savingQuickAdd, setSavingQuickAdd] = useState<boolean>(false);
 
   // File import state
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -138,7 +152,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
     registrationNumber: '',
     email: '',
     phone: '',
-    team: 'Technical Team',
+    team: 'Technical',
     position: 'Member',
   });
   const [savingMember, setSavingMember] = useState<boolean>(false);
@@ -243,7 +257,21 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
 
   useEffect(() => {
     loadAllMembers();
-  }, []);
+
+    const loadMetaAndPerms = async () => {
+      try {
+        const meta = await fetchClubMetadata();
+        setClubMetadata(meta);
+
+        const perms = await fetchPermissionsConfig();
+        const allowed = isSuperAdmin || (userRole ? perms.allowedMetadataRoles.includes(userRole) : false);
+        setCanManageMetadata(allowed);
+      } catch (err) {
+        console.error('Failed to load club metadata / permissions:', err);
+      }
+    };
+    loadMetaAndPerms();
+  }, [isSuperAdmin, userRole]);
 
   // Compute team counts & metrics
   const { teamCounts, leadershipPeople, uniqueTeams } = useMemo(() => {
@@ -487,8 +515,8 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
         registrationNumber: member.registrationNumber,
         email: member.email,
         phone: member.phone || '',
-        team: member.team,
-        position: member.position,
+        team: member.team || clubMetadata.domains[0] || 'Technical',
+        position: member.position || clubMetadata.positions[0] || 'Member',
       });
     } else {
       setEditingMember(null);
@@ -497,26 +525,77 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
         registrationNumber: '',
         email: '',
         phone: '',
-        team: 'Technical Team',
-        position: 'Member',
+        team: clubMetadata.domains[0] || 'Technical',
+        position: clubMetadata.positions[0] || 'Member',
       });
     }
     setMemberModalOpen(true);
+  };
+
+  const handleSaveQuickAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = quickAddInput.trim();
+    if (!clean || !quickAddModalType) return;
+
+    setSavingQuickAdd(true);
+    try {
+      if (quickAddModalType === 'domain') {
+        if (!clubMetadata.domains.some((d) => d.toLowerCase() === clean.toLowerCase())) {
+          const updated = { ...clubMetadata, domains: [...clubMetadata.domains, clean] };
+          await saveClubMetadata(updated);
+          setClubMetadata(updated);
+          setMemberFormData((prev) => ({ ...prev, team: clean }));
+        }
+      } else {
+        if (!clubMetadata.positions.some((p) => p.toLowerCase() === clean.toLowerCase())) {
+          const updated = { ...clubMetadata, positions: [...clubMetadata.positions, clean] };
+          await saveClubMetadata(updated);
+          setClubMetadata(updated);
+          setMemberFormData((prev) => ({ ...prev, position: clean }));
+        }
+      }
+      setQuickAddModalType(null);
+      setQuickAddInput('');
+    } catch (err: any) {
+      alert('Failed to add ' + quickAddModalType + ': ' + err.message);
+    } finally {
+      setSavingQuickAdd(false);
+    }
   };
 
   const handleSaveMember = async (e: React.FormEvent) => {
     e.preventDefault();
     setMemberFormError('');
 
+    const cleanName = memberFormData.name.trim();
+    const cleanReg = memberFormData.registrationNumber.trim().toUpperCase();
     const cleanEmail = memberFormData.email.toLowerCase().trim();
+    const cleanDomain = memberFormData.team.trim();
+    const cleanPosition = memberFormData.position.trim();
+    const cleanPhone = (memberFormData.phone || '').trim();
+
+    // Compulsory fields check: Name, RegNo, Email, Primary Domain, Position are COMPULSORY
+    if (!cleanName) {
+      setMemberFormError('Full Name is compulsory.');
+      return;
+    }
+    if (!cleanReg) {
+      setMemberFormError('Registration Number is compulsory.');
+      return;
+    }
     if (!cleanEmail || !cleanEmail.includes('@')) {
-      setMemberFormError('A valid official email is required.');
+      setMemberFormError('A valid official institutional email is compulsory.');
       return;
     }
-    if (!memberFormData.name.trim()) {
-      setMemberFormError('Member name is required.');
+    if (!cleanDomain) {
+      setMemberFormError('Primary Domain is compulsory. Please choose from dropdown.');
       return;
     }
+    if (!cleanPosition) {
+      setMemberFormError('Role / Designation is compulsory. Please choose from dropdown.');
+      return;
+    }
+    // Phone is strictly OPTIONAL!
 
     setSavingMember(true);
     try {
@@ -524,12 +603,12 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
       await setDoc(
         doc(db, 'members', docId),
         {
-          name: memberFormData.name.trim(),
-          registrationNumber: memberFormData.registrationNumber.toUpperCase().trim(),
+          name: cleanName,
+          registrationNumber: cleanReg,
           email: cleanEmail,
-          phone: memberFormData.phone.trim(),
-          team: memberFormData.team.trim(),
-          position: memberFormData.position.trim(),
+          phone: cleanPhone, // Optional
+          team: cleanDomain,
+          position: cleanPosition,
           updatedAt: new Date().toISOString(),
         },
         { merge: true }
@@ -1359,7 +1438,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
 
             <form onSubmit={handleSaveMember} className="space-y-3">
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 mb-1">FULL NAME *</label>
+                <label className="block text-[10px] font-bold text-slate-400 mb-1">FULL NAME * (COMPULSORY)</label>
                 <input
                   type="text"
                   required
@@ -1372,7 +1451,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 mb-1">OFFICIAL EMAIL *</label>
+                  <label className="block text-[10px] font-bold text-slate-400 mb-1">OFFICIAL EMAIL * (COMPULSORY)</label>
                   <input
                     type="email"
                     required
@@ -1384,9 +1463,10 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 mb-1">REGISTRATION NUMBER</label>
+                  <label className="block text-[10px] font-bold text-slate-400 mb-1">REGISTRATION NUMBER * (COMPULSORY)</label>
                   <input
                     type="text"
+                    required
                     placeholder="e.g. 24BCG10051"
                     value={memberFormData.registrationNumber}
                     onChange={(e) => setMemberFormData({ ...memberFormData, registrationNumber: e.target.value.toUpperCase() })}
@@ -1397,24 +1477,65 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 mb-1">PRIMARY DOMAIN / TEAM</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Technical Team, Design Team"
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] font-bold text-slate-400">PRIMARY DOMAIN * (COMPULSORY)</label>
+                    {canManageMetadata && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQuickAddInput('');
+                          setQuickAddModalType('domain');
+                        }}
+                        className="text-[10px] text-purple-400 hover:text-purple-300 font-bold flex items-center gap-0.5 cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[12px]">add</span>
+                        New Domain
+                      </button>
+                    )}
+                  </div>
+                  <select
+                    required
                     value={memberFormData.team}
                     onChange={(e) => setMemberFormData({ ...memberFormData, team: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#1c1c1c] border border-[#333333] rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
-                  />
+                    className="w-full px-3 py-2 bg-[#1c1c1c] border border-[#333333] rounded-lg text-xs text-white focus:outline-none focus:border-purple-500 cursor-pointer"
+                  >
+                    {clubMetadata.domains.map((dom) => (
+                      <option key={dom} value={dom}>
+                        {dom}
+                      </option>
+                    ))}
+                  </select>
                 </div>
+
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 mb-1">ROLE / DESIGNATION</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Member, Lead, Creative Director"
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] font-bold text-slate-400">ROLE / DESIGNATION * (COMPULSORY)</label>
+                    {canManageMetadata && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQuickAddInput('');
+                          setQuickAddModalType('position');
+                        }}
+                        className="text-[10px] text-purple-400 hover:text-purple-300 font-bold flex items-center gap-0.5 cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[12px]">add</span>
+                        New Role
+                      </button>
+                    )}
+                  </div>
+                  <select
+                    required
                     value={memberFormData.position}
                     onChange={(e) => setMemberFormData({ ...memberFormData, position: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#1c1c1c] border border-[#333333] rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
-                  />
+                    className="w-full px-3 py-2 bg-[#1c1c1c] border border-[#333333] rounded-lg text-xs text-white focus:outline-none focus:border-purple-500 cursor-pointer"
+                  >
+                    {clubMetadata.positions.map((pos) => (
+                      <option key={pos} value={pos}>
+                        {pos}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -1422,7 +1543,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
                 <label className="block text-[10px] font-bold text-slate-400 mb-1">PHONE NUMBER (OPTIONAL)</label>
                 <input
                   type="tel"
-                  placeholder="e.g. +91 9876543210"
+                  placeholder="e.g. +91 9876543210 (Optional)"
                   value={memberFormData.phone}
                   onChange={(e) => setMemberFormData({ ...memberFormData, phone: e.target.value })}
                   className="w-full px-3 py-2 bg-[#1c1c1c] border border-[#333333] rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
@@ -1482,6 +1603,63 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ─── MODAL 5: Quick Add Domain or Role (Delegated Metadata) ─────────────── */}
+      {quickAddModalType && (
+        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
+          <form
+            onSubmit={handleSaveQuickAdd}
+            className="w-full max-w-sm bg-[#141414] border border-purple-500 rounded-2xl p-5 space-y-4 shadow-2xl text-left"
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-[#2b1442]">
+              <h4 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
+                <span className="material-symbols-outlined text-purple-400 text-base">add_circle</span>
+                Add New {quickAddModalType === 'domain' ? 'Primary Domain' : 'Club Role / Position'}
+              </h4>
+              <button
+                type="button"
+                onClick={() => setQuickAddModalType(null)}
+                className="text-slate-400 hover:text-white"
+              >
+                <span className="material-symbols-outlined text-base">close</span>
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">
+                {quickAddModalType === 'domain' ? 'Domain Name' : 'Position Title'}
+              </label>
+              <input
+                type="text"
+                required
+                autoFocus
+                placeholder={quickAddModalType === 'domain' ? 'e.g. AI & Robotics' : 'e.g. Student Lead'}
+                value={quickAddInput}
+                onChange={(e) => setQuickAddInput(e.target.value)}
+                className="w-full px-3 py-2 bg-[#1c1c1c] border border-[#333333] rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setQuickAddModalType(null)}
+                className="px-3 py-1.5 bg-[#262626] hover:bg-[#333333] text-slate-300 text-xs font-semibold rounded-lg cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={savingQuickAdd || !quickAddInput.trim()}
+                className="px-4 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {savingQuickAdd && <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                Add &amp; Select
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>

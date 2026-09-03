@@ -19,9 +19,16 @@ import MaintenanceModal, {
 } from '@/components/MaintenanceModal';
 import PlannedEvents from '@/components/PlannedEvents';
 import SuperAdminManagementModal from '@/components/SuperAdminManagementModal';
+import SuperAdminControlCenter from '@/components/SuperAdminControlCenter';
 import { useAuth } from '@/lib/auth-context';
 import { auth, db } from '@/lib/firebase';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import {
+  PermissionsConfig,
+  DEFAULT_PERMISSIONS_CONFIG,
+  resolveUserPagePermission,
+  PageId,
+} from '@/lib/permissions';
 
 // ── Under-maintenance screen (shown instead of the locked section) ────────────
 const MaintenanceScreen = ({
@@ -62,6 +69,41 @@ const MaintenanceScreen = ({
   </div>
 );
 
+// ── Restricted module screen (shown when Super Admin has toggled off visibility for this role) ──
+const RestrictedModuleScreen = ({
+  pageTitle,
+  onBack,
+}: {
+  pageTitle: string;
+  onBack?: () => void;
+}) => (
+  <div className="flex-1 flex items-center justify-center p-6 select-none">
+    <div className="max-w-md w-full bg-[#0d0517] border border-purple-900/60 rounded-3xl p-8 sm:p-10 shadow-[0_0_50px_rgba(0,0,0,0.8)] flex flex-col items-center gap-5 text-center">
+      <div className="w-16 h-16 rounded-2xl bg-purple-900/30 border border-purple-500/30 flex items-center justify-center text-purple-400">
+        <span className="material-symbols-outlined text-3xl">lock</span>
+      </div>
+      <div className="space-y-2">
+        <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-950 text-purple-300 border border-purple-700/50">
+          ACCESS RESTRICTED
+        </div>
+        <h2 className="text-2xl font-black text-white tracking-tight uppercase">Module Restricted</h2>
+        <p className="text-slate-300 text-xs leading-relaxed">
+          Access to the <span className="text-purple-300 font-bold">{pageTitle}</span> section is currently restricted for your role by the Club Super Administrator.
+        </p>
+      </div>
+      {onBack && (
+        <button
+          onClick={onBack}
+          className="px-5 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold transition-all flex items-center gap-2 cursor-pointer mt-2"
+        >
+          <span className="material-symbols-outlined text-sm">arrow_back</span>
+          Return to Dashboard
+        </button>
+      )}
+    </div>
+  </div>
+);
+
 function AppContent() {
   const {
     user,
@@ -72,6 +114,7 @@ function AppContent() {
     isFaculty,
     isAuthorized,
     memberData,
+    userRole,
     authLoading,
     authError,
     handleLogin,
@@ -82,6 +125,40 @@ function AppContent() {
   const [toast, setToast] = useState<string | null>(null);
   const [toastKey, setToastKey] = useState<number>(0);
   const [isSuperAdminModalOpen, setIsSuperAdminModalOpen] = useState<boolean>(false);
+
+  // ── Real-time Dynamic Page Permissions Matrix ───────────────────────────
+  const [permissionsConfig, setPermissionsConfig] = useState<PermissionsConfig>(DEFAULT_PERMISSIONS_CONFIG);
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'config', 'permissions'), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data() as PermissionsConfig;
+        setPermissionsConfig({
+          roles: { ...DEFAULT_PERMISSIONS_CONFIG.roles, ...(data.roles || {}) },
+          tiers: {
+            members: { ...DEFAULT_PERMISSIONS_CONFIG.tiers.members, ...(data.tiers?.members || {}) },
+            faculty: { ...DEFAULT_PERMISSIONS_CONFIG.tiers.faculty, ...(data.tiers?.faculty || {}) },
+          },
+          customRoles: data.customRoles || [],
+          allowedMetadataRoles: data.allowedMetadataRoles || DEFAULT_PERMISSIONS_CONFIG.allowedMetadataRoles,
+        });
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  const getPagePermission = (pageKey: string) => {
+    if (pageKey === 'dashboard') return { canView: true, canEdit: true, bypassMaintenance: true };
+    if (pageKey === 'superadmin') return { canView: isSuperAdmin, canEdit: isSuperAdmin, bypassMaintenance: true };
+    return resolveUserPagePermission(
+      pageKey as PageId,
+      permissionsConfig,
+      userRole,
+      isSuperAdmin,
+      isFaculty,
+      isAuthorized
+    );
+  };
 
   // ── Maintenance mode — read from Firestore in real time ───────────────────
   const [maintenanceConfig, setMaintenanceConfig] = useState<MaintenanceConfigState & { enabled?: boolean }>({
@@ -126,8 +203,10 @@ function AppContent() {
   };
 
   const isSectionLocked = (sectionKey: string): boolean => {
-    // Admins bypass lock to inspect/test freely
-    if (isAdmin || isPaymentAdmin || isSuperAdmin) return false;
+    const perm = getPagePermission(sectionKey);
+    // If the role/tier has bypassMaintenance granted by Super Admin, never lock
+    if (perm.bypassMaintenance) return false;
+
     // Lobby forms are not locked by category maintenance
     if (sectionKey === 'batch24' || sectionKey === 'batch25') {
       return !!(maintenanceConfig.all || maintenanceConfig.enabled);
@@ -150,13 +229,13 @@ function AppContent() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // Parse initial tab from clean URL path (e.g. /referrals, /idcard, /payments, /members, /planned_events)
+  // Parse initial tab from clean URL path (e.g. /referrals, /idcard, /payments, /members, /planned_events, /superadmin)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const path = window.location.pathname.replace(/^\//, '');
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get('tab');
-      const validPaths = ['referrals', 'idcard', 'payments', 'dashboard', 'batch24', 'batch25', 'members', 'planned_events'];
+      const validPaths = ['referrals', 'idcard', 'payments', 'dashboard', 'batch24', 'batch25', 'members', 'planned_events', 'superadmin'];
 
       if (path && validPaths.includes(path)) {
         setActivePage(path);
@@ -191,6 +270,7 @@ function AppContent() {
       case 'referrals': return 'Referrals';
       case 'idcard': return 'ID Card Portal';
       case 'payments': return isFaculty ? 'Faculty Payments Ledger' : 'Payments & Dues Portal';
+      case 'superadmin': return 'Super Admin Enclave';
       case 'tickets': return 'Tickets';
       default: return 'Command Center';
     }
@@ -427,11 +507,22 @@ function AppContent() {
           activePage={activePage}
           onPageChange={handlePageChange}
           isAdmin={isAdmin}
+          isSuperAdmin={isSuperAdmin}
           isFaculty={isFaculty}
           isAuthorized={isAuthorized}
+          userRole={userRole}
+          permissionsConfig={permissionsConfig}
         />
 
         <main className="flex-grow min-w-0 pb-24 md:pb-12 min-h-[calc(100vh-76px)] flex flex-col">
+          {/* Permission restriction check across modules */}
+          {activePage !== 'dashboard' && !getPagePermission(activePage).canView && (
+            <RestrictedModuleScreen
+              pageTitle={getPageTitle()}
+              onBack={() => handlePageChange('dashboard')}
+            />
+          )}
+
           {activePage === 'dashboard' && (
             isFaculty ? (
               <FacultyDashboard
@@ -442,12 +533,26 @@ function AppContent() {
             ) : (
               <Dashboard
                 onPageChange={handlePageChange}
-                onOpenSuperAdminModal={() => setIsSuperAdminModalOpen(true)}
+                onOpenSuperAdminModal={() => handlePageChange('superadmin')}
               />
             )
           )}
 
-          {activePage === 'members' && (
+          {activePage === 'superadmin' && (
+            isSuperAdmin ? (
+              <SuperAdminControlCenter
+                onRedirect={() => handlePageChange('dashboard')}
+                currentUserEmail={userEmail || ''}
+              />
+            ) : (
+              <RestrictedModuleScreen
+                pageTitle="Super Admin Enclave"
+                onBack={() => handlePageChange('dashboard')}
+              />
+            )
+          )}
+
+          {activePage === 'members' && getPagePermission('members').canView && (
             isSectionLocked('members') ? (
               <MaintenanceScreen
                 section="Members Roster"
@@ -461,7 +566,7 @@ function AppContent() {
             )
           )}
 
-          {activePage === 'planned_events' && (
+          {activePage === 'planned_events' && getPagePermission('planned_events').canView && (
             isSectionLocked('planned_events') ? (
               <MaintenanceScreen
                 section="Planned Events"
@@ -478,7 +583,7 @@ function AppContent() {
             )
           )}
 
-          {activePage === 'batch25' && (
+          {activePage === 'batch25' && getPagePermission('batch25').canView && (
             maintenanceConfig.all || maintenanceConfig.enabled ? (
               <MaintenanceScreen
                 section="Lobby 25 Member Entry"
@@ -491,7 +596,7 @@ function AppContent() {
             )
           )}
 
-          {activePage === 'batch24' && (
+          {activePage === 'batch24' && getPagePermission('batch24').canView && (
             maintenanceConfig.all || maintenanceConfig.enabled ? (
               <MaintenanceScreen
                 section="Lobby 24 Member Entry"
@@ -504,7 +609,7 @@ function AppContent() {
             )
           )}
 
-          {activePage === 'referrals' && (
+          {activePage === 'referrals' && getPagePermission('referrals').canView && (
             isSectionLocked('referrals') ? (
               <MaintenanceScreen
                 section="Referrals Portal"
@@ -523,7 +628,7 @@ function AppContent() {
             )
           )}
 
-          {activePage === 'idcard' && (
+          {activePage === 'idcard' && getPagePermission('idcard').canView && (
             isSectionLocked('idcard') ? (
               <MaintenanceScreen
                 section="ID Card Portal & Form"
@@ -543,7 +648,7 @@ function AppContent() {
             )
           )}
 
-          {activePage === 'payments' && (
+          {activePage === 'payments' && getPagePermission('payments').canView && (
             isSectionLocked('payments') ? (
               <MaintenanceScreen
                 section="Payments & Dues Portal"

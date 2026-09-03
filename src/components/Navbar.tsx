@@ -86,9 +86,12 @@ const Navbar: React.FC<NavbarProps> = ({
           {/* Super Admin Badge - Visible on both Mobile and Desktop */}
           {isSuperAdmin && (
             <button
-              onClick={onOpenSuperAdminModal}
+              onClick={() => {
+                if (onPageChange) onPageChange('superadmin');
+                else onOpenSuperAdminModal?.();
+              }}
               className="inline-flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-md text-[8px] sm:text-[9px] font-black tracking-wider uppercase bg-purple-700 hover:bg-purple-600 text-white border border-purple-500 shadow-[0_0_10px_rgba(147,51,234,0.35)] cursor-pointer transition-colors"
-              title="Open Super Admin Command Center"
+              title="Open Super Admin Command Enclave"
             >
               <span className="material-symbols-outlined text-[11px] sm:text-[12px]">admin_panel_settings</span>
               <span>SUPER ADMIN</span>
@@ -285,17 +288,18 @@ const Navbar: React.FC<NavbarProps> = ({
           {/* Admin & Super Admin Action Triggers */}
           {(isSuperAdmin || isAdmin) && (
             <div className="pt-2 border-t border-purple-900/40 space-y-2">
-              {isSuperAdmin && onOpenSuperAdminModal && (
+              {isSuperAdmin && (
                 <button
                   onClick={() => {
                     setIsMobileMenuOpen(false);
-                    onOpenSuperAdminModal();
+                    if (onPageChange) onPageChange('superadmin');
+                    else onOpenSuperAdminModal?.();
                   }}
                   className="w-full flex items-center justify-between p-2.5 rounded-xl bg-purple-900/80 border border-purple-500 text-white text-xs font-bold shadow-[0_0_15px_rgba(147,51,234,0.3)] cursor-pointer"
                 >
                   <span className="flex items-center gap-2">
                     <span className="material-symbols-outlined text-base">admin_panel_settings</span>
-                    <span>Super Admin Console</span>
+                    <span>Super Admin Enclave</span>
                   </span>
                   <span className="material-symbols-outlined text-sm">chevron_right</span>
                 </button>

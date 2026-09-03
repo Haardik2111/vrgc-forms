@@ -2,54 +2,64 @@
 
 import React from 'react';
 
+import { PermissionsConfig, resolveUserPagePermission, PageId } from '@/lib/permissions';
+
 interface SidebarProps {
   activePage: string;
   onPageChange: (pageId: string) => void;
   isAdmin?: boolean;
+  isSuperAdmin?: boolean;
   isFaculty?: boolean;
   isAuthorized?: boolean;
+  userRole?: string | null;
+  permissionsConfig?: PermissionsConfig;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
   activePage,
   onPageChange,
   isAdmin = false,
+  isSuperAdmin = false,
   isFaculty = false,
   isAuthorized = true,
+  userRole,
+  permissionsConfig,
 }) => {
-  // Faculty POV menu items
-  const facultyMenuItems = [
+  // Base menu items
+  const baseItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
     { id: 'members', label: 'Members Roster', icon: 'groups' },
     { id: 'planned_events', label: 'Planned Events', icon: 'event_upcoming' },
-    { id: 'payments', label: 'Payments View', icon: 'payments' },
-  ];
-
-  // Standard member menu items (Roster & Planned Events now visible to all!)
-  const standardMenuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
-    { id: 'members', label: 'Members Roster', icon: 'groups' },
-    { id: 'planned_events', label: 'Planned Events', icon: 'event_upcoming' },
-    { id: 'idcard', label: 'ID Card Form', icon: 'badge' },
-    { id: 'payments', label: 'Payments & Dues', icon: 'payments' },
+    { id: 'payments', label: isFaculty ? 'Payments View' : 'Payments & Dues', icon: 'payments' },
+    { id: 'idcard', label: 'ID Card Portal', icon: 'badge' },
     { id: 'referrals', label: 'Referrals', icon: 'share' },
   ];
 
-  // Admin menu items: Full access to both student portal and faculty governance
-  const adminMenuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
-    { id: 'members', label: 'Members Roster', icon: 'groups' },
-    { id: 'planned_events', label: 'Planned Events', icon: 'event_upcoming' },
-    { id: 'payments', label: 'Payments & Dues', icon: 'payments' },
-    { id: 'idcard', label: 'ID Card Form', icon: 'badge' },
-    { id: 'referrals', label: 'Referrals', icon: 'share' },
-  ];
+  // Filter based on permissions matrix
+  const menuItems = baseItems.filter((item) => {
+    if (item.id === 'dashboard') return true;
+    if (isSuperAdmin) return true;
+    if (!permissionsConfig) return true;
 
-  const menuItems = isFaculty
-    ? facultyMenuItems
-    : isAdmin
-    ? adminMenuItems
-    : standardMenuItems;
+    const perm = resolveUserPagePermission(
+      item.id as PageId,
+      permissionsConfig,
+      userRole,
+      isSuperAdmin,
+      isFaculty,
+      isAuthorized
+    );
+    return perm.canView;
+  });
+
+  // If Super Admin, add dedicated Super Admin Enclave
+  if (isSuperAdmin) {
+    menuItems.push({
+      id: 'superadmin',
+      label: 'Super Admin',
+      icon: 'admin_panel_settings',
+    });
+  }
 
   return (
     <aside className="h-[calc(100vh-76px)] w-64 hidden md:flex flex-col p-4 bg-[#090314] border-r border-purple-500/20 sticky top-[76px] select-none">
