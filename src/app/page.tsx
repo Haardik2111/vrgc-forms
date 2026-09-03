@@ -10,8 +10,6 @@ import IDCard from '@/components/IDCard';
 import Referrals from '@/components/Referrals';
 import Tickets from '@/components/Tickets';
 import Payments from '@/components/Payments';
-import Lobby25MemberEntry from '@/components/Lobby25MemberEntry';
-import Lobby24MemberEntry from '@/components/Lobby24MemberEntry';
 import Footer from '@/components/Footer';
 import MaintenanceModal, {
   MaintenanceConfigState,
@@ -207,10 +205,6 @@ function AppContent() {
     // If the role/tier has bypassMaintenance granted by Super Admin, never lock
     if (perm.bypassMaintenance) return false;
 
-    // Lobby forms are not locked by category maintenance
-    if (sectionKey === 'batch24' || sectionKey === 'batch25') {
-      return !!(maintenanceConfig.all || maintenanceConfig.enabled);
-    }
     if (maintenanceConfig.all || maintenanceConfig.enabled) return true;
     return !!maintenanceConfig.sections?.[sectionKey];
   };
@@ -235,7 +229,7 @@ function AppContent() {
       const path = window.location.pathname.replace(/^\//, '');
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get('tab');
-      const validPaths = ['referrals', 'idcard', 'payments', 'dashboard', 'batch24', 'batch25', 'members', 'planned_events', 'superadmin'];
+      const validPaths = ['referrals', 'idcard', 'payments', 'dashboard', 'members', 'planned_events', 'superadmin'];
 
       if (path && validPaths.includes(path)) {
         setActivePage(path);
@@ -265,8 +259,6 @@ function AppContent() {
       case 'dashboard': return isFaculty ? 'Faculty Dashboard' : 'Dashboard';
       case 'members': return 'Members Roster';
       case 'planned_events': return 'Planned Events';
-      case 'batch25': return 'Lobby 25';
-      case 'batch24': return 'Lobby 24';
       case 'referrals': return 'Referrals';
       case 'idcard': return 'ID Card Portal';
       case 'payments': return isFaculty ? 'Faculty Payments Ledger' : 'Payments & Dues Portal';
@@ -583,31 +575,6 @@ function AppContent() {
             )
           )}
 
-          {activePage === 'batch25' && getPagePermission('batch25').canView && (
-            maintenanceConfig.all || maintenanceConfig.enabled ? (
-              <MaintenanceScreen
-                section="Lobby 25 Member Entry"
-                onBack={() => handlePageChange('dashboard')}
-              />
-            ) : isAuthorized ? (
-              <Lobby25MemberEntry onRedirect={() => handlePageChange('dashboard')} />
-            ) : (
-              renderRestrictedSignIn('Lobby 25')
-            )
-          )}
-
-          {activePage === 'batch24' && getPagePermission('batch24').canView && (
-            maintenanceConfig.all || maintenanceConfig.enabled ? (
-              <MaintenanceScreen
-                section="Lobby 24 Member Entry"
-                onBack={() => handlePageChange('dashboard')}
-              />
-            ) : isAuthorized ? (
-              <Lobby24MemberEntry onRedirect={() => handlePageChange('dashboard')} />
-            ) : (
-              renderRestrictedSignIn('Lobby 24')
-            )
-          )}
 
           {activePage === 'referrals' && getPagePermission('referrals').canView && (
             isSectionLocked('referrals') ? (

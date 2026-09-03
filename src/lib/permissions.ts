@@ -6,9 +6,7 @@ export type PageId =
   | 'planned_events'
   | 'referrals'
   | 'idcard'
-  | 'payments'
-  | 'batch24'
-  | 'batch25';
+  | 'payments';
 
 export interface PagePermission {
   canView: boolean;
@@ -39,8 +37,6 @@ export const ALL_PAGE_IDS: { id: PageId; label: string; icon: string }[] = [
   { id: 'referrals', label: 'Referrals Portal', icon: 'share' },
   { id: 'idcard', label: 'ID Card Portal', icon: 'badge' },
   { id: 'payments', label: 'Payments & Dues', icon: 'payments' },
-  { id: 'batch24', label: 'Lobby 24 Entry', icon: 'how_to_reg' },
-  { id: 'batch25', label: 'Lobby 25 Entry', icon: 'how_to_reg' },
 ];
 
 export const SYSTEM_ROLES = ['Admin', 'Payment Admin', 'Technical'];
@@ -110,8 +106,6 @@ export const DEFAULT_PERMISSIONS_CONFIG: PermissionsConfig = {
       referrals: createDefaultPagePermission(true, true, false),
       idcard: createDefaultPagePermission(true, true, false),
       payments: createDefaultPagePermission(true, true, false),
-      batch24: createDefaultPagePermission(true, true, false),
-      batch25: createDefaultPagePermission(true, true, false),
     },
     faculty: {
       members: createDefaultPagePermission(true, false, false),
@@ -119,8 +113,6 @@ export const DEFAULT_PERMISSIONS_CONFIG: PermissionsConfig = {
       referrals: createDefaultPagePermission(true, false, false),
       idcard: createDefaultPagePermission(true, true, false),
       payments: createDefaultPagePermission(true, false, false),
-      batch24: createDefaultPagePermission(false, false, false),
-      batch25: createDefaultPagePermission(false, false, false),
     },
   },
   customRoles: [],
