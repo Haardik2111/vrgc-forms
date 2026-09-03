@@ -64,9 +64,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onPageChange, onOpenSuperAdminMod
   // Personalized user info calculation
   const rawFullName = memberData?.name || user?.displayName || (userEmail ? userEmail.split('@')[0] : 'Member');
   const firstName = rawFullName.trim().split(' ')[0] || 'Member';
-  const designation = memberData?.position || (isSuperAdmin ? 'Super Administrator' : userRole || (isAdmin ? 'Administrator' : isFaculty ? 'Faculty Mentor' : 'Club Member'));
-  const teamName = memberData?.team || (isFaculty ? 'Faculty Advisory' : (isSuperAdmin || isAdmin) ? 'Management' : 'General Crew');
-  const regNumber = memberData?.registrationNumber || (isSuperAdmin ? 'SUPER ADMIN' : isAdmin ? 'ADMIN' : isFaculty ? 'FACULTY' : '');
+  const designation = (isSuperAdmin ? 'Super Administrator' : userRole) || memberData?.position || (isAdmin ? 'Administrator' : isFaculty ? 'Faculty Mentor' : 'Club Member');
+  const teamName = memberData?.team || (userRole === 'Technical' ? 'Technical Division' : userRole === 'Payment Admin' ? 'Finance & Treasury' : isFaculty ? 'Faculty Advisory' : (isSuperAdmin || isAdmin) ? 'Management' : 'General Crew');
+  const regNumber = memberData?.registrationNumber || (isSuperAdmin ? 'SUPER ADMIN' : userRole ? userRole.toUpperCase() : isAdmin ? 'ADMIN' : isFaculty ? 'FACULTY' : '');
 
   return (
     <div className="flex-grow min-h-[calc(100vh-117px)] overflow-y-auto p-3 sm:p-6 md:p-8 bg-[#0a0a0a] relative text-left select-none">

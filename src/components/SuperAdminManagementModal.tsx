@@ -83,10 +83,12 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
       const list: AdminRecord[] = [];
       snap.forEach((d) => {
         const data = d.data();
+        const email = (data.email || d.id).toLowerCase().trim();
+        const fallbackName = email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
         list.push({
           id: d.id,
-          email: data.email || d.id,
-          name: data.name || 'Administrator',
+          email,
+          name: (data.name && data.name !== 'Admin' && data.name !== 'Administrator') ? data.name : fallbackName,
           role: data.role || 'Admin',
           isSuperAdmin: !!(data.role === 'super_admin' || data.isSuperAdmin),
           addedBy: data.addedBy || '',
@@ -503,7 +505,7 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
                         return (
                           <tr key={adm.id} className="hover:bg-[#161616] transition-colors">
                             <td className="p-3.5">
-                              <div className="font-bold text-white">{adm.name || 'Admin'}</div>
+                              <div className="font-bold text-white">{adm.name}</div>
                               <div className="text-[11px] text-slate-400 font-mono">{adm.email}</div>
                             </td>
                             <td className="p-3.5 text-slate-300">
@@ -528,8 +530,14 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
                                   SUPER ADMIN
                                 </span>
                               ) : (
-                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950/60 text-emerald-300 border border-emerald-600/40">
-                                  ACTIVE ADMIN
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  adm.role === 'Technical'
+                                    ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-600/50'
+                                    : adm.role === 'Payment Admin'
+                                    ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-600/50'
+                                    : 'bg-purple-950/80 text-purple-300 border border-purple-600/50'
+                                }`}>
+                                  {adm.role ? adm.role.toUpperCase() : 'ADMIN'}
                                 </span>
                               )}
                             </td>

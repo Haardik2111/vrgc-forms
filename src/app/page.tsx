@@ -477,6 +477,7 @@ function AppContent() {
         isAdmin={isAdmin}
         isSuperAdmin={isSuperAdmin}
         isFaculty={isFaculty}
+        userRole={userRole}
         onLogout={handleLogout}
         onLogin={handleLogin}
         onOpenSuperAdminModal={() => setIsSuperAdminModalOpen(true)}

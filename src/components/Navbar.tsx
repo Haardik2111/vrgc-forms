@@ -13,6 +13,7 @@ interface NavbarProps {
   isAdmin?: boolean;
   isSuperAdmin?: boolean;
   isFaculty?: boolean;
+  userRole?: string | null;
   onLogout?: () => Promise<void> | void;
   onLogin?: () => Promise<void> | void;
   onOpenSuperAdminModal?: () => void;
@@ -29,6 +30,7 @@ const Navbar: React.FC<NavbarProps> = ({
   isAdmin,
   isSuperAdmin,
   isFaculty,
+  userRole,
   onLogout,
   onLogin,
   onOpenSuperAdminModal,
@@ -98,11 +100,19 @@ const Navbar: React.FC<NavbarProps> = ({
             </button>
           )}
 
-          {/* Admin Badge */}
+          {/* Admin Role Badge */}
           {!isSuperAdmin && isAdmin && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-md text-[8px] sm:text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-              <span className="material-symbols-outlined text-[10px] sm:text-[11px]">shield</span>
-              ADMIN
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-md text-[8px] sm:text-[9px] font-bold border ${
+              userRole === 'Technical'
+                ? 'bg-cyan-950/80 text-cyan-300 border-cyan-600/50'
+                : userRole === 'Payment Admin'
+                ? 'bg-emerald-950/80 text-emerald-300 border-emerald-600/50'
+                : 'bg-purple-950/80 text-purple-300 border-purple-600/50'
+            }`}>
+              <span className="material-symbols-outlined text-[10px] sm:text-[11px]">
+                {userRole === 'Technical' ? 'terminal' : userRole === 'Payment Admin' ? 'account_balance_wallet' : 'shield'}
+              </span>
+              {userRole ? userRole.toUpperCase() : 'ADMIN'}
             </span>
           )}
 
