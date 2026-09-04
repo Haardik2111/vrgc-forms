@@ -6,6 +6,7 @@ import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/aut
 import { collection, onSnapshot, doc, deleteDoc, updateDoc, setDoc, getDoc, addDoc, getDocs, query, orderBy, limit } from 'firebase/firestore';
 import { supabase } from '../lib/supabase';
 import { CONFIG } from '../lib/config';
+import SpecularButton from './SpecularButton';
 
 interface IDCardProps {
   onRedirect: () => void;
@@ -997,13 +998,20 @@ const IDCard: React.FC<IDCardProps> = ({
           </div>
 
           <div className="flex flex-wrap gap-4 self-start md:self-end z-20">
-            <button
+            <SpecularButton
+              size="xs"
+              radius={10}
+              tint="#e11d48"
+              tintOpacity={0.2}
+              lineColor="#fb7185"
+              baseColor="#881337"
+              intensity={1.1}
               onClick={handleLogout}
-              className="bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 hover:border-red-500/50 px-5 py-2.5 rounded-full text-xs font-label-caps tracking-wider transition-all flex items-center gap-2 font-bold"
+              className="font-bold text-rose-400 font-label-caps tracking-wider"
             >
               <span className="material-symbols-outlined text-sm">logout</span>
               <span>LOGOUT</span>
-            </button>
+            </SpecularButton>
           </div>
         </header>
 

@@ -647,7 +647,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
   const allRolesList = ['Admin', 'Payment Admin', 'Technical', ...(permissions.customRoles || [])];
 
   return (
-    <div className="flex-grow min-h-screen bg-[#06020c] p-3 sm:p-6 md:p-8 text-left text-white select-none">
+    <div className="flex-grow min-h-screen bg-transparent p-3 sm:p-6 md:p-8 text-left text-white select-none">
       <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8">
         
         {/* Enclave Header */}

@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { User } from 'firebase/auth';
+import SpecularButton from './SpecularButton';
 
 interface NavbarProps {
   pageTitle?: string;
@@ -87,17 +88,24 @@ const Navbar: React.FC<NavbarProps> = ({
           
           {/* Super Admin Badge - Visible on both Mobile and Desktop */}
           {isSuperAdmin && (
-            <button
+            <SpecularButton
+              size="xs"
+              radius={8}
+              tint="#9333ea"
+              tintOpacity={0.4}
+              lineColor="#c084fc"
+              baseColor="#581c87"
+              intensity={1.2}
               onClick={() => {
                 if (onPageChange) onPageChange('superadmin');
                 else onOpenSuperAdminModal?.();
               }}
-              className="inline-flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-md text-[8px] sm:text-[9px] font-black tracking-wider uppercase bg-purple-700 hover:bg-purple-600 text-white border border-purple-500 shadow-[0_0_10px_rgba(147,51,234,0.35)] cursor-pointer transition-colors"
+              className="text-[8px] sm:text-[9px] font-black uppercase text-white shadow-[0_0_10px_rgba(147,51,234,0.35)]"
               title="Open Super Admin Command Enclave"
             >
               <span className="material-symbols-outlined text-[11px] sm:text-[12px]">admin_panel_settings</span>
               <span>SUPER ADMIN</span>
-            </button>
+            </SpecularButton>
           )}
 
           {/* Admin Role Badge */}
@@ -152,14 +160,21 @@ const Navbar: React.FC<NavbarProps> = ({
 
           {/* Sign In Button (when logged out) */}
           {onLogin && !userEmail && (
-            <button
+            <SpecularButton
+              size="xs"
+              radius={8}
+              tint="#9333ea"
+              tintOpacity={0.4}
+              lineColor="#c084fc"
+              baseColor="#581c87"
+              intensity={1.2}
               onClick={onLogin}
               title="Sign In with Google"
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-[10px] sm:text-[11px] font-bold shadow-[0_0_12px_rgba(147,51,234,0.4)] transition-all duration-200 cursor-pointer"
+              className="text-[10px] sm:text-[11px] font-bold text-white shadow-[0_0_12px_rgba(147,51,234,0.4)]"
             >
               <span className="material-symbols-outlined text-[12px]">login</span>
               <span>Sign In</span>
-            </button>
+            </SpecularButton>
           )}
 
           {/* Mobile Menu Hamburger Button */}
@@ -178,14 +193,21 @@ const Navbar: React.FC<NavbarProps> = ({
 
           {/* Sign Out Button (desktop) */}
           {onLogout && userEmail && (
-            <button
+            <SpecularButton
+              size="xs"
+              radius={8}
+              tint="#e11d48"
+              tintOpacity={0.15}
+              lineColor="#fb7185"
+              baseColor="#881337"
+              intensity={1}
               onClick={onLogout}
               title="Sign Out"
-              className="hidden md:flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 text-[10px] font-bold transition-all duration-200 cursor-pointer"
+              className="hidden md:flex text-[10px] font-bold text-rose-300"
             >
               <span className="material-symbols-outlined text-[13px]">logout</span>
               <span>Sign Out</span>
-            </button>
+            </SpecularButton>
           )}
         </div>
       </header>

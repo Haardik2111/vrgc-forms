@@ -5,6 +5,7 @@ import { CONFIG } from '../lib/config';
 import { auth, googleProvider, db } from '../lib/firebase';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { collection, addDoc, updateDoc, deleteDoc, doc, setDoc, onSnapshot, query, orderBy, getDocs } from 'firebase/firestore';
+import SpecularButton from './SpecularButton';
 
 interface ReferralsProps {
   onRedirect: () => void;
@@ -1358,14 +1359,21 @@ const Referrals: React.FC<ReferralsProps> = ({
 
                   {/* Submit Button */}
                   <div className="pt-4 flex justify-center">
-                    <button
+                    <SpecularButton
                       type="submit"
+                      size="md"
+                      radius={16}
+                      tint="#9333ea"
+                      tintOpacity={0.85}
+                      lineColor="#c084fc"
+                      baseColor="#581c87"
+                      intensity={1.3}
                       disabled={isSubmitting || dailyCount >= 5}
-                      className="w-full sm:w-auto bg-gradient-to-r from-purple-600 via-fuchsia-600 to-purple-600 hover:from-purple-500 hover:to-fuchsia-500 text-white font-black py-4 px-12 rounded-2xl shadow-[0_0_30px_rgba(168,85,247,0.4)] transition-all duration-300 text-xs font-label-caps flex items-center justify-center gap-2 uppercase tracking-widest active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                      className="w-full sm:w-auto font-black py-3 px-10 text-xs font-label-caps flex items-center justify-center gap-2 uppercase tracking-widest text-white shadow-[0_0_30px_rgba(168,85,247,0.4)]"
                     >
                       <span>{isSubmitting ? 'TRANSMITTING REFERRAL...' : 'TRANSMIT REFERRAL'}</span>
                       <span className="material-symbols-outlined text-base">send</span>
-                    </button>
+                    </SpecularButton>
                   </div>
                 </form>
               </section>

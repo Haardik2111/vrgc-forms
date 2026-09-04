@@ -107,7 +107,7 @@ const FacultyDashboard: React.FC<FacultyDashboardProps> = ({
   }, [facultyEmail]);
 
   return (
-    <div className="flex-grow min-h-[calc(100vh-117px)] overflow-y-auto p-3 sm:p-6 md:p-8 bg-[#05010a] relative text-left select-none">
+    <div className="flex-grow min-h-[calc(100vh-117px)] overflow-y-auto p-3 sm:p-6 md:p-8 bg-transparent relative text-left select-none">
       <div className="max-w-6xl mx-auto space-y-6 sm:space-y-8">
         
         {/* Header Hero Section - Strictly Solid Colors */}

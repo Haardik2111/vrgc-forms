@@ -14,6 +14,7 @@ import {
   saveClubMetadata,
   fetchPermissionsConfig,
 } from '@/lib/permissions';
+import SpecularButton from './SpecularButton';
 
 export interface RosterMember {
   id: string;
@@ -811,7 +812,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
   };
 
   return (
-    <div className="flex-grow min-h-screen bg-[#0a0a0a] p-3 sm:p-6 md:p-8 text-left text-white select-none">
+    <div className="flex-grow min-h-screen bg-transparent p-3 sm:p-6 md:p-8 text-left text-white select-none">
       <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8">
         
         {/* Hidden File Input for CSV/Excel */}
@@ -846,36 +847,57 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
             {/* Admin-only Import and Add controls */}
             {canManage && (
               <>
-                <button
+                <SpecularButton
+                  size="sm"
+                  radius={12}
+                  tint="#9333ea"
+                  tintOpacity={0.8}
+                  lineColor="#c084fc"
+                  baseColor="#581c87"
+                  intensity={1.2}
                   onClick={() => fileInputRef.current?.click()}
                   disabled={importingFile}
-                  className="px-3.5 py-2 rounded-xl bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-[0_0_15px_rgba(147,51,234,0.3)] disabled:opacity-50"
+                  className="font-bold text-white shadow-[0_0_15px_rgba(147,51,234,0.3)]"
                 >
                   <span className="material-symbols-outlined text-base">upload_file</span>
                   <span>{importingFile ? 'Parsing...' : 'Import CSV / Excel'}</span>
-                </button>
+                </SpecularButton>
 
-                <button
+                <SpecularButton
+                  size="sm"
+                  radius={12}
+                  tint="#1e132e"
+                  tintOpacity={0.7}
+                  lineColor="#c084fc"
+                  baseColor="#581c87"
+                  intensity={1.1}
                   onClick={() => openMemberModal()}
-                  className="px-3.5 py-2 rounded-xl bg-[#1e132e] hover:bg-purple-900/80 border border-purple-600/70 text-purple-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                  className="font-bold text-purple-200"
                 >
                   <span className="material-symbols-outlined text-base">person_add</span>
                   <span>Add Member</span>
-                </button>
+                </SpecularButton>
               </>
             )}
 
-            <button
+            <SpecularButton
+              size="sm"
+              radius={12}
+              tint="#1a1a1a"
+              tintOpacity={0.6}
+              lineColor="#94a3b8"
+              baseColor="#334155"
+              intensity={0.9}
               onClick={() => {
                 setSearchQuery('');
                 setSelectedTeam('ALL');
                 setSelectedPosition('ALL');
               }}
-              className="px-3.5 py-2 rounded-xl bg-[#1a1a1a] hover:bg-[#262626] border border-[#333333] text-slate-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+              className="font-bold text-slate-300"
             >
               <span className="material-symbols-outlined text-sm">filter_alt_off</span>
               <span>Reset Filters</span>
-            </button>
+            </SpecularButton>
           </div>
         </header>
 

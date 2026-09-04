@@ -69,7 +69,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onPageChange, onOpenSuperAdminMod
   const regNumber = memberData?.registrationNumber || (isSuperAdmin ? 'SUPER ADMIN' : userRole ? userRole.toUpperCase() : isAdmin ? 'ADMIN' : isFaculty ? 'FACULTY' : '');
 
   return (
-    <div className="flex-grow min-h-[calc(100vh-117px)] overflow-y-auto p-3 sm:p-6 md:p-8 bg-[#0a0a0a] relative text-left select-none">
+    <div className="flex-grow min-h-[calc(100vh-117px)] overflow-y-auto p-3 sm:p-6 md:p-8 bg-transparent relative text-left select-none">
       <div className="max-w-6xl mx-auto space-y-6 sm:space-y-8">
         
         {/* Personalized Welcome & Hero Section (Strictly SOLID colors - NO GRADIENTS) */}
