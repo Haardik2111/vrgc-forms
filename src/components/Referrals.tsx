@@ -603,28 +603,73 @@ const Referrals: React.FC<ReferralsProps> = ({
     }
   };
 
-  const getRecruiterTier = (xp: number) => {
-    if (xp >= 500) {
+  // Strict Recruiter XP Formula per candidate referral:
+  // +10 XP for submission (pending / in process)
+  // +50 XP when invited to interview (replaces pending 10 XP)
+  // +100 XP when admitted (replaces interview 50 XP)
+  // 0 XP when rejected (replaces candidate's XP to 0 without zeroing other recruits)
+  const calculateCandidateXP = (rawStatus?: string): number => {
+    const s = (rawStatus || 'pending').toLowerCase().trim();
+    if (s === 'rejected' || s.includes('reject')) {
+      return 0;
+    }
+    if (s === 'admitted' || s.includes('admit')) {
+      return 100;
+    }
+    if (s.includes('interview')) {
+      return 50;
+    }
+    // Submission / Pending / In Process
+    return 10;
+  };
+
+  // Ranking Rewards Tiers:
+  // 1 - Mythic Prime (Rank 1)
+  // Next 5 - Apex Titan (Ranks 2–6)
+  // Next 10 - Cyber Elite (Ranks 7–16)
+  // Remaining - Challenger (Ranks 17+)
+  const getRecruiterTier = (rankNum: number) => {
+    if (rankNum === 1) {
       return { 
         name: 'Mythic Prime', 
-        color: 'text-amber-300 border-amber-500/40 bg-amber-950/40 font-black shadow-[0_0_10px_rgba(245,158,11,0.2)]',
+        tierRange: 'Rank 1',
+        badge: 'MYTHIC',
+        color: 'text-amber-300 border-amber-500/40 bg-amber-950/40 font-black shadow-[0_0_12px_rgba(245,158,11,0.25)]',
+        accentColor: '#f59e0b',
+        title: 'Mythic Prime (Rank 1)',
+        description: 'Supreme Recruiter honor, exclusive VIP club placement & recognition'
       };
     }
-    if (xp >= 250) {
+    if (rankNum >= 2 && rankNum <= 6) {
       return { 
         name: 'Apex Titan', 
-        color: 'text-fuchsia-300 border-fuchsia-500/40 bg-fuchsia-950/40 font-bold shadow-[0_0_10px_rgba(217,70,239,0.2)]',
+        tierRange: 'Ranks 2–6 (Next 5)',
+        badge: 'APEX',
+        color: 'text-fuchsia-300 border-fuchsia-500/40 bg-fuchsia-950/40 font-bold shadow-[0_0_12px_rgba(217,70,239,0.2)]',
+        accentColor: '#d946ef',
+        title: 'Apex Titan (Next 5)',
+        description: 'Fast-track executive intake review & priority placement honors'
       };
     }
-    if (xp >= 100) {
+    if (rankNum >= 7 && rankNum <= 16) {
       return { 
         name: 'Cyber Elite', 
-        color: 'text-cyan-300 border-cyan-500/40 bg-cyan-950/40 font-bold shadow-[0_0_10px_rgba(6,182,212,0.2)]',
+        tierRange: 'Ranks 7–16 (Next 10)',
+        badge: 'CYBER',
+        color: 'text-cyan-300 border-cyan-500/40 bg-cyan-950/40 font-bold shadow-[0_0_12px_rgba(6,182,212,0.2)]',
+        accentColor: '#06b6d4',
+        title: 'Cyber Elite (Next 10)',
+        description: 'Elite recruiter distinction badge & specialized division priority'
       };
     }
     return { 
       name: 'Challenger', 
-      color: 'text-purple-300 border-purple-800/40 bg-purple-950/40 font-medium',
+      tierRange: 'Ranks 17+ (Remaining)',
+      badge: 'CHALLENGER',
+      color: 'text-slate-300 border-slate-700/60 bg-slate-900/40 font-medium',
+      accentColor: '#94a3b8',
+      title: 'Challenger (Remaining)',
+      description: 'Active club recruitment operative climbing the leaderboards'
     };
   };
 
@@ -632,9 +677,10 @@ const Referrals: React.FC<ReferralsProps> = ({
     const referrerStats: Record<string, any> = {};
 
     referrals.forEach(ref => {
-      const reg = getRefVal(ref, 'Referrer Registration Number') || getRefVal(ref, 'referrerRegNo') || "UNKNOWN";
+      const reg = (getRefVal(ref, 'Referrer Registration Number') || getRefVal(ref, 'referrerRegNo') || "UNKNOWN").toString().toUpperCase().trim();
       const name = getRefVal(ref, 'Referrer Name') || getRefVal(ref, 'referrerName') || "VRGC Recruiter";
-      const status = (getRefVal(ref, 'Status') || getRefVal(ref, 'status') || "Pending").toString().toLowerCase();
+      const rawStatus = (getRefVal(ref, 'Status') || getRefVal(ref, 'status') || "Pending").toString();
+      const statusLower = rawStatus.toLowerCase().trim();
       const email = (getRefVal(ref, 'Referrer Email') || getRefVal(ref, 'referrerEmail') || '').toLowerCase().trim();
       const emailPrefix = email ? email.split('@')[0] : '';
       const nameLower = name.toLowerCase().trim();
@@ -647,10 +693,7 @@ const Referrals: React.FC<ReferralsProps> = ({
                        (nameLower ? userPhotoMap[nameLower] : null) || 
                        null;
 
-      let xpAwarded = 10;
-      if (status === 'admitted') xpAwarded = 100;
-      else if (status.includes('interview')) xpAwarded = 50;
-      else if (status.includes('process')) xpAwarded = 20;
+      const xpAwarded = calculateCandidateXP(rawStatus);
 
       if (!referrerStats[reg]) {
         referrerStats[reg] = {
@@ -659,6 +702,9 @@ const Referrals: React.FC<ReferralsProps> = ({
           totalReferrals: 0,
           totalXP: 0,
           admittedCount: 0,
+          interviewCount: 0,
+          pendingCount: 0,
+          rejectedCount: 0,
           photoURL
         };
       } else if (!referrerStats[reg].photoURL && photoURL) {
@@ -667,51 +713,64 @@ const Referrals: React.FC<ReferralsProps> = ({
 
       referrerStats[reg].totalReferrals += 1;
       referrerStats[reg].totalXP += xpAwarded;
-      if (status === 'admitted') referrerStats[reg].admittedCount += 1;
+
+      if (statusLower === 'admitted' || statusLower.includes('admit')) {
+        referrerStats[reg].admittedCount += 1;
+      } else if (statusLower.includes('interview')) {
+        referrerStats[reg].interviewCount += 1;
+      } else if (statusLower === 'rejected' || statusLower.includes('reject')) {
+        referrerStats[reg].rejectedCount += 1;
+      } else {
+        referrerStats[reg].pendingCount += 1;
+      }
     });
 
-    const sorted = Object.values(referrerStats).sort((a, b) => b.totalXP - a.totalXP);
+    // Primary sort: Total Recruiter XP, Secondary sort: Admitted Count, Tertiary: Total Submissions
+    const sorted = Object.values(referrerStats).sort((a, b) => {
+      if (b.totalXP !== a.totalXP) return b.totalXP - a.totalXP;
+      if (b.admittedCount !== a.admittedCount) return b.admittedCount - a.admittedCount;
+      return b.totalReferrals - a.totalReferrals;
+    });
 
-    let currentRank = 1;
-    let prevXP: number | null = null;
     return sorted.map((rank, index) => {
-      if (index > 0 && rank.totalXP !== prevXP) {
-        currentRank = currentRank + 1;
-      }
-      prevXP = rank.totalXP;
-      return { ...rank, rankNumber: currentRank };
+      const rankNumber = index + 1;
+      return { 
+        ...rank, 
+        rankNumber,
+        tier: getRecruiterTier(rankNumber)
+      };
     });
   };
 
   const renderRankBadge = (rankNum: number) => {
     if (rankNum === 1) {
       return (
-        <div className="w-10 h-10 bg-gradient-to-tr from-amber-600 via-yellow-400 to-amber-200 rounded-2xl border-2 border-yellow-200 flex flex-col items-center justify-center shadow-[0_0_20px_rgba(245,158,11,0.5)]">
-          <span className="material-symbols-outlined text-black font-black text-lg">sports_esports</span>
-          <span className="text-[6.5px] font-black text-black uppercase tracking-tighter">MYTHIC</span>
+        <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-tr from-amber-600 via-yellow-400 to-amber-200 rounded-2xl border-2 border-yellow-200 flex flex-col items-center justify-center shadow-[0_0_20px_rgba(245,158,11,0.5)] shrink-0">
+          <span className="material-symbols-outlined text-black font-black text-base sm:text-lg">sports_esports</span>
+          <span className="text-[6px] sm:text-[6.5px] font-black text-black uppercase tracking-tighter">MYTHIC</span>
         </div>
       );
     }
-    if (rankNum === 2) {
+    if (rankNum >= 2 && rankNum <= 6) {
       return (
-        <div className="w-10 h-10 bg-gradient-to-tr from-purple-800 via-fuchsia-500 to-purple-400 rounded-2xl border-2 border-fuchsia-300 flex flex-col items-center justify-center shadow-[0_0_20px_rgba(217,70,239,0.4)]">
-          <span className="material-symbols-outlined text-white font-black text-lg">bolt</span>
-          <span className="text-[6.5px] font-black text-white uppercase tracking-tighter">APEX</span>
+        <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-tr from-purple-800 via-fuchsia-500 to-purple-400 rounded-2xl border-2 border-fuchsia-300 flex flex-col items-center justify-center shadow-[0_0_20px_rgba(217,70,239,0.4)] shrink-0">
+          <span className="material-symbols-outlined text-white font-black text-base sm:text-lg">bolt</span>
+          <span className="text-[6px] sm:text-[6.5px] font-black text-white uppercase tracking-tighter">APEX</span>
         </div>
       );
     }
-    if (rankNum === 3) {
+    if (rankNum >= 7 && rankNum <= 16) {
       return (
-        <div className="w-10 h-10 bg-gradient-to-tr from-cyan-800 via-cyan-400 to-teal-300 rounded-2xl border-2 border-cyan-200 flex flex-col items-center justify-center shadow-[0_0_20px_rgba(6,182,212,0.4)]">
-          <span className="material-symbols-outlined text-black font-black text-lg">videogame_asset</span>
-          <span className="text-[6.5px] font-black text-black uppercase tracking-tighter">CYBER</span>
+        <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-tr from-cyan-800 via-cyan-400 to-teal-300 rounded-2xl border-2 border-cyan-200 flex flex-col items-center justify-center shadow-[0_0_20px_rgba(6,182,212,0.4)] shrink-0">
+          <span className="material-symbols-outlined text-black font-black text-base sm:text-lg">videogame_asset</span>
+          <span className="text-[6px] sm:text-[6.5px] font-black text-black uppercase tracking-tighter">CYBER</span>
         </div>
       );
     }
     return (
-      <div className="w-10 h-10 bg-[#0c0419] border border-purple-500/30 rounded-2xl flex flex-col items-center justify-center text-purple-300 font-bold shadow-[0_0_10px_rgba(168,85,247,0.1)]">
-        <span className="text-xs font-black font-mono">#{rankNum}</span>
-        <span className="text-[6px] text-slate-400 font-bold uppercase">LVL</span>
+      <div className="w-9 h-9 sm:w-10 sm:h-10 bg-[#0c0419] border border-purple-500/30 rounded-2xl flex flex-col items-center justify-center text-purple-300 font-bold shadow-[0_0_10px_rgba(168,85,247,0.1)] shrink-0">
+        <span className="text-[11px] sm:text-xs font-black font-mono">#{rankNum}</span>
+        <span className="text-[5.5px] sm:text-[6px] text-slate-400 font-bold uppercase">LVL</span>
       </div>
     );
   };
@@ -852,6 +911,45 @@ const Referrals: React.FC<ReferralsProps> = ({
     );
   };
 
+  const getCandidateStatusBadge = (statusText?: string) => {
+    const s = (statusText || 'Pending').toLowerCase().trim();
+    const xp = calculateCandidateXP(s);
+    if (s === 'admitted' || s.includes('admit')) {
+      return (
+        <span className="inline-flex items-center gap-1.5 text-[10px] bg-emerald-500/20 border border-emerald-400 text-emerald-300 font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider font-mono shadow-[0_0_12px_rgba(16,185,129,0.35)]">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span>ADMITTED</span>
+          <span className="text-emerald-200 font-black ml-0.5">(+100 XP)</span>
+        </span>
+      );
+    }
+    if (s.includes('interview')) {
+      return (
+        <span className="inline-flex items-center gap-1.5 text-[10px] bg-purple-500/20 border border-purple-400 text-purple-300 font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider font-mono shadow-[0_0_12px_rgba(168,85,247,0.35)]">
+          <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse"></span>
+          <span>INTERVIEW</span>
+          <span className="text-purple-200 font-black ml-0.5">(+50 XP)</span>
+        </span>
+      );
+    }
+    if (s === 'rejected' || s.includes('reject')) {
+      return (
+        <span className="inline-flex items-center gap-1.5 text-[10px] bg-rose-500/20 border border-rose-500 text-rose-400 font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider font-mono shadow-[0_0_12px_rgba(239,68,68,0.35)]">
+          <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+          <span>REJECTED</span>
+          <span className="text-rose-300 font-black ml-0.5">(0 XP)</span>
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[10px] bg-cyan-500/20 border border-cyan-400 text-cyan-300 font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider font-mono shadow-[0_0_12px_rgba(6,182,212,0.35)]">
+        <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+        <span>{s.includes('process') ? 'IN PROCESS' : 'PENDING'}</span>
+        <span className="text-cyan-200 font-black ml-0.5">(+10 XP)</span>
+      </span>
+    );
+  };
+
   const getSelectStatusColor = (statusText?: string) => {
     const s = (statusText || 'Pending').toLowerCase();
     if (s === 'admitted') return 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300 font-bold';
@@ -868,6 +966,7 @@ const Referrals: React.FC<ReferralsProps> = ({
   );
   const userStats = userRankIndex !== -1 ? leaderboard[userRankIndex] : null;
   const userRank = userRankIndex !== -1 ? `#${userRankIndex + 1}` : 'UNRANKED';
+  const userTier = userRankIndex !== -1 ? getRecruiterTier(userRankIndex + 1) : getRecruiterTier(999);
   const userXP = userStats ? userStats.totalXP : 0;
   const isMasterAdmin = externalIsAdmin !== undefined ? externalIsAdmin : (currentUser ? adminEmails.includes((currentUser.email || '').toLowerCase()) : false);
 
@@ -959,61 +1058,61 @@ const Referrals: React.FC<ReferralsProps> = ({
     <main className="flex-1 w-full min-h-[calc(100vh-76px)] overflow-y-auto pt-6 pb-24 px-4 md:px-8 relative bg-mesh">
       <div className="max-w-4xl mx-auto space-y-8 stagger-in">
         
-        {/* Navigation Tabs */}
-        <div className="flex border-b border-purple-500/25 gap-2 relative z-10 justify-between md:justify-start pb-1">
+        {/* Navigation Tabs - Optimized for mobile touch scrolling & desktop flex */}
+        <div className="flex items-center border-b border-purple-500/25 gap-1.5 sm:gap-2 relative z-10 overflow-x-auto no-scrollbar scroll-smooth pb-1 -mx-2 px-2 sm:mx-0 sm:px-0">
           <button
             onClick={() => setActiveTab('form')}
-            className={`flex items-center gap-2 py-3 px-4 md:px-6 font-label-caps text-xs tracking-widest border-b-2 font-bold transition-all duration-300 rounded-t-xl shrink-0 ${
+            className={`flex items-center gap-1.5 sm:gap-2 py-2.5 sm:py-3 px-3 sm:px-5 font-label-caps text-[11px] sm:text-xs tracking-wider border-b-2 font-bold transition-all duration-300 rounded-t-xl shrink-0 cursor-pointer ${
               activeTab === 'form' 
                 ? 'border-purple-500 text-purple-300 bg-purple-500/10 shadow-[0_-5px_15px_rgba(168,85,247,0.15)]' 
                 : 'border-transparent text-slate-400 hover:text-white hover:bg-white/5'
             }`}
           >
-            <span className="material-symbols-outlined text-base">send</span>
+            <span className="material-symbols-outlined text-sm sm:text-base">send</span>
             <span>SUBMIT REFERRAL</span>
           </button>
           
           <button
             onClick={() => setActiveTab('leaderboard')}
-            className={`flex items-center gap-2 py-3 px-4 md:px-6 font-label-caps text-xs tracking-widest border-b-2 font-bold transition-all duration-300 rounded-t-xl shrink-0 ${
+            className={`flex items-center gap-1.5 sm:gap-2 py-2.5 sm:py-3 px-3 sm:px-5 font-label-caps text-[11px] sm:text-xs tracking-wider border-b-2 font-bold transition-all duration-300 rounded-t-xl shrink-0 cursor-pointer ${
               activeTab === 'leaderboard' 
                 ? 'border-purple-500 text-purple-300 bg-purple-500/10 shadow-[0_-5px_15px_rgba(168,85,247,0.15)]' 
                 : 'border-transparent text-slate-400 hover:text-white hover:bg-white/5'
             }`}
           >
-            <span className="material-symbols-outlined text-base">trophy</span>
+            <span className="material-symbols-outlined text-sm sm:text-base">trophy</span>
             <span>LEADERBOARD</span>
           </button>
           
           <button
             onClick={() => setActiveTab('my_ops')}
-            className={`flex items-center gap-2 py-3 px-4 md:px-6 font-label-caps text-xs tracking-widest border-b-2 font-bold transition-all duration-300 rounded-t-xl shrink-0 ${
+            className={`flex items-center gap-1.5 sm:gap-2 py-2.5 sm:py-3 px-3 sm:px-5 font-label-caps text-[11px] sm:text-xs tracking-wider border-b-2 font-bold transition-all duration-300 rounded-t-xl shrink-0 cursor-pointer ${
               activeTab === 'my_ops' 
                 ? 'border-purple-500 text-purple-300 bg-purple-500/10 shadow-[0_-5px_15px_rgba(168,85,247,0.15)]' 
                 : 'border-transparent text-slate-400 hover:text-white hover:bg-white/5'
             }`}
           >
-            <span className="material-symbols-outlined text-base">assignment</span>
+            <span className="material-symbols-outlined text-sm sm:text-base">assignment</span>
             <span>MY REGISTRY</span>
           </button>
 
           {isMasterAdmin && (
             <button
               onClick={() => setActiveTab('admin')}
-              className={`flex items-center gap-2 py-3 px-4 md:px-6 font-label-caps text-xs tracking-widest border-b-2 font-bold transition-all duration-300 rounded-t-xl shrink-0 ${
+              className={`flex items-center gap-1.5 sm:gap-2 py-2.5 sm:py-3 px-3 sm:px-5 font-label-caps text-[11px] sm:text-xs tracking-wider border-b-2 font-bold transition-all duration-300 rounded-t-xl shrink-0 cursor-pointer ${
                 activeTab === 'admin' 
                   ? 'border-rose-500 text-rose-300 bg-rose-500/10 shadow-[0_-5px_15px_rgba(244,63,94,0.15)]' 
                   : 'border-transparent text-rose-400/80 hover:text-rose-300 hover:bg-rose-500/5'
               }`}
             >
-              <span className="material-symbols-outlined text-base">admin_panel_settings</span>
+              <span className="material-symbols-outlined text-sm sm:text-base">admin_panel_settings</span>
               <span>ADMIN DESK</span>
             </button>
           )}
 
           <button
             onClick={onRedirect}
-            className="ml-auto bg-purple-500/10 border border-purple-500/30 hover:border-purple-400 hover:bg-purple-500/20 text-purple-300 px-4 py-2 rounded-full text-xs font-extrabold font-label-caps transition-all flex items-center gap-1.5 shadow-[0_0_15px_rgba(168,85,247,0.15)]"
+            className="ml-auto shrink-0 bg-purple-500/10 border border-purple-500/30 hover:border-purple-400 hover:bg-purple-500/20 text-purple-300 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-[11px] sm:text-xs font-extrabold font-label-caps transition-all flex items-center gap-1.5 shadow-[0_0_15px_rgba(168,85,247,0.15)] cursor-pointer"
           >
             <span className="material-symbols-outlined text-sm">arrow_back</span>
             <span>DASHBOARD</span>
@@ -1021,14 +1120,14 @@ const Referrals: React.FC<ReferralsProps> = ({
         </div>
 
         {/* Referrer Profile Badge */}
-        <div className="glass-panel p-6 rounded-3xl border border-purple-500/30 relative overflow-hidden bg-gradient-to-r from-[#130728] via-[#0e041f] to-[#080213] flex flex-col md:flex-row items-center justify-between gap-6 shadow-[0_0_40px_rgba(168,85,247,0.15)]">
+        <div className="glass-panel p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-purple-500/30 relative overflow-hidden bg-gradient-to-r from-[#130728] via-[#0e041f] to-[#080213] flex flex-col md:flex-row items-center justify-between gap-4 sm:gap-6 shadow-[0_0_40px_rgba(168,85,247,0.15)]">
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 via-fuchsia-500 to-pink-500" />
-          <div className="flex flex-col md:flex-row items-center gap-4 relative z-10 w-full md:w-auto text-center md:text-left">
-            <div className="relative mx-auto md:mx-0 shrink-0">
+          <div className="flex flex-col sm:flex-row items-center gap-3.5 sm:gap-4 relative z-10 w-full md:w-auto text-center sm:text-left">
+            <div className="relative mx-auto sm:mx-0 shrink-0">
               <img 
                 src={currentUser.photoURL || 'https://www.gravatar.com/avatar/?d=mp'} 
                 alt="User Profile" 
-                className="w-16 h-16 rounded-2xl object-cover border-2 border-purple-400/60 shadow-[0_0_20px_rgba(168,85,247,0.35)]"
+                className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl object-cover border-2 border-purple-400/60 shadow-[0_0_20px_rgba(168,85,247,0.35)]"
               />
               <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-2 border-[#090314] flex items-center justify-center">
                 <div className="w-1.5 h-1.5 bg-emerald-300 rounded-full animate-ping"></div>
@@ -1036,31 +1135,32 @@ const Referrals: React.FC<ReferralsProps> = ({
             </div>
             
             <div className="space-y-1.5 w-full">
-              <div className="text-[9px] text-purple-400 font-extrabold tracking-[0.2em] font-label-caps uppercase flex items-center justify-center md:justify-start gap-1.5">
+              <div className="text-[9px] text-purple-400 font-extrabold tracking-[0.2em] font-label-caps uppercase flex items-center justify-center sm:justify-start gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                 VERIFIED REFERRER IDENTITY
               </div>
-              <div className="font-display-lg text-xl text-white font-extrabold tracking-wide">
+              <div className="font-display-lg text-lg sm:text-xl text-white font-extrabold tracking-wide">
                 {referrerInfo ? referrerInfo.Name : currentUser.displayName || 'VRGC Operator'}
               </div>
-              <div className="font-code-sm text-xs text-slate-300 tracking-wider flex flex-wrap justify-center md:justify-start gap-2 items-center">
+              <div className="font-code-sm text-[11px] sm:text-xs text-slate-300 tracking-wider flex flex-wrap justify-center sm:justify-start gap-1.5 sm:gap-2 items-center">
                 <span className="bg-purple-500/15 border border-purple-500/30 px-2.5 py-0.5 rounded-full">ID: <strong className="text-purple-300 font-bold">{referrerInfo ? referrerInfo['Registration Number'] : extractRegNo(currentUser.email)}</strong></span>
                 <span className="bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 rounded-full">RANK: <strong className="text-amber-300 font-bold">{userRank}</strong></span>
+                <span className={`border px-2.5 py-0.5 rounded-full ${userTier.color}`}>TIER: <strong>{userTier.name}</strong></span>
                 <span className="bg-purple-500/15 border border-purple-500/30 px-2.5 py-0.5 rounded-full">SCORE: <strong className="text-purple-300 font-bold">{userXP} XP</strong></span>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 pt-4 md:pt-0 border-purple-500/15">
-            <div className="text-center px-4 py-2 rounded-2xl bg-black/40 border border-purple-500/20">
-              <div className="text-[9px] text-slate-400 font-label-caps tracking-widest font-bold">DAILY SUBMISSIONS</div>
-              <div className="font-code-sm text-lg font-bold text-white mt-0.5">
+          <div className="flex items-center gap-3 sm:gap-4 w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 pt-3 md:pt-0 border-purple-500/15">
+            <div className="text-center px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-2xl bg-black/40 border border-purple-500/20">
+              <div className="text-[8.5px] sm:text-[9px] text-slate-400 font-label-caps tracking-widest font-bold">DAILY SUBMISSIONS</div>
+              <div className="font-code-sm text-base sm:text-lg font-bold text-white mt-0.5">
                 <span className={dailyCount >= 5 ? 'text-rose-400' : 'text-emerald-400'}>{dailyCount}</span> / 5
               </div>
             </div>
             <button 
               onClick={handleSignOut}
-              className="flex items-center justify-center gap-2 text-xs text-rose-400 hover:text-rose-300 font-label-caps font-bold border border-rose-500/30 hover:border-rose-500/60 px-5 py-3 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 transition-all duration-300"
+              className="flex items-center justify-center gap-1.5 text-xs text-rose-400 hover:text-rose-300 font-label-caps font-bold border border-rose-500/30 hover:border-rose-500/60 px-4 sm:px-5 py-2.5 sm:py-3 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 transition-all duration-300 cursor-pointer"
             >
               <span className="material-symbols-outlined text-base">logout</span>
               <span>LOGOUT</span>
@@ -1383,7 +1483,7 @@ const Referrals: React.FC<ReferralsProps> = ({
 
         {/* TAB 2: LEADERBOARD */}
         {activeTab === 'leaderboard' && (
-          <div className="space-y-8 text-left">
+          <div className="space-y-6 sm:space-y-8 text-left">
             {/* Header / Stats Summary */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
@@ -1391,11 +1491,11 @@ const Referrals: React.FC<ReferralsProps> = ({
                   <span className="material-symbols-outlined text-xs text-amber-400">emoji_events</span>
                   VRGC RECRUITER HONORS
                 </div>
-                <h3 className="text-2xl font-black text-white uppercase tracking-tight">
+                <h3 className="text-xl sm:text-2xl font-black text-white uppercase tracking-tight">
                   Recruiter Leaderboard &amp; Tier Standings
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Earn XP by submitting high-caliber recruits: <strong className="text-purple-300">+10 XP</strong> submission, <strong className="text-cyan-300">+50 XP</strong> interview, <strong className="text-emerald-300">+100 XP</strong> admitted recruit.
+                  Earn XP by referring candidates: <strong className="text-cyan-300">+10 XP</strong> submission, <strong className="text-purple-300">+50 XP</strong> interview, <strong className="text-emerald-300">+100 XP</strong> admitted recruit.
                 </p>
               </div>
 
@@ -1404,16 +1504,16 @@ const Referrals: React.FC<ReferralsProps> = ({
                 <span className="material-symbols-outlined text-purple-400 text-2xl">groups</span>
                 <div>
                   <div className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">ACTIVE RECRUITERS</div>
-                  <div className="text-lg font-black text-white font-mono">{leaderboard.length}</div>
+                  <div className="text-base sm:text-lg font-black text-white font-mono">{leaderboard.length}</div>
                 </div>
               </div>
             </div>
 
-            {/* Top 3 Podium Highlight (If enough recruiters exist) */}
+            {/* Top 3 Podium Highlight */}
             {leaderboard.length >= 3 && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-                {/* #2 Rank - Silver / Apex Titan */}
-                <div className="order-2 md:order-1 p-5 rounded-3xl bg-gradient-to-b from-[#180932] via-[#0d041c] to-[#06010e] border border-purple-500/40 relative flex flex-col items-center text-center shadow-[0_0_30px_rgba(168,85,247,0.15)] hover:-translate-y-1 transition-transform">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 pt-2">
+                {/* #2 Rank - Apex Titan */}
+                <div className="order-2 md:order-1 p-4 sm:p-5 rounded-3xl bg-gradient-to-b from-[#1c0836] via-[#0e041d] to-[#06010e] border border-fuchsia-500/40 relative flex flex-col items-center text-center shadow-[0_0_30px_rgba(217,70,239,0.15)] hover:-translate-y-1 transition-transform">
                   <div className="relative mb-3">
                     <img
                       src={leaderboard[1].photoURL || `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(leaderboard[1].name)}`}
@@ -1421,25 +1521,25 @@ const Referrals: React.FC<ReferralsProps> = ({
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(leaderboard[1].name)}`;
                       }}
-                      className="w-14 h-14 rounded-2xl object-cover border-2 border-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.4)] bg-purple-950/40"
+                      className="w-14 h-14 rounded-2xl object-cover border-2 border-fuchsia-400 shadow-[0_0_20px_rgba(217,70,239,0.4)] bg-purple-950/40"
                     />
-                    <div className="absolute -bottom-2 -right-2 w-6 h-6 rounded-lg bg-purple-600 border border-purple-300 flex items-center justify-center text-white text-xs font-black shadow-md">
+                    <div className="absolute -bottom-2 -right-2 w-6 h-6 rounded-lg bg-gradient-to-tr from-fuchsia-600 to-purple-600 border border-fuchsia-300 flex items-center justify-center text-white text-xs font-black shadow-md">
                       2
                     </div>
                   </div>
-                  <span className="text-[9px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-400/40 mb-2">
+                  <span className="text-[9px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-400/40 mb-2">
                     #2 APEX TITAN
                   </span>
-                  <h4 className="text-base font-extrabold text-white truncate max-w-full">{leaderboard[1].name}</h4>
+                  <h4 className="text-sm sm:text-base font-extrabold text-white truncate max-w-full">{leaderboard[1].name}</h4>
                   <span className="text-xs text-slate-400 font-mono">{leaderboard[1].registrationNumber}</span>
                   <div className="mt-4 pt-3 border-t border-purple-500/20 w-full flex items-center justify-between text-xs">
                     <span className="text-slate-400">Referrals: <strong className="text-white">{leaderboard[1].totalReferrals}</strong></span>
-                    <span className="font-bold text-purple-300 font-mono text-sm">{leaderboard[1].totalXP} XP</span>
+                    <span className="font-bold text-fuchsia-300 font-mono text-sm">{leaderboard[1].totalXP} XP</span>
                   </div>
                 </div>
 
-                {/* #1 Rank - Gold / Mythic Prime */}
-                <div className="order-1 md:order-2 p-6 rounded-3xl bg-gradient-to-b from-[#2a1705] via-[#150a02] to-[#0a0501] border-2 border-amber-400/60 relative flex flex-col items-center text-center shadow-[0_0_40px_rgba(245,158,11,0.25)] md:-translate-y-2 hover:-translate-y-3 transition-transform">
+                {/* #1 Rank - Mythic Prime */}
+                <div className="order-1 md:order-2 p-5 sm:p-6 rounded-3xl bg-gradient-to-b from-[#2a1705] via-[#150a02] to-[#0a0501] border-2 border-amber-400/70 relative flex flex-col items-center text-center shadow-[0_0_40px_rgba(245,158,11,0.25)] md:-translate-y-2 hover:-translate-y-3 transition-transform">
                   <div className="absolute -top-3 px-3 py-0.5 rounded-full bg-amber-400 text-black font-black text-[10px] uppercase tracking-widest shadow-[0_0_15px_rgba(245,158,11,0.6)]">
                     👑 CROWN RECRUITER
                   </div>
@@ -1459,7 +1559,7 @@ const Referrals: React.FC<ReferralsProps> = ({
                   <span className="text-[10px] font-black uppercase tracking-widest px-3 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/50 mb-2">
                     #1 MYTHIC PRIME
                   </span>
-                  <h4 className="text-lg font-black text-white truncate max-w-full">{leaderboard[0].name}</h4>
+                  <h4 className="text-base sm:text-lg font-black text-white truncate max-w-full">{leaderboard[0].name}</h4>
                   <span className="text-xs text-amber-200/80 font-mono font-bold">{leaderboard[0].registrationNumber}</span>
                   <div className="mt-4 pt-3 border-t border-amber-500/30 w-full flex items-center justify-between text-xs">
                     <span className="text-slate-300">Admitted: <strong className="text-emerald-400 font-bold">{leaderboard[0].admittedCount}</strong></span>
@@ -1467,8 +1567,8 @@ const Referrals: React.FC<ReferralsProps> = ({
                   </div>
                 </div>
 
-                {/* #3 Rank - Bronze / Cyber Elite */}
-                <div className="order-3 p-5 rounded-3xl bg-gradient-to-b from-[#081a28] via-[#040e16] to-[#02070b] border border-cyan-500/40 relative flex flex-col items-center text-center shadow-[0_0_30px_rgba(6,182,212,0.15)] hover:-translate-y-1 transition-transform">
+                {/* #3 Rank - Apex Titan */}
+                <div className="order-3 p-4 sm:p-5 rounded-3xl bg-gradient-to-b from-[#1c0836] via-[#0e041d] to-[#06010e] border border-fuchsia-500/40 relative flex flex-col items-center text-center shadow-[0_0_30px_rgba(217,70,239,0.15)] hover:-translate-y-1 transition-transform">
                   <div className="relative mb-3">
                     <img
                       src={leaderboard[2].photoURL || `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(leaderboard[2].name)}`}
@@ -1476,24 +1576,128 @@ const Referrals: React.FC<ReferralsProps> = ({
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(leaderboard[2].name)}`;
                       }}
-                      className="w-14 h-14 rounded-2xl object-cover border-2 border-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.4)] bg-cyan-950/40"
+                      className="w-14 h-14 rounded-2xl object-cover border-2 border-fuchsia-400 shadow-[0_0_20px_rgba(217,70,239,0.4)] bg-purple-950/40"
                     />
-                    <div className="absolute -bottom-2 -right-2 w-6 h-6 rounded-lg bg-cyan-600 border border-cyan-300 flex items-center justify-center text-white text-xs font-black shadow-md">
+                    <div className="absolute -bottom-2 -right-2 w-6 h-6 rounded-lg bg-gradient-to-tr from-purple-700 to-fuchsia-600 border border-fuchsia-300 flex items-center justify-center text-white text-xs font-black shadow-md">
                       3
                     </div>
                   </div>
-                  <span className="text-[9px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 mb-2">
-                    #3 CYBER ELITE
+                  <span className="text-[9px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-400/40 mb-2">
+                    #3 APEX TITAN
                   </span>
-                  <h4 className="text-base font-extrabold text-white truncate max-w-full">{leaderboard[2].name}</h4>
+                  <h4 className="text-sm sm:text-base font-extrabold text-white truncate max-w-full">{leaderboard[2].name}</h4>
                   <span className="text-xs text-slate-400 font-mono">{leaderboard[2].registrationNumber}</span>
-                  <div className="mt-4 pt-3 border-t border-cyan-500/20 w-full flex items-center justify-between text-xs">
+                  <div className="mt-4 pt-3 border-t border-purple-500/20 w-full flex items-center justify-between text-xs">
                     <span className="text-slate-400">Referrals: <strong className="text-white">{leaderboard[2].totalReferrals}</strong></span>
-                    <span className="font-bold text-cyan-300 font-mono text-sm">{leaderboard[2].totalXP} XP</span>
+                    <span className="font-bold text-fuchsia-300 font-mono text-sm">{leaderboard[2].totalXP} XP</span>
                   </div>
                 </div>
               </div>
             )}
+
+            {/* RANKING REWARDS & TIER DIVISIONS SHOWCASE */}
+            <div className="space-y-4">
+              <div className="bg-[#0b0318]/90 border border-purple-500/30 rounded-3xl p-4 sm:p-6 shadow-[0_0_35px_rgba(168,85,247,0.1)] space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-500/20 pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-amber-400 text-lg">military_tech</span>
+                    <h4 className="text-xs sm:text-sm font-black uppercase tracking-wider text-white">
+                      RANKING REWARDS &amp; TIER DIVISIONS
+                    </h4>
+                  </div>
+                  <span className="text-[10px] sm:text-xs text-slate-400 font-mono">Standings Tier Allocations</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {/* Tier 1: Mythic Prime */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-b from-[#2a1705] to-[#120802] border border-amber-500/40 space-y-2 shadow-[0_0_20px_rgba(245,158,11,0.15)] relative overflow-hidden">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/40">
+                        RANK 1
+                      </span>
+                      <span className="material-symbols-outlined text-amber-400 text-lg">sports_esports</span>
+                    </div>
+                    <div className="text-sm font-black text-white">Mythic Prime</div>
+                    <p className="text-[11px] text-amber-200/70 leading-relaxed">
+                      Crown Recruiter standing, supreme club honors &amp; VIP consideration.
+                    </p>
+                  </div>
+
+                  {/* Tier 2: Apex Titan */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-b from-[#200838] to-[#0f041d] border border-fuchsia-500/40 space-y-2 shadow-[0_0_20px_rgba(217,70,239,0.15)] relative overflow-hidden">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-400/40">
+                        NEXT 5 (RANKS 2–6)
+                      </span>
+                      <span className="material-symbols-outlined text-fuchsia-400 text-lg">bolt</span>
+                    </div>
+                    <div className="text-sm font-black text-white">Apex Titan</div>
+                    <p className="text-[11px] text-fuchsia-200/70 leading-relaxed">
+                      Executive core intake fast-track &amp; Apex Recruiter distinction.
+                    </p>
+                  </div>
+
+                  {/* Tier 3: Cyber Elite */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-b from-[#081a28] to-[#040e16] border border-cyan-500/40 space-y-2 shadow-[0_0_20px_rgba(6,182,212,0.15)] relative overflow-hidden">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-400/40">
+                        NEXT 10 (RANKS 7–16)
+                      </span>
+                      <span className="material-symbols-outlined text-cyan-400 text-lg">videogame_asset</span>
+                    </div>
+                    <div className="text-sm font-black text-white">Cyber Elite</div>
+                    <p className="text-[11px] text-cyan-200/70 leading-relaxed">
+                      Cyber Division distinction badge &amp; exclusive outreach pipeline perks.
+                    </p>
+                  </div>
+
+                  {/* Tier 4: Challenger */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-b from-[#13111c] to-[#07060a] border border-slate-700/50 space-y-2 shadow-[0_0_15px_rgba(148,163,184,0.08)] relative overflow-hidden">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                        RANKS 17+ (REMAINING)
+                      </span>
+                      <span className="material-symbols-outlined text-slate-400 text-lg">military_tech</span>
+                    </div>
+                    <div className="text-sm font-black text-white">Challenger</div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Active recruitment operative climbing towards Cyber Elite ranks.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* XP Point System Transparency Banner */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-[#0e041d]/80 border border-purple-500/25 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="text-[10px] font-extrabold uppercase tracking-widest text-purple-400 flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-xs">tune</span>
+                    STRICT RECRUITER XP FORMULA
+                  </div>
+                  <div className="text-xs text-slate-300">
+                    Calculated strictly per referred candidate (provisional points replace as stages advance):
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full md:w-auto">
+                  <div className="px-3 py-2 rounded-xl bg-cyan-950/40 border border-cyan-500/30 text-center">
+                    <div className="text-cyan-300 font-mono font-black text-sm">+10 XP</div>
+                    <div className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Submission</div>
+                  </div>
+                  <div className="px-3 py-2 rounded-xl bg-purple-950/40 border border-purple-500/30 text-center">
+                    <div className="text-purple-300 font-mono font-black text-sm">+50 XP</div>
+                    <div className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Interview</div>
+                  </div>
+                  <div className="px-3 py-2 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-center">
+                    <div className="text-emerald-300 font-mono font-black text-sm">+100 XP</div>
+                    <div className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Admitted</div>
+                  </div>
+                  <div className="px-3 py-2 rounded-xl bg-rose-950/40 border border-rose-500/30 text-center">
+                    <div className="text-rose-400 font-mono font-black text-sm">0 XP</div>
+                    <div className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Rejected</div>
+                  </div>
+                </div>
+              </div>
+            </div>
 
             {/* Comprehensive Standings Table */}
             <div className="bg-[#0b0318]/90 border border-purple-500/30 rounded-3xl p-4 sm:p-6 shadow-[0_0_35px_rgba(168,85,247,0.1)] space-y-4">
@@ -1509,7 +1713,7 @@ const Referrals: React.FC<ReferralsProps> = ({
                   <div className="py-12 text-center text-slate-500 text-xs">No referral records on leaderboard yet.</div>
                 ) : (
                   leaderboard.map((lb) => {
-                    const tier = getRecruiterTier(lb.totalXP);
+                    const tier = lb.tier || getRecruiterTier(lb.rankNumber);
                     const isCurrentUser = userRegNo && lb.registrationNumber.toUpperCase() === userRegNo.toUpperCase();
 
                     return (
@@ -1521,7 +1725,7 @@ const Referrals: React.FC<ReferralsProps> = ({
                             : 'bg-black/40 border-purple-500/15 hover:border-purple-500/40 hover:bg-white/5'
                         }`}
                       >
-                        <div className="flex items-center gap-3.5 min-w-0">
+                        <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
                           <div className="shrink-0 flex items-center gap-2">
                             {renderRankBadge(lb.rankNumber)}
                             <img
@@ -1530,19 +1734,19 @@ const Referrals: React.FC<ReferralsProps> = ({
                               onError={(e) => {
                                 (e.target as HTMLImageElement).src = `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(lb.name)}`;
                               }}
-                              className="w-10 h-10 rounded-xl object-cover border border-purple-500/30 bg-purple-950/40"
+                              className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-cover border border-purple-500/30 bg-purple-950/40"
                             />
                           </div>
                           <div className="min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <h4 className="text-white font-bold text-sm truncate">{lb.name}</h4>
+                            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                              <h4 className="text-white font-bold text-xs sm:text-sm truncate">{lb.name}</h4>
                               {isCurrentUser && (
-                                <span className="text-[9px] font-black uppercase px-2 py-0.2 rounded-full bg-purple-500 text-white shadow-[0_0_10px_rgba(168,85,247,0.5)]">
+                                <span className="text-[8.5px] sm:text-[9px] font-black uppercase px-2 py-0.2 rounded-full bg-purple-500 text-white shadow-[0_0_10px_rgba(168,85,247,0.5)]">
                                   YOU
                                 </span>
                               )}
                             </div>
-                            <div className="flex items-center gap-2 text-xs text-slate-400 font-mono mt-0.5">
+                            <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-slate-400 font-mono mt-0.5 flex-wrap">
                               <span>{lb.registrationNumber}</span>
                               <span>•</span>
                               <span>{lb.totalReferrals} referred</span>
@@ -1556,12 +1760,12 @@ const Referrals: React.FC<ReferralsProps> = ({
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-3 shrink-0">
-                          <span className={`hidden sm:inline-flex text-[10px] px-2.5 py-1 rounded-full uppercase tracking-wider font-extrabold ${tier.color}`}>
+                        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                          <span className={`text-[9px] sm:text-[10px] px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full uppercase tracking-wider font-extrabold ${tier.color}`}>
                             {tier.name}
                           </span>
                           <div className="text-right">
-                            <span className="text-sm sm:text-base font-black text-purple-300 font-mono tracking-tight block">
+                            <span className="text-xs sm:text-base font-black text-purple-300 font-mono tracking-tight block">
                               {lb.totalXP} XP
                             </span>
                           </div>
@@ -1577,42 +1781,68 @@ const Referrals: React.FC<ReferralsProps> = ({
 
         {/* TAB 3: MY REGISTRY */}
         {activeTab === 'my_ops' && (
-          <div className="glass-panel p-6 rounded-2xl border border-purple-500/30 space-y-6 text-left">
-            <h3 className="text-xl font-bold text-white uppercase">MY SUBMITTED CANDIDATES</h3>
+          <div className="glass-panel p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-purple-500/30 space-y-6 text-left">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-500/20 pb-4">
+              <div>
+                <h3 className="text-lg sm:text-xl font-bold text-white uppercase tracking-tight">MY SUBMITTED CANDIDATES</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Track candidate evaluation stages and individual recruiter XP contribution</p>
+              </div>
+              <div className="flex items-center gap-2 self-start sm:self-auto px-3.5 py-1.5 rounded-xl bg-purple-500/15 border border-purple-500/30">
+                <span className="text-xs text-slate-400 font-mono">My Total Score:</span>
+                <span className="text-sm font-black text-purple-300 font-mono">{userXP} XP</span>
+              </div>
+            </div>
 
             <div className="space-y-3">
               {getMyReferrals().length === 0 ? (
-                <p className="text-slate-500 text-center py-8">You haven't submitted any candidate referrals yet.</p>
+                <div className="py-12 text-center text-slate-500 text-xs">
+                  You haven't submitted any candidate referrals yet.
+                </div>
               ) : (
-                getMyReferrals().map((ref, idx) => (
-                  <div key={idx} className="p-4 bg-black/50 border border-white/5 rounded-2xl flex items-center justify-between gap-4">
-                    <div>
-                      <h4 className="text-white font-bold text-sm">{getRefVal(ref, 'Candidate Name') || getRefVal(ref, 'candidateName')}</h4>
-                      <div className="flex items-center gap-3 text-xs text-slate-400 font-code-sm mt-1">
-                        <span>{getRefVal(ref, 'Candidate Registration Number') || getRefVal(ref, 'candidateRegNo')}</span>
-                        <span>•</span>
-                        <span>{getRefVal(ref, 'Target Team') || getRefVal(ref, 'targetTeam') || 'Technical'}</span>
+                getMyReferrals().map((ref, idx) => {
+                  const status = getRefVal(ref, 'Status') || getRefVal(ref, 'status') || 'Pending';
+                  const candidateXP = calculateCandidateXP(status);
+                  const cReg = getRefVal(ref, 'Candidate Registration Number') || getRefVal(ref, 'candidateRegNo') || 'UNKNOWN';
+                  const cName = getRefVal(ref, 'Candidate Name') || getRefVal(ref, 'candidateName') || 'Candidate';
+                  const targetT = getRefVal(ref, 'Target Team') || getRefVal(ref, 'targetTeam') || 'Technical';
+
+                  return (
+                    <div key={idx} className="p-3.5 sm:p-4 bg-black/50 border border-white/5 hover:border-purple-500/30 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors">
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="text-white font-bold text-sm">{cName}</h4>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/25">
+                            {targetT}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-slate-400 font-mono mt-1 flex-wrap">
+                          <span>{cReg}</span>
+                          <span>•</span>
+                          <span className="text-slate-300">
+                            XP Earned: <strong className={candidateXP > 0 ? "text-purple-300 font-bold" : "text-rose-400 font-bold"}>
+                              {candidateXP > 0 ? `+${candidateXP}` : 0} XP
+                            </strong>
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2.5 self-end sm:self-auto shrink-0">
+                        {getCandidateStatusBadge(status)}
+                        {canDeleteReferrals && (
+                          <button
+                            type="button"
+                            title="Delete Referral (Admin)"
+                            onClick={() => {
+                              setPendingDeleteReferral({ docId: ref.id, regNo: cReg, candidateName: cName });
+                            }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-base">delete</span>
+                          </button>
+                        )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      {getStatusPill(getRefVal(ref, 'Status') || getRefVal(ref, 'status'))}
-                      {canDeleteReferrals && (
-                        <button
-                          type="button"
-                          title="Delete Referral (Admin)"
-                          onClick={() => {
-                            const cReg = getRefVal(ref, 'Candidate Registration Number') || getRefVal(ref, 'candidateRegNo') || 'UNKNOWN';
-                            const cName = getRefVal(ref, 'Candidate Name') || getRefVal(ref, 'candidateName') || 'Candidate';
-                            setPendingDeleteReferral({ docId: ref.id, regNo: cReg, candidateName: cName });
-                          }}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                        >
-                          <span className="material-symbols-outlined text-base">delete</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -1671,48 +1901,51 @@ const Referrals: React.FC<ReferralsProps> = ({
                 {adminSearchQuery && (
                   <button 
                     onClick={() => setAdminSearchQuery('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs p-1"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs p-1 cursor-pointer"
                   >
                     <span className="material-symbols-outlined text-sm">close</span>
                   </button>
                 )}
               </div>
 
-              {/* Team Filter */}
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="text-[10px] font-black text-purple-300 uppercase tracking-wider">TEAM:</span>
-                <select
-                  value={adminTeamFilter}
-                  onChange={(e) => setAdminTeamFilter(e.target.value)}
-                  className="bg-[#05010a] border border-purple-500/30 text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-purple-400 cursor-pointer font-bold tracking-wide"
-                >
-                  <option value="All">All Divisions</option>
-                  <option value="Technical">Technical</option>
-                  <option value="Design">Design</option>
-                  <option value="Education">Education</option>
-                  <option value="Esports(PC)">Esports (PC)</option>
-                  <option value="Esports(Mobile)">Esports (Mobile)</option>
-                  <option value="PR">PR</option>
-                  <option value="Social Media">Social Media</option>
-                </select>
-              </div>
+              {/* Filters Flex Row */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
+                {/* Team Filter */}
+                <div className="flex items-center gap-2 justify-between sm:justify-start">
+                  <span className="text-[10px] font-black text-purple-300 uppercase tracking-wider">TEAM:</span>
+                  <select
+                    value={adminTeamFilter}
+                    onChange={(e) => setAdminTeamFilter(e.target.value)}
+                    className="bg-[#05010a] border border-purple-500/30 text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-purple-400 cursor-pointer font-bold tracking-wide flex-1 sm:flex-none"
+                  >
+                    <option value="All">All Divisions</option>
+                    <option value="Technical">Technical</option>
+                    <option value="Design">Design</option>
+                    <option value="Education">Education</option>
+                    <option value="Esports(PC)">Esports (PC)</option>
+                    <option value="Esports(Mobile)">Esports (Mobile)</option>
+                    <option value="PR">PR</option>
+                    <option value="Social Media">Social Media</option>
+                  </select>
+                </div>
 
-              {/* Status Filter */}
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="text-[10px] font-black text-purple-300 uppercase tracking-wider">STATUS:</span>
-                <select
-                  value={adminStatusFilter}
-                  onChange={(e) => setAdminStatusFilter(e.target.value)}
-                  className="bg-[#05010a] border border-purple-500/30 text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-purple-400 cursor-pointer font-bold tracking-wide"
-                >
-                  <option value="All">Active Pipeline (Excl. Final)</option>
-                  <option value="Pending">Pending Review</option>
-                  <option value="In Process">In Process</option>
-                  <option value="Invited to Interview">Interview Scheduled</option>
-                  <option value="Interview Taken">Interview Taken</option>
-                  <option value="Admitted">Admitted</option>
-                  <option value="Rejected">Rejected</option>
-                </select>
+                {/* Status Filter */}
+                <div className="flex items-center gap-2 justify-between sm:justify-start">
+                  <span className="text-[10px] font-black text-purple-300 uppercase tracking-wider">STATUS:</span>
+                  <select
+                    value={adminStatusFilter}
+                    onChange={(e) => setAdminStatusFilter(e.target.value)}
+                    className="bg-[#05010a] border border-purple-500/30 text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-purple-400 cursor-pointer font-bold tracking-wide flex-1 sm:flex-none"
+                  >
+                    <option value="All">Active Pipeline (Excl. Final)</option>
+                    <option value="Pending">Pending Review</option>
+                    <option value="In Process">In Process</option>
+                    <option value="Invited to Interview">Interview Scheduled</option>
+                    <option value="Interview Taken">Interview Taken</option>
+                    <option value="Admitted">Admitted</option>
+                    <option value="Rejected">Rejected</option>
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -1796,9 +2029,9 @@ const Referrals: React.FC<ReferralsProps> = ({
             )}
 
             {/* Candidate Dossiers Table */}
-            <div className="bg-[#090214]/95 border border-purple-500/30 rounded-2xl p-4 sm:p-5 shadow-[0_0_30px_rgba(0,0,0,0.6)] space-y-3">
-              <div className="overflow-x-auto custom-scrollbar">
-                <table className="w-full text-sm">
+            <div className="bg-[#090214]/95 border border-purple-500/30 rounded-2xl p-3 sm:p-5 shadow-[0_0_30px_rgba(0,0,0,0.6)] space-y-3">
+              <div className="overflow-x-auto custom-scrollbar -mx-3 sm:mx-0 px-3 sm:px-0">
+                <table className="w-full text-sm min-w-[640px]">
                   <thead>
                     <tr className="border-b border-purple-500/20 text-[10px] text-slate-400 uppercase tracking-widest font-black">
                       <th className="py-2.5 px-3 w-10 text-center">
@@ -1968,24 +2201,24 @@ const Referrals: React.FC<ReferralsProps> = ({
         {/* Status Confirmation Modal */}
         {pendingStatusChange && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-            <div className="glass-panel p-8 rounded-2xl max-w-md w-full text-center space-y-6 border border-purple-500/30 shadow-[0_0_50px_rgba(0,0,0,0.8)]">
-              <span className={`material-symbols-outlined text-[64px] animate-pulse ${
+            <div className="glass-panel p-5 sm:p-8 rounded-2xl max-w-md w-full text-center space-y-5 sm:space-y-6 border border-purple-500/30 shadow-[0_0_50px_rgba(0,0,0,0.8)] mx-2">
+              <span className={`material-symbols-outlined text-5xl sm:text-[64px] animate-pulse ${
                 pendingStatusChange.newStatus.toLowerCase() === 'rejected' ? 'text-red-500' : 'text-green-400'
               }`}>
                 {pendingStatusChange.newStatus.toLowerCase() === 'rejected' ? 'cancel_presentation' : 'verified'}
               </span>
               <div className="space-y-2">
-                <h3 className="font-display-lg text-2xl text-white font-extrabold uppercase">
+                <h3 className="font-display-lg text-xl sm:text-2xl text-white font-extrabold uppercase">
                   Confirm Candidate Action
                 </h3>
                 <p className="text-xs text-slate-300 leading-relaxed">
                   Are you sure you want to change the status of candidate <strong className="text-white">"{pendingStatusChange.candidateName}"</strong> to <strong className={pendingStatusChange.newStatus.toLowerCase() === 'rejected' ? 'text-red-400' : 'text-green-400'}>{pendingStatusChange.newStatus.toUpperCase()}</strong>?
                 </p>
               </div>
-              <div className="flex gap-4 pt-2">
+              <div className="flex gap-3 sm:gap-4 pt-2">
                 <button
                   onClick={() => setPendingStatusChange(null)}
-                  className="flex-1 py-3 border border-purple-500/30 hover:bg-white/5 rounded-xl font-label-caps text-xs text-white tracking-widest"
+                  className="flex-1 py-2.5 sm:py-3 border border-purple-500/30 hover:bg-white/5 rounded-xl font-label-caps text-xs text-white tracking-widest cursor-pointer"
                 >
                   CANCEL
                 </button>
@@ -1994,7 +2227,7 @@ const Referrals: React.FC<ReferralsProps> = ({
                     const { docId, regNo, newStatus } = pendingStatusChange;
                     executeStatusUpdate(docId, regNo, newStatus);
                   }}
-                  className={`flex-1 py-3 rounded-xl font-label-caps text-xs text-black font-black tracking-widest ${
+                  className={`flex-1 py-2.5 sm:py-3 rounded-xl font-label-caps text-xs text-black font-black tracking-widest cursor-pointer ${
                     pendingStatusChange.newStatus.toLowerCase() === 'rejected' 
                       ? 'bg-red-500 hover:bg-red-600' 
                       : 'bg-green-400 hover:bg-green-500'
@@ -2009,8 +2242,8 @@ const Referrals: React.FC<ReferralsProps> = ({
 
         {/* Sync Toast Notification */}
         {syncToastMessage && (
-          <div className="fixed bottom-6 right-6 z-50 glass-panel p-4 rounded-xl border border-green-500/40 bg-black/90 flex items-center gap-3 text-left shadow-[0_10px_30px_rgba(0,0,0,0.8)]">
-            <span className="material-symbols-outlined text-green-400 text-lg">check_circle</span>
+          <div className="fixed bottom-6 right-6 z-50 glass-panel p-4 rounded-xl border border-green-500/40 bg-black/90 flex items-center gap-3 text-left shadow-[0_10px_30px_rgba(0,0,0,0.8)] max-w-sm">
+            <span className="material-symbols-outlined text-green-400 text-lg shrink-0">check_circle</span>
             <span className="text-xs text-white font-bold">{syncToastMessage}</span>
           </div>
         )}
@@ -2019,11 +2252,11 @@ const Referrals: React.FC<ReferralsProps> = ({
 
       {/* Candidate Detail Inspector Modal */}
       {inspectingCandidate && (
-        <div className="fixed inset-0 z-[999] w-screen h-screen bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="glass-panel p-6 md:p-8 rounded-2xl max-w-lg w-full text-left space-y-5 border border-purple-500/30 shadow-[0_0_60px_rgba(168,85,247,0.4)] relative max-h-[85vh] overflow-y-auto custom-scrollbar animate-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-[999] w-screen h-screen bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
+          <div className="glass-panel p-5 sm:p-8 rounded-2xl max-w-lg w-full text-left space-y-4 sm:space-y-5 border border-purple-500/30 shadow-[0_0_60px_rgba(168,85,247,0.4)] relative max-h-[85vh] overflow-y-auto custom-scrollbar animate-in zoom-in-95 duration-150 mx-2">
             <div className="flex justify-between items-start border-b border-purple-500/20 pb-4">
               <div>
-                <h3 className="font-display-lg text-2xl text-white font-extrabold">
+                <h3 className="font-display-lg text-xl sm:text-2xl text-white font-extrabold">
                   Candidate Dossier
                 </h3>
                 <p className="text-[10px] text-purple-400 font-code-sm uppercase tracking-wider mt-0.5">
@@ -2032,13 +2265,13 @@ const Referrals: React.FC<ReferralsProps> = ({
               </div>
               <button
                 onClick={() => setInspectingCandidate(null)}
-                className="p-1.5 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-colors"
+                className="p-1.5 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer"
               >
                 <span className="material-symbols-outlined text-xl">close</span>
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-xs">
               <div>
                 <span className="text-[10px] text-purple-300 font-label-caps tracking-widest block font-bold mb-0.5">CANDIDATE NAME</span>
                 <span className="text-sm font-bold text-white block">{getRefVal(inspectingCandidate, "Candidate Name") || getRefVal(inspectingCandidate, "candidateName")}</span>
@@ -2070,9 +2303,9 @@ const Referrals: React.FC<ReferralsProps> = ({
               </div>
             </div>
 
-            <div className="flex justify-between items-center border-t border-purple-500/20 pt-4">
+            <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 border-t border-purple-500/20 pt-4">
               <span className="text-[10px] text-purple-300 font-label-caps tracking-widest font-bold">DOSSIER STATUS</span>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 justify-between sm:justify-end">
                 {getStatusPill(getRefVal(inspectingCandidate, "Status") || getRefVal(inspectingCandidate, "status"))}
                 {canDeleteReferrals && (
                   <button
@@ -2096,13 +2329,13 @@ const Referrals: React.FC<ReferralsProps> = ({
 
       {/* Delete Referral Confirmation Modal */}
       {pendingDeleteReferral && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
-          <div className="glass-panel p-8 rounded-2xl max-w-md w-full text-center space-y-6 border border-rose-500/50 shadow-[0_0_60px_rgba(244,63,94,0.3)]">
-            <div className="w-16 h-16 mx-auto rounded-2xl bg-rose-500/15 border-2 border-rose-500/40 flex items-center justify-center text-rose-400 shadow-[0_0_20px_rgba(244,63,94,0.3)]">
-              <span className="material-symbols-outlined text-3xl">delete_forever</span>
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md">
+          <div className="glass-panel p-5 sm:p-8 rounded-2xl max-w-md w-full text-center space-y-5 sm:space-y-6 border border-rose-500/50 shadow-[0_0_60px_rgba(244,63,94,0.3)] mx-2">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 mx-auto rounded-2xl bg-rose-500/15 border-2 border-rose-500/40 flex items-center justify-center text-rose-400 shadow-[0_0_20px_rgba(244,63,94,0.3)]">
+              <span className="material-symbols-outlined text-2xl sm:text-3xl">delete_forever</span>
             </div>
             <div className="space-y-2">
-              <h3 className="font-display-lg text-2xl text-white font-extrabold uppercase">
+              <h3 className="font-display-lg text-xl sm:text-2xl text-white font-extrabold uppercase">
                 Delete Referral Record?
               </h3>
               <p className="text-xs text-slate-300 leading-relaxed">
@@ -2112,11 +2345,11 @@ const Referrals: React.FC<ReferralsProps> = ({
                 ⚠️ This action cannot be undone and will recalculate recruiter leaderboard scores.
               </p>
             </div>
-            <div className="flex gap-4 pt-2">
+            <div className="flex gap-3 sm:gap-4 pt-2">
               <button
                 type="button"
                 onClick={() => setPendingDeleteReferral(null)}
-                className="flex-1 py-3 border border-purple-500/30 hover:bg-white/5 rounded-xl font-label-caps text-xs text-white tracking-widest cursor-pointer"
+                className="flex-1 py-2.5 sm:py-3 border border-purple-500/30 hover:bg-white/5 rounded-xl font-label-caps text-xs text-white tracking-widest cursor-pointer"
               >
                 CANCEL
               </button>
@@ -2127,7 +2360,7 @@ const Referrals: React.FC<ReferralsProps> = ({
                   const { docId, regNo } = pendingDeleteReferral;
                   executeDeleteReferral(docId, regNo);
                 }}
-                className="flex-1 py-3 rounded-xl font-label-caps text-xs text-white font-black tracking-widest bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 shadow-[0_0_20px_rgba(244,63,94,0.4)] disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+                className="flex-1 py-2.5 sm:py-3 rounded-xl font-label-caps text-xs text-white font-black tracking-widest bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 shadow-[0_0_20px_rgba(244,63,94,0.4)] disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
               >
                 {isDeletingReferral === pendingDeleteReferral.regNo ? (
                   <>
