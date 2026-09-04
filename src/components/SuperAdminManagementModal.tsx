@@ -404,22 +404,22 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md select-none">
-      <div className="w-full max-w-5xl max-h-[90vh] flex flex-col bg-[#0f0f0f] border border-purple-600/40 rounded-2xl shadow-[0_0_50px_rgba(147,51,234,0.2)] overflow-hidden text-white text-left">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-black/85 backdrop-blur-md select-none">
+      <div className="w-full max-w-5xl max-h-[88vh] flex flex-col bg-[#0f0f0f] border border-purple-600/40 rounded-2xl shadow-[0_0_50px_rgba(147,51,234,0.2)] overflow-hidden text-white text-left mx-1 sm:mx-0">
         {/* Header */}
-        <div className="p-5 sm:p-6 bg-[#161616] border-b border-[#262626] flex items-center justify-between shrink-0">
+        <div className="p-4 sm:p-6 bg-[#161616] border-b border-[#262626] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-900/60 border border-purple-600 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-purple-900/60 border border-purple-600 flex items-center justify-center shrink-0">
               <span className="material-symbols-outlined text-purple-300 text-2xl">admin_panel_settings</span>
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-xl font-black text-white tracking-wide">Super Admin Command Center</h2>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-700 text-white uppercase tracking-wider">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-lg sm:text-xl font-black text-white tracking-wide">Super Admin Command Center</h2>
+                <span className="px-2 py-0.5 rounded text-[9px] sm:text-[10px] font-bold bg-purple-700 text-white uppercase tracking-wider">
                   Firebase Database Live
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
                 Direct management of Administrators and Faculty advisory records stored in Firebase Firestore.
               </p>
             </div>
@@ -463,7 +463,7 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
           {/* TAB 1: ADMINS */}
           {activeTab === 'admins' && (
             <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
                 <div className="relative flex-1 max-w-md">
                   <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-lg">search</span>
                   <input
@@ -479,7 +479,7 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
                     setAdminError('');
                     setIsAddAdminOpen(true);
                   }}
-                  className="px-4 py-2 bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-[0_0_15px_rgba(147,51,234,0.3)]"
+                  className="px-4 py-2 bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-[0_0_15px_rgba(147,51,234,0.3)] shrink-0"
                 >
                   <span className="material-symbols-outlined text-base">person_add</span>
                   Add New Admin
@@ -672,7 +672,7 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
           {/* TAB 2: FACULTY DATABASE TABLE */}
           {activeTab === 'faculty' && (
             <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
                 <div className="relative flex-1 max-w-md">
                   <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-lg">search</span>
                   <input
@@ -685,7 +685,7 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
                 </div>
                 <button
                   onClick={() => openFacultyForm()}
-                  className="px-4 py-2 bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-[0_0_15px_rgba(147,51,234,0.3)]"
+                  className="px-4 py-2 bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-[0_0_15px_rgba(147,51,234,0.3)] shrink-0"
                 >
                   <span className="material-symbols-outlined text-base">person_add</span>
                   Add Faculty Member
@@ -693,8 +693,8 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
               </div>
 
               {/* Faculty Table */}
-              <div className="border border-[#222222] rounded-xl overflow-hidden bg-[#111111]">
-                <table className="w-full text-left text-xs">
+              <div className="border border-[#222222] rounded-xl overflow-hidden bg-[#111111] overflow-x-auto custom-scrollbar">
+                <table className="w-full text-left text-xs min-w-[640px]">
                   <thead className="bg-[#181818] border-b border-[#222222] text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                     <tr>
                       <th className="p-3.5">Faculty Name &amp; ID</th>
@@ -905,8 +905,8 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
 
       {/* Confirmation Dialog */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/90">
-          <div className="w-full max-w-sm bg-[#161616] border border-rose-600/60 rounded-2xl p-6 text-center space-y-4 shadow-[0_0_40px_rgba(225,29,72,0.3)]">
+        <div className="fixed inset-0 z-70 flex items-center justify-center p-3 sm:p-4 bg-black/90">
+          <div className="w-full max-w-sm bg-[#161616] border border-rose-600/60 rounded-2xl p-5 sm:p-6 text-center space-y-4 shadow-[0_0_40px_rgba(225,29,72,0.3)] mx-2">
             <div className="w-12 h-12 rounded-full bg-rose-950 border border-rose-600 flex items-center justify-center mx-auto text-rose-400">
               <span className="material-symbols-outlined text-2xl">warning</span>
             </div>

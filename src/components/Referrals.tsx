@@ -745,32 +745,31 @@ const Referrals: React.FC<ReferralsProps> = ({
   const renderRankBadge = (rankNum: number) => {
     if (rankNum === 1) {
       return (
-        <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-tr from-amber-600 via-yellow-400 to-amber-200 rounded-2xl border-2 border-yellow-200 flex flex-col items-center justify-center shadow-[0_0_20px_rgba(245,158,11,0.5)] shrink-0">
-          <span className="material-symbols-outlined text-black font-black text-base sm:text-lg">sports_esports</span>
-          <span className="text-[6px] sm:text-[6.5px] font-black text-black uppercase tracking-tighter">MYTHIC</span>
+        <div className="w-8 h-8 sm:w-9 sm:h-9 bg-gradient-to-tr from-amber-500 to-yellow-400 rounded-xl border border-yellow-200 flex flex-col items-center justify-center text-black shadow-[0_0_15px_rgba(245,158,11,0.5)] shrink-0">
+          <span className="material-symbols-outlined text-xs sm:text-sm leading-none">sports_esports</span>
+          <span className="text-[7px] sm:text-[8px] font-black font-mono leading-none">#1</span>
         </div>
       );
     }
     if (rankNum >= 2 && rankNum <= 6) {
       return (
-        <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-tr from-purple-800 via-fuchsia-500 to-purple-400 rounded-2xl border-2 border-fuchsia-300 flex flex-col items-center justify-center shadow-[0_0_20px_rgba(217,70,239,0.4)] shrink-0">
-          <span className="material-symbols-outlined text-white font-black text-base sm:text-lg">bolt</span>
-          <span className="text-[6px] sm:text-[6.5px] font-black text-white uppercase tracking-tighter">APEX</span>
+        <div className="w-8 h-8 sm:w-9 sm:h-9 bg-gradient-to-tr from-purple-700 to-fuchsia-500 rounded-xl border border-purple-300 flex flex-col items-center justify-center text-white shadow-[0_0_15px_rgba(217,70,239,0.4)] shrink-0">
+          <span className="material-symbols-outlined text-xs sm:text-sm leading-none">bolt</span>
+          <span className="text-[7px] sm:text-[8px] font-black font-mono leading-none">#{rankNum}</span>
         </div>
       );
     }
     if (rankNum >= 7 && rankNum <= 16) {
       return (
-        <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-tr from-cyan-800 via-cyan-400 to-teal-300 rounded-2xl border-2 border-cyan-200 flex flex-col items-center justify-center shadow-[0_0_20px_rgba(6,182,212,0.4)] shrink-0">
-          <span className="material-symbols-outlined text-black font-black text-base sm:text-lg">videogame_asset</span>
-          <span className="text-[6px] sm:text-[6.5px] font-black text-black uppercase tracking-tighter">CYBER</span>
+        <div className="w-8 h-8 sm:w-9 sm:h-9 bg-gradient-to-tr from-cyan-700 to-teal-400 rounded-xl border border-cyan-300 flex flex-col items-center justify-center text-black shadow-[0_0_15px_rgba(6,182,212,0.4)] shrink-0">
+          <span className="material-symbols-outlined text-xs sm:text-sm leading-none">videogame_asset</span>
+          <span className="text-[7px] sm:text-[8px] font-black font-mono leading-none">#{rankNum}</span>
         </div>
       );
     }
     return (
-      <div className="w-9 h-9 sm:w-10 sm:h-10 bg-[#0c0419] border border-purple-500/30 rounded-2xl flex flex-col items-center justify-center text-purple-300 font-bold shadow-[0_0_10px_rgba(168,85,247,0.1)] shrink-0">
-        <span className="text-[11px] sm:text-xs font-black font-mono">#{rankNum}</span>
-        <span className="text-[5.5px] sm:text-[6px] text-slate-400 font-bold uppercase">LVL</span>
+      <div className="w-8 h-8 sm:w-9 sm:h-9 bg-[#110624] border border-purple-500/30 rounded-xl flex flex-col items-center justify-center text-purple-300 font-bold shadow-sm shrink-0">
+        <span className="text-[10px] sm:text-xs font-black font-mono leading-none">#{rankNum}</span>
       </div>
     );
   };
@@ -1055,8 +1054,8 @@ const Referrals: React.FC<ReferralsProps> = ({
   }
 
   return (
-    <main className="flex-1 w-full min-h-[calc(100vh-76px)] overflow-y-auto pt-6 pb-24 px-4 md:px-8 relative bg-mesh">
-      <div className="max-w-4xl mx-auto space-y-8 stagger-in">
+    <main className="flex-1 w-full min-h-[calc(100vh-76px)] overflow-y-auto pt-6 pb-36 sm:pb-24 px-3 sm:px-6 md:px-8 relative bg-mesh">
+      <div className="max-w-4xl mx-auto space-y-6 sm:space-y-8 stagger-in">
         
         {/* Navigation Tabs - Optimized for mobile touch scrolling & desktop flex */}
         <div className="flex items-center border-b border-purple-500/25 gap-1.5 sm:gap-2 relative z-10 overflow-x-auto no-scrollbar scroll-smooth pb-1 -mx-2 px-2 sm:mx-0 sm:px-0">
@@ -1483,7 +1482,7 @@ const Referrals: React.FC<ReferralsProps> = ({
 
         {/* TAB 2: LEADERBOARD */}
         {activeTab === 'leaderboard' && (
-          <div className="space-y-6 sm:space-y-8 text-left">
+          <div className="space-y-5 sm:space-y-8 text-left">
             {/* Header / Stats Summary */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
@@ -1494,13 +1493,13 @@ const Referrals: React.FC<ReferralsProps> = ({
                 <h3 className="text-xl sm:text-2xl font-black text-white uppercase tracking-tight">
                   Recruiter Leaderboard &amp; Tier Standings
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Earn XP by referring candidates: <strong className="text-cyan-300">+10 XP</strong> submission, <strong className="text-purple-300">+50 XP</strong> interview, <strong className="text-emerald-300">+100 XP</strong> admitted recruit.
+                <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                  Earn XP by submitting high-caliber recruits: <strong className="text-purple-400 font-bold">+10 XP</strong> submission, <strong className="text-cyan-400 font-bold">+50 XP</strong> interview, <strong className="text-emerald-400 font-bold">+100 XP</strong> admitted recruit.
                 </p>
               </div>
 
               {/* Total Active Recruiters Counter */}
-              <div className="px-4 py-2 rounded-2xl bg-purple-500/10 border border-purple-500/25 flex items-center gap-3 shrink-0">
+              <div className="px-4 py-2.5 rounded-2xl bg-purple-500/10 border border-purple-500/25 flex items-center gap-3 shrink-0 w-fit">
                 <span className="material-symbols-outlined text-purple-400 text-2xl">groups</span>
                 <div>
                   <div className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">ACTIVE RECRUITERS</div>
@@ -1509,94 +1508,223 @@ const Referrals: React.FC<ReferralsProps> = ({
               </div>
             </div>
 
-            {/* Top 3 Podium Highlight */}
+            {/* Top 3 Podium Highlight — 3-Card Side-by-Side Row on Mobile & Desktop */}
             {leaderboard.length >= 3 && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 pt-2">
-                {/* #2 Rank - Apex Titan */}
-                <div className="order-2 md:order-1 p-4 sm:p-5 rounded-3xl bg-gradient-to-b from-[#1c0836] via-[#0e041d] to-[#06010e] border border-fuchsia-500/40 relative flex flex-col items-center text-center shadow-[0_0_30px_rgba(217,70,239,0.15)] hover:-translate-y-1 transition-transform">
-                  <div className="relative mb-3">
-                    <img
-                      src={leaderboard[1].photoURL || `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(leaderboard[1].name)}`}
-                      alt={leaderboard[1].name}
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(leaderboard[1].name)}`;
-                      }}
-                      className="w-14 h-14 rounded-2xl object-cover border-2 border-fuchsia-400 shadow-[0_0_20px_rgba(217,70,239,0.4)] bg-purple-950/40"
-                    />
-                    <div className="absolute -bottom-2 -right-2 w-6 h-6 rounded-lg bg-gradient-to-tr from-fuchsia-600 to-purple-600 border border-fuchsia-300 flex items-center justify-center text-white text-xs font-black shadow-md">
+              <div className="grid grid-cols-3 gap-1.5 sm:gap-4 pt-3 sm:pt-4">
+                {/* #2 Rank - Apex Titan (Left) */}
+                <div className="p-2 sm:p-5 rounded-2xl sm:rounded-3xl bg-gradient-to-b from-[#1b0833] via-[#0d041a] to-[#06010e] border border-purple-500/40 relative flex flex-col items-center text-center shadow-[0_0_20px_rgba(168,85,247,0.15)] transition-all">
+                  <div className="relative mb-1.5 sm:mb-3">
+                    {leaderboard[1].photoURL ? (
+                      <img
+                        src={leaderboard[1].photoURL}
+                        alt={leaderboard[1].name}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(leaderboard[1].name)}`;
+                        }}
+                        className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl object-cover border border-purple-400/60 shadow-[0_0_15px_rgba(168,85,247,0.3)] bg-purple-950/50"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-tr from-purple-800 to-fuchsia-600 border border-purple-400/60 flex items-center justify-center text-white font-black text-sm sm:text-xl shadow-[0_0_15px_rgba(168,85,247,0.3)]">
+                        {leaderboard[1].name.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="absolute -bottom-1 -right-1 sm:-bottom-1.5 sm:-right-1.5 w-4 h-4 sm:w-6 sm:h-6 rounded-full bg-purple-600 border border-purple-300 flex items-center justify-center text-white text-[9px] sm:text-xs font-black shadow-md">
                       2
                     </div>
                   </div>
-                  <span className="text-[9px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-400/40 mb-2">
+                  <span className="text-[7px] sm:text-[9px] font-black uppercase tracking-wider px-1.5 sm:px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-400/40 mb-1 sm:mb-2 truncate max-w-full">
                     #2 APEX TITAN
                   </span>
-                  <h4 className="text-sm sm:text-base font-extrabold text-white truncate max-w-full">{leaderboard[1].name}</h4>
-                  <span className="text-xs text-slate-400 font-mono">{leaderboard[1].registrationNumber}</span>
-                  <div className="mt-4 pt-3 border-t border-purple-500/20 w-full flex items-center justify-between text-xs">
-                    <span className="text-slate-400">Referrals: <strong className="text-white">{leaderboard[1].totalReferrals}</strong></span>
-                    <span className="font-bold text-fuchsia-300 font-mono text-sm">{leaderboard[1].totalXP} XP</span>
+                  <h4 className="text-xs sm:text-base font-extrabold text-white truncate max-w-full">{leaderboard[1].name}</h4>
+                  <span className="text-[8.5px] sm:text-xs text-slate-400 font-mono truncate max-w-full">{leaderboard[1].registrationNumber}</span>
+                  <div className="mt-2.5 sm:mt-4 pt-2 sm:pt-3 border-t border-purple-500/20 w-full flex flex-col items-center gap-0.5 sm:gap-1">
+                    <span className="text-[9px] sm:text-xs text-slate-400">Refs: <strong className="text-white">{leaderboard[1].totalReferrals}</strong></span>
+                    <span className="font-black text-purple-300 font-mono text-xs sm:text-base">{leaderboard[1].totalXP} XP</span>
                   </div>
                 </div>
 
-                {/* #1 Rank - Mythic Prime */}
-                <div className="order-1 md:order-2 p-5 sm:p-6 rounded-3xl bg-gradient-to-b from-[#2a1705] via-[#150a02] to-[#0a0501] border-2 border-amber-400/70 relative flex flex-col items-center text-center shadow-[0_0_40px_rgba(245,158,11,0.25)] md:-translate-y-2 hover:-translate-y-3 transition-transform">
-                  <div className="absolute -top-3 px-3 py-0.5 rounded-full bg-amber-400 text-black font-black text-[10px] uppercase tracking-widest shadow-[0_0_15px_rgba(245,158,11,0.6)]">
-                    👑 CROWN RECRUITER
+                {/* #1 Rank - Mythic Prime (Center, Elevated with Crown) */}
+                <div className="p-2.5 sm:p-6 rounded-2xl sm:rounded-3xl bg-gradient-to-b from-[#261504] via-[#140a02] to-[#080401] border-2 border-amber-400/80 relative flex flex-col items-center text-center shadow-[0_0_30px_rgba(245,158,11,0.3)] -translate-y-1.5 sm:-translate-y-2 transition-all">
+                  {/* Crown Floating Tab */}
+                  <div className="absolute -top-2.5 sm:-top-3 px-2 sm:px-3 py-0.5 rounded-full bg-amber-400 text-black font-black text-[9px] sm:text-[10px] uppercase tracking-widest shadow-[0_0_15px_rgba(245,158,11,0.6)] flex items-center justify-center">
+                    👑
                   </div>
-                  <div className="relative my-3">
-                    <img
-                      src={leaderboard[0].photoURL || `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(leaderboard[0].name)}`}
-                      alt={leaderboard[0].name}
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(leaderboard[0].name)}`;
-                      }}
-                      className="w-16 h-16 rounded-2xl object-cover border-2 border-yellow-300 shadow-[0_0_25px_rgba(245,158,11,0.5)] bg-amber-950/40"
-                    />
-                    <div className="absolute -bottom-2 -right-2 w-7 h-7 rounded-lg bg-gradient-to-tr from-amber-500 to-yellow-300 border border-yellow-200 flex items-center justify-center text-black text-xs font-black shadow-md">
+                  <div className="relative mt-1 sm:mt-2 mb-1.5 sm:mb-3">
+                    {leaderboard[0].photoURL ? (
+                      <img
+                        src={leaderboard[0].photoURL}
+                        alt={leaderboard[0].name}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(leaderboard[0].name)}`;
+                        }}
+                        className="w-11 h-11 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl object-cover border-2 border-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.5)] bg-amber-950/50"
+                      />
+                    ) : (
+                      <div className="w-11 h-11 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-gradient-to-tr from-amber-600 to-yellow-400 border-2 border-amber-300 flex items-center justify-center text-black font-black text-sm sm:text-2xl shadow-[0_0_20px_rgba(245,158,11,0.5)]">
+                        {leaderboard[0].name.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="absolute -bottom-1 -right-1 sm:-bottom-1.5 sm:-right-1.5 w-4 h-4 sm:w-6 sm:h-6 rounded-full bg-amber-400 border border-amber-200 flex items-center justify-center text-black text-[9px] sm:text-xs font-black shadow-md">
                       1
                     </div>
                   </div>
-                  <span className="text-[10px] font-black uppercase tracking-widest px-3 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/50 mb-2">
+                  <span className="text-[7px] sm:text-[9px] font-black uppercase tracking-wider px-1.5 sm:px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/50 mb-1 sm:mb-2 truncate max-w-full">
                     #1 MYTHIC PRIME
                   </span>
-                  <h4 className="text-base sm:text-lg font-black text-white truncate max-w-full">{leaderboard[0].name}</h4>
-                  <span className="text-xs text-amber-200/80 font-mono font-bold">{leaderboard[0].registrationNumber}</span>
-                  <div className="mt-4 pt-3 border-t border-amber-500/30 w-full flex items-center justify-between text-xs">
-                    <span className="text-slate-300">Admitted: <strong className="text-emerald-400 font-bold">{leaderboard[0].admittedCount}</strong></span>
-                    <span className="font-black text-amber-300 font-mono text-base">{leaderboard[0].totalXP} XP</span>
+                  <h4 className="text-xs sm:text-base font-black text-white truncate max-w-full">{leaderboard[0].name}</h4>
+                  <span className="text-[8.5px] sm:text-xs text-amber-200/80 font-mono font-bold truncate max-w-full">{leaderboard[0].registrationNumber}</span>
+                  <div className="mt-2.5 sm:mt-4 pt-2 sm:pt-3 border-t border-amber-500/30 w-full flex flex-col items-center gap-0.5 sm:gap-1">
+                    <span className="text-[9px] sm:text-xs text-slate-300">
+                      {leaderboard[0].admittedCount > 0 ? (
+                        <>Adm: <strong className="text-emerald-400 font-bold">{leaderboard[0].admittedCount}</strong></>
+                      ) : (
+                        <>Refs: <strong className="text-white font-bold">{leaderboard[0].totalReferrals}</strong></>
+                      )}
+                    </span>
+                    <span className="font-black text-amber-300 font-mono text-xs sm:text-base">{leaderboard[0].totalXP} XP</span>
                   </div>
                 </div>
 
-                {/* #3 Rank - Apex Titan */}
-                <div className="order-3 p-4 sm:p-5 rounded-3xl bg-gradient-to-b from-[#1c0836] via-[#0e041d] to-[#06010e] border border-fuchsia-500/40 relative flex flex-col items-center text-center shadow-[0_0_30px_rgba(217,70,239,0.15)] hover:-translate-y-1 transition-transform">
-                  <div className="relative mb-3">
-                    <img
-                      src={leaderboard[2].photoURL || `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(leaderboard[2].name)}`}
-                      alt={leaderboard[2].name}
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(leaderboard[2].name)}`;
-                      }}
-                      className="w-14 h-14 rounded-2xl object-cover border-2 border-fuchsia-400 shadow-[0_0_20px_rgba(217,70,239,0.4)] bg-purple-950/40"
-                    />
-                    <div className="absolute -bottom-2 -right-2 w-6 h-6 rounded-lg bg-gradient-to-tr from-purple-700 to-fuchsia-600 border border-fuchsia-300 flex items-center justify-center text-white text-xs font-black shadow-md">
+                {/* #3 Rank - Apex Titan / Cyber Elite (Right) */}
+                <div className="p-2 sm:p-5 rounded-2xl sm:rounded-3xl bg-gradient-to-b from-[#061726] via-[#030e1a] to-[#01060c] border border-cyan-500/40 relative flex flex-col items-center text-center shadow-[0_0_20px_rgba(6,182,212,0.15)] transition-all">
+                  <div className="relative mb-1.5 sm:mb-3">
+                    {leaderboard[2].photoURL ? (
+                      <img
+                        src={leaderboard[2].photoURL}
+                        alt={leaderboard[2].name}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(leaderboard[2].name)}`;
+                        }}
+                        className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl object-cover border border-cyan-400/60 shadow-[0_0_15px_rgba(6,182,212,0.3)] bg-cyan-950/50"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-tr from-cyan-800 to-teal-500 border border-cyan-400/60 flex items-center justify-center text-white font-black text-sm sm:text-xl shadow-[0_0_15px_rgba(6,182,212,0.3)]">
+                        {leaderboard[2].name.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="absolute -bottom-1 -right-1 sm:-bottom-1.5 sm:-right-1.5 w-4 h-4 sm:w-6 sm:h-6 rounded-full bg-cyan-600 border border-cyan-300 flex items-center justify-center text-white text-[9px] sm:text-xs font-black shadow-md">
                       3
                     </div>
                   </div>
-                  <span className="text-[9px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-400/40 mb-2">
-                    #3 APEX TITAN
+                  <span className="text-[7px] sm:text-[9px] font-black uppercase tracking-wider px-1.5 sm:px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 mb-1 sm:mb-2 truncate max-w-full">
+                    #3 {leaderboard[2].tier?.name || 'APEX TITAN'}
                   </span>
-                  <h4 className="text-sm sm:text-base font-extrabold text-white truncate max-w-full">{leaderboard[2].name}</h4>
-                  <span className="text-xs text-slate-400 font-mono">{leaderboard[2].registrationNumber}</span>
-                  <div className="mt-4 pt-3 border-t border-purple-500/20 w-full flex items-center justify-between text-xs">
-                    <span className="text-slate-400">Referrals: <strong className="text-white">{leaderboard[2].totalReferrals}</strong></span>
-                    <span className="font-bold text-fuchsia-300 font-mono text-sm">{leaderboard[2].totalXP} XP</span>
+                  <h4 className="text-xs sm:text-base font-extrabold text-white truncate max-w-full">{leaderboard[2].name}</h4>
+                  <span className="text-[8.5px] sm:text-xs text-slate-400 font-mono truncate max-w-full">{leaderboard[2].registrationNumber}</span>
+                  <div className="mt-2.5 sm:mt-4 pt-2 sm:pt-3 border-t border-cyan-500/20 w-full flex flex-col items-center gap-0.5 sm:gap-1">
+                    <span className="text-[9px] sm:text-xs text-slate-400">Refs: <strong className="text-white">{leaderboard[2].totalReferrals}</strong></span>
+                    <span className="font-black text-cyan-300 font-mono text-xs sm:text-base">{leaderboard[2].totalXP} XP</span>
                   </div>
                 </div>
               </div>
             )}
 
+            {/* Standings Table — Directly Under Podium (Matches Mobile Screenshot) */}
+            <div className="bg-[#0b0318]/90 border border-purple-500/30 rounded-3xl p-3.5 sm:p-6 shadow-[0_0_35px_rgba(168,85,247,0.1)] space-y-3 sm:space-y-4">
+              <div className="flex items-center justify-between px-1 sm:px-2">
+                <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-white">
+                  ALL OPERATOR STANDINGS
+                </span>
+                <span className="text-[10px] sm:text-xs text-slate-400 font-mono">
+                  Ranked by Total Recruiter XP
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                {leaderboard.length === 0 ? (
+                  <div className="py-12 text-center text-slate-500 text-xs">No referral records on leaderboard yet.</div>
+                ) : (
+                  leaderboard.map((lb) => {
+                    const tier = lb.tier || getRecruiterTier(lb.rankNumber);
+                    const isCurrentUser = userRegNo && lb.registrationNumber.toUpperCase() === userRegNo.toUpperCase();
+
+                    return (
+                      <div 
+                        key={lb.registrationNumber} 
+                        className={`p-2.5 sm:p-3.5 rounded-2xl border transition-all duration-200 flex items-center justify-between gap-2 sm:gap-3 ${
+                          isCurrentUser
+                            ? 'bg-purple-600/20 border-purple-400/80 shadow-[0_0_20px_rgba(168,85,247,0.25)]'
+                            : 'bg-black/50 border-purple-500/15 hover:border-purple-500/40 hover:bg-white/5'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                          {/* Rank badge + Avatar */}
+                          <div className="shrink-0 flex items-center gap-1.5 sm:gap-2">
+                            {renderRankBadge(lb.rankNumber)}
+                            {lb.photoURL ? (
+                              <img
+                                src={lb.photoURL}
+                                alt={lb.name}
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(lb.name)}`;
+                                }}
+                                className="w-8 h-8 sm:w-10 sm:h-10 rounded-full sm:rounded-xl object-cover border border-purple-500/30 bg-purple-950/40"
+                              />
+                            ) : (
+                              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full sm:rounded-xl bg-purple-900/60 border border-purple-500/30 flex items-center justify-center text-white font-bold text-xs sm:text-sm">
+                                {lb.name.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Operator Details */}
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 sm:gap-2">
+                              <h4 className="text-white font-bold text-xs sm:text-sm truncate">{lb.name}</h4>
+                              {isCurrentUser && (
+                                <span className="text-[8px] sm:text-[9px] font-black uppercase px-1.5 py-0.2 rounded-full bg-purple-500 text-white shadow-[0_0_10px_rgba(168,85,247,0.5)]">
+                                  YOU
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1 sm:gap-1.5 text-[9px] sm:text-xs text-slate-400 font-mono mt-0.5 truncate">
+                              <span>{lb.registrationNumber}</span>
+                              <span>•</span>
+                              <span>{lb.totalReferrals} referred</span>
+                              {lb.admittedCount > 0 && (
+                                <>
+                                  <span>•</span>
+                                  <span className="text-emerald-400 font-bold">{lb.admittedCount} admitted</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Right side: Stacked XP & Tier Name */}
+                        <div className="text-right shrink-0">
+                          <div className={`text-xs sm:text-base font-black font-mono tracking-tight ${
+                            lb.rankNumber === 1 
+                              ? 'text-amber-300' 
+                              : lb.rankNumber <= 6 
+                              ? 'text-purple-300' 
+                              : lb.rankNumber <= 16 
+                              ? 'text-cyan-300' 
+                              : 'text-slate-300'
+                          }`}>
+                            {lb.totalXP} XP
+                          </div>
+                          <div className={`text-[8px] sm:text-[9.5px] uppercase font-bold tracking-wider ${
+                            lb.rankNumber === 1 
+                              ? 'text-amber-400' 
+                              : lb.rankNumber <= 6 
+                              ? 'text-purple-400' 
+                              : lb.rankNumber <= 16 
+                              ? 'text-cyan-400' 
+                              : 'text-slate-500'
+                          }`}>
+                            {tier.name}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
             {/* RANKING REWARDS & TIER DIVISIONS SHOWCASE */}
-            <div className="space-y-4">
+            <div className="space-y-4 pt-2">
               <div className="bg-[#0b0318]/90 border border-purple-500/30 rounded-3xl p-4 sm:p-6 shadow-[0_0_35px_rgba(168,85,247,0.1)] space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-500/20 pb-3">
                   <div className="flex items-center gap-2">
@@ -1696,84 +1824,6 @@ const Referrals: React.FC<ReferralsProps> = ({
                     <div className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Rejected</div>
                   </div>
                 </div>
-              </div>
-            </div>
-
-            {/* Comprehensive Standings Table */}
-            <div className="bg-[#0b0318]/90 border border-purple-500/30 rounded-3xl p-4 sm:p-6 shadow-[0_0_35px_rgba(168,85,247,0.1)] space-y-4">
-              <div className="flex items-center justify-between px-2">
-                <span className="text-xs font-black uppercase tracking-wider text-purple-300">
-                  ALL OPERATOR STANDINGS
-                </span>
-                <span className="text-[11px] text-slate-400 font-mono">Ranked by Total Recruiter XP</span>
-              </div>
-
-              <div className="space-y-2.5">
-                {leaderboard.length === 0 ? (
-                  <div className="py-12 text-center text-slate-500 text-xs">No referral records on leaderboard yet.</div>
-                ) : (
-                  leaderboard.map((lb) => {
-                    const tier = lb.tier || getRecruiterTier(lb.rankNumber);
-                    const isCurrentUser = userRegNo && lb.registrationNumber.toUpperCase() === userRegNo.toUpperCase();
-
-                    return (
-                      <div 
-                        key={lb.registrationNumber} 
-                        className={`p-3.5 sm:p-4 rounded-2xl border transition-all duration-200 flex items-center justify-between gap-3 ${
-                          isCurrentUser
-                            ? 'bg-purple-600/20 border-purple-400/80 shadow-[0_0_20px_rgba(168,85,247,0.25)]'
-                            : 'bg-black/40 border-purple-500/15 hover:border-purple-500/40 hover:bg-white/5'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
-                          <div className="shrink-0 flex items-center gap-2">
-                            {renderRankBadge(lb.rankNumber)}
-                            <img
-                              src={lb.photoURL || `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(lb.name)}`}
-                              alt={lb.name}
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).src = `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(lb.name)}`;
-                              }}
-                              className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-cover border border-purple-500/30 bg-purple-950/40"
-                            />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                              <h4 className="text-white font-bold text-xs sm:text-sm truncate">{lb.name}</h4>
-                              {isCurrentUser && (
-                                <span className="text-[8.5px] sm:text-[9px] font-black uppercase px-2 py-0.2 rounded-full bg-purple-500 text-white shadow-[0_0_10px_rgba(168,85,247,0.5)]">
-                                  YOU
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-slate-400 font-mono mt-0.5 flex-wrap">
-                              <span>{lb.registrationNumber}</span>
-                              <span>•</span>
-                              <span>{lb.totalReferrals} referred</span>
-                              {lb.admittedCount > 0 && (
-                                <>
-                                  <span>•</span>
-                                  <span className="text-emerald-400 font-bold">{lb.admittedCount} admitted</span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                          <span className={`text-[9px] sm:text-[10px] px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full uppercase tracking-wider font-extrabold ${tier.color}`}>
-                            {tier.name}
-                          </span>
-                          <div className="text-right">
-                            <span className="text-xs sm:text-base font-black text-purple-300 font-mono tracking-tight block">
-                              {lb.totalXP} XP
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
               </div>
             </div>
           </div>

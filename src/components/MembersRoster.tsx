@@ -812,7 +812,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
   };
 
   return (
-    <div className="flex-grow min-h-screen bg-transparent p-3 sm:p-6 md:p-8 text-left text-white select-none">
+    <div className="flex-grow min-h-screen bg-transparent p-3 sm:p-6 md:p-8 pb-36 sm:pb-16 text-left text-white select-none">
       <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8">
         
         {/* Hidden File Input for CSV/Excel */}
@@ -907,11 +907,11 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
             Club Strength &amp; Division Metrics
           </h2>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-4">
             {/* Total Members Card */}
-            <div className="col-span-2 sm:col-span-3 lg:col-span-2 bg-[#141414] border border-purple-600/50 rounded-2xl p-5 shadow-[0_0_25px_rgba(147,51,234,0.1)] flex flex-col justify-between relative overflow-hidden">
+            <div className="col-span-2 sm:col-span-3 lg:col-span-2 bg-[#141414] border border-purple-600/50 rounded-2xl p-4 sm:p-5 shadow-[0_0_25px_rgba(147,51,234,0.1)] flex flex-col justify-between relative overflow-hidden">
               <div className="absolute top-2 right-2 opacity-15">
-                <span className="material-symbols-outlined text-7xl text-purple-400">diversity_3</span>
+                <span className="material-symbols-outlined text-6xl sm:text-7xl text-purple-400">diversity_3</span>
               </div>
               <div>
                 <span className="text-[10px] font-black text-purple-400 uppercase tracking-wider block mb-1">
@@ -921,7 +921,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
                   {loading ? '…' : members.length}
                 </div>
               </div>
-              <p className="text-[11px] text-slate-400 mt-3">
+              <p className="text-[11px] text-slate-400 mt-2 sm:mt-3">
                 Registered student members across all technical &amp; creative domains
               </p>
             </div>
@@ -935,7 +935,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
                 <button
                   key={teamName}
                   onClick={() => setSelectedTeam(isSelected ? 'ALL' : teamName)}
-                  className={`p-4 rounded-2xl border text-left transition-all duration-200 cursor-pointer flex flex-col justify-between ${
+                  className={`p-3 sm:p-4 rounded-2xl border text-left transition-all duration-200 cursor-pointer flex flex-col justify-between ${
                     isSelected
                       ? 'bg-purple-950 border-purple-500 shadow-[0_0_20px_rgba(147,51,234,0.3)]'
                       : 'bg-[#141414] border-[#262626] hover:border-purple-600/60'
@@ -944,7 +944,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
                   <span className="text-[10px] font-bold text-slate-400 uppercase truncate block">
                     {teamName}
                   </span>
-                  <div className="text-2xl font-black text-white mt-2">{count}</div>
+                  <div className="text-xl sm:text-2xl font-black text-white mt-1.5 sm:mt-2">{count}</div>
                   <span className="text-[9px] text-purple-300/80 mt-1 font-semibold">Members</span>
                 </button>
               );
@@ -960,16 +960,16 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
               Executive Council &amp; Student Leadership
             </h2>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               {leadershipPeople.map((lead) => (
                 <div
                   key={lead.id}
-                  className="p-5 bg-[#141414] border border-purple-600/40 rounded-2xl flex items-center gap-4 shadow-[0_0_20px_rgba(0,0,0,0.5)]"
+                  className="p-4 sm:p-5 bg-[#141414] border border-purple-600/40 rounded-2xl flex items-center gap-3.5 sm:gap-4 shadow-[0_0_20px_rgba(0,0,0,0.5)]"
                 >
                   <img
                     src={lead.avatarUrl}
                     alt={lead.name}
-                    className="w-14 h-14 rounded-xl object-cover border border-purple-500 bg-purple-950 shrink-0"
+                    className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl object-cover border border-purple-500 bg-purple-950 shrink-0"
                   />
                   <div className="min-w-0">
                     <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-purple-900/60 text-purple-300 border border-purple-600">
@@ -991,7 +991,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
 
         {/* Search & Filter Toolbar */}
         <section className="space-y-3">
-          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 p-4 bg-[#141414] border border-[#262626] rounded-2xl">
+          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 p-3.5 sm:p-4 bg-[#141414] border border-[#262626] rounded-2xl">
             {/* Search Input */}
             <div className="relative flex-1">
               <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-lg">search</span>
@@ -1005,11 +1005,11 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
             </div>
 
             {/* Filter Dropdowns & View Mode */}
-            <div className="flex items-center gap-2.5 flex-wrap">
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-2.5 w-full md:w-auto">
               <select
                 value={selectedTeam}
                 onChange={(e) => setSelectedTeam(e.target.value)}
-                className="px-3 py-2 bg-[#1c1c1c] border border-[#333333] rounded-xl text-xs text-white focus:outline-none focus:border-purple-500"
+                className="flex-1 sm:flex-initial px-3 py-2 bg-[#1c1c1c] border border-[#333333] rounded-xl text-xs text-white focus:outline-none focus:border-purple-500 cursor-pointer min-w-[130px]"
               >
                 <option value="ALL">All Domains</option>
                 {uniqueTeams.map((t) => (
@@ -1020,7 +1020,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
               <select
                 value={selectedPosition}
                 onChange={(e) => setSelectedPosition(e.target.value)}
-                className="px-3 py-2 bg-[#1c1c1c] border border-[#333333] rounded-xl text-xs text-white focus:outline-none focus:border-purple-500"
+                className="flex-1 sm:flex-initial px-3 py-2 bg-[#1c1c1c] border border-[#333333] rounded-xl text-xs text-white focus:outline-none focus:border-purple-500 cursor-pointer min-w-[120px]"
               >
                 <option value="ALL">All Roles</option>
                 <option value="CO_PRESIDENT">Co-Presidents</option>
@@ -1030,7 +1030,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
               </select>
 
               {/* View Toggle */}
-              <div className="flex items-center bg-[#1c1c1c] border border-[#333333] rounded-xl p-1">
+              <div className="flex items-center bg-[#1c1c1c] border border-[#333333] rounded-xl p-1 shrink-0">
                 <button
                   onClick={() => setViewMode('grid')}
                   className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
@@ -1190,8 +1190,8 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
         ) : (
           /* Table View */
           <div className="bg-[#141414] border border-[#262626] rounded-2xl overflow-hidden shadow-xl">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-300">
+            <div className="overflow-x-auto custom-scrollbar">
+              <table className="w-full min-w-[720px] text-left text-xs text-slate-300">
                 <thead className="bg-[#181818] text-purple-300 font-bold border-b border-[#262626]">
                   <tr>
                     <th className="py-3.5 px-4">Member Name</th>
@@ -1261,7 +1261,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
       {/* ─── MODAL 1: CSV/XLSX Import & Clash Resolution ──────────────────────── */}
       {importModalOpen && (
         <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-6 bg-black/90 backdrop-blur-md">
-          <div className="w-full max-w-4xl max-h-[90vh] flex flex-col bg-[#121212] border border-purple-600 rounded-2xl shadow-[0_0_50px_rgba(147,51,234,0.3)] overflow-hidden text-left">
+          <div className="w-full max-w-4xl max-h-[88vh] flex flex-col bg-[#121212] border border-purple-600 rounded-2xl shadow-[0_0_50px_rgba(147,51,234,0.3)] overflow-hidden text-left mx-1 sm:mx-0">
             {/* Modal Header */}
             <div className="p-5 bg-[#181818] border-b border-[#262626] flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
@@ -1606,8 +1606,8 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
 
       {/* ─── MODAL 3: Manual Add / Edit Member ────────────────────────────────── */}
       {memberModalOpen && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
-          <div className="w-full max-w-lg bg-[#141414] border border-purple-600 rounded-2xl p-6 space-y-4 text-left shadow-[0_0_40px_rgba(147,51,234,0.3)]">
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-4 bg-black/90 backdrop-blur-md">
+          <div className="w-full max-w-lg max-h-[88vh] overflow-y-auto custom-scrollbar bg-[#141414] border border-purple-600 rounded-2xl p-6 space-y-4 text-left shadow-[0_0_40px_rgba(147,51,234,0.3)] mx-1 sm:mx-0">
             <div className="flex items-center justify-between pb-3 border-b border-[#262626]">
               <h3 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
                 <span className="material-symbols-outlined text-purple-400">group_add</span>

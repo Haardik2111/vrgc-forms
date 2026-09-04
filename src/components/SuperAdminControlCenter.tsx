@@ -647,11 +647,11 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
   const allRolesList = ['Admin', 'Payment Admin', 'Technical', ...(permissions.customRoles || [])];
 
   return (
-    <div className="flex-grow min-h-screen bg-transparent p-3 sm:p-6 md:p-8 text-left text-white select-none">
+    <div className="flex-grow min-h-screen bg-transparent p-3 sm:p-6 md:p-8 pb-36 sm:pb-16 text-left text-white select-none">
       <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8">
         
         {/* Enclave Header */}
-        <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-5 sm:p-6 bg-[#0e0618] border border-purple-600/50 rounded-2xl sm:rounded-3xl shadow-[0_0_40px_rgba(147,51,234,0.18)]">
+        <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 sm:p-6 bg-[#0e0618] border border-purple-600/50 rounded-2xl sm:rounded-3xl shadow-[0_0_40px_rgba(147,51,234,0.18)]">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="px-2.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-purple-700 text-white border border-purple-400 shadow-[0_0_10px_rgba(147,51,234,0.4)] flex items-center gap-1.5">
@@ -681,8 +681,8 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
           </button>
         </header>
 
-        {/* Tab Navigation Strip */}
-        <div className="flex border-b border-[#231238] gap-1 sm:gap-2 overflow-x-auto custom-scrollbar pb-1">
+        {/* Tab Navigation Strip - Smooth Touch Horizontal Scroll */}
+        <div className="flex border-b border-[#231238] gap-1 sm:gap-2 overflow-x-auto no-scrollbar flex-nowrap scroll-smooth pb-1 -mx-2 px-2 sm:mx-0 sm:px-0">
           <button
             onClick={() => setActiveTab('permissions')}
             className={`px-3 sm:px-5 py-2.5 rounded-t-xl text-xs font-black tracking-wider uppercase flex items-center gap-2 transition-all shrink-0 border-b-2 cursor-pointer ${
@@ -749,16 +749,16 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                 </p>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
                 {permissionsSuccess && (
-                  <span className="text-xs text-emerald-400 font-bold bg-[#052e16] border border-emerald-600 px-3 py-1.5 rounded-xl animate-fade-in">
+                  <span className="text-xs text-emerald-400 font-bold bg-[#052e16] border border-emerald-600 px-3 py-1.5 rounded-xl animate-fade-in text-center">
                     {permissionsSuccess}
                   </span>
                 )}
                 <button
                   onClick={handleSavePermissions}
                   disabled={savingPermissions}
-                  className="px-5 py-2.5 bg-purple-700 hover:bg-purple-600 disabled:opacity-50 text-white text-xs font-black tracking-wider uppercase rounded-xl transition-all cursor-pointer flex items-center gap-2"
+                  className="w-full sm:w-auto px-5 py-2.5 bg-purple-700 hover:bg-purple-600 disabled:opacity-50 text-white text-xs font-black tracking-wider uppercase rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2"
                 >
                   {savingPermissions && <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
                   Save Permissions Matrix
@@ -807,7 +807,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
 
             {/* Matrix Table with horizontal scroll */}
             <div className="bg-[#0c0517] border border-[#2b1642] rounded-2xl overflow-hidden shadow-lg overflow-x-auto custom-scrollbar">
-              <table className="w-full text-left text-xs min-w-[760px]">
+              <table className="w-full text-left text-xs min-w-[880px]">
                 <thead className="bg-[#140b24] border-b border-[#2b1642] text-slate-300 font-bold uppercase tracking-wider text-[10px]">
                   <tr>
                     <th className="p-4 w-52">Role / Access Tier</th>
@@ -1060,18 +1060,18 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
               </div>
 
               {/* Add Custom Role Form */}
-              <form onSubmit={handleCreateCustomRole} className="flex items-center gap-2">
+              <form onSubmit={handleCreateCustomRole} className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
                 <input
                   type="text"
                   placeholder="New Role (e.g. Lead, Event Admin)"
                   value={newCustomRoleName}
                   onChange={(e) => setNewCustomRoleName(e.target.value)}
-                  className="px-3 py-1.5 bg-[#160b26] border border-purple-900/60 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                  className="flex-1 sm:flex-initial px-3 py-1.5 bg-[#160b26] border border-purple-900/60 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
                 />
                 <button
                   type="submit"
                   disabled={creatingCustomRole || !newCustomRoleName.trim()}
-                  className="px-3.5 py-1.5 bg-purple-700 hover:bg-purple-600 disabled:opacity-40 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  className="px-3.5 py-1.5 bg-purple-700 hover:bg-purple-600 disabled:opacity-40 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-sm shrink-0"
                 >
                   <span className="material-symbols-outlined text-sm">add</span>
                   <span>Add Role</span>
@@ -1118,7 +1118,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
 
           {/* Admin Accounts Table */}
           <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
               <div className="relative flex-1 max-w-md">
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-lg">search</span>
                 <input
@@ -1134,7 +1134,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                   setAdminError('');
                   setIsAddAdminOpen(true);
                 }}
-                className="px-4 py-2 bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-[0_0_15px_rgba(147,51,234,0.3)]"
+                className="px-4 py-2 bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-[0_0_15px_rgba(147,51,234,0.3)] shrink-0"
               >
                 <span className="material-symbols-outlined text-base">person_add</span>
                 Add New Admin
@@ -1215,7 +1215,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
 
             {/* Table */}
             <div className="border border-[#2b1442] rounded-2xl overflow-hidden bg-[#0c0517] overflow-x-auto custom-scrollbar shadow-md">
-              <table className="w-full text-left text-xs min-w-[600px]">
+              <table className="w-full text-left text-xs min-w-[640px]">
                 <thead className="bg-[#140b24] border-b border-[#2b1442] text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                   <tr>
                     <th className="p-3.5">Admin Profile</th>
@@ -1464,7 +1464,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
       {/* ════════════════════════════════════════════════════════════════════ */}
       {activeTab === 'faculty' && (
         <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
             <div className="relative flex-1 max-w-md">
               <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-lg">search</span>
               <input
@@ -1477,7 +1477,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
             </div>
             <button
               onClick={() => openFacultyForm()}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-[0_0_15px_rgba(99,102,241,0.3)]"
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-[0_0_15px_rgba(99,102,241,0.3)] shrink-0"
             >
               <span className="material-symbols-outlined text-base">add</span>
               Register Faculty Advisor
@@ -1663,8 +1663,8 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
 
       {/* ── Confirmation Modal ── */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm select-none">
-          <div className="max-w-sm w-full bg-[#12081f] border border-rose-500/40 rounded-2xl p-6 space-y-4 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm select-none">
+          <div className="max-w-sm w-full bg-[#12081f] border border-rose-500/40 rounded-2xl p-5 sm:p-6 space-y-4 shadow-2xl mx-2">
             <div className="w-12 h-12 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400">
               <span className="material-symbols-outlined text-2xl">warning</span>
             </div>
