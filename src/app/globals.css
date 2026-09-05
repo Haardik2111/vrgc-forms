@@ -1,8 +1,20 @@
-/* Fonts loaded via layout.tsx <link> tags for best LCP performance */
+/* Fonts loaded via layout.tsx next/font/google */
 @import "tailwindcss";
+
+@theme {
+  --font-display: var(--font-display, Impact, 'Space Grotesk', sans-serif);
+  --font-head: var(--font-head, -apple-system, sans-serif);
+  --font-body: var(--font-body, -apple-system, BlinkMacSystemFont, sans-serif);
+  --font-mono: var(--font-mono, monospace);
+}
 
 @layer base {
   :root {
+    --font-display: var(--font-display, 'Bebas Neue', Impact, 'Space Grotesk', sans-serif);
+    --font-head: var(--font-head, 'Space Grotesk', -apple-system, sans-serif);
+    --font-body: var(--font-body, 'Inter', -apple-system, BlinkMacSystemFont, sans-serif);
+    --font-mono: var(--font-mono, 'JetBrains Mono', monospace);
+
     --neon-purple: #A855F7;
     --true-black: #000000;
     --background: #03010A;
@@ -17,28 +29,72 @@
     --error: #ef4444;
   }
 
+  html {
+    max-width: 100vw;
+    overflow-x: clip;
+    width: 100%;
+  }
+
   body {
     background-color: var(--background);
     color: var(--on-surface);
-    font-family: 'Hanken Grotesk', 'Inter', system-ui, sans-serif;
-    overflow-x: hidden;
+    font-family: var(--font-body);
+    max-width: 100vw;
+    overflow-x: clip;
+    width: 100%;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
     -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeSpeed;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-head);
   }
 
   button, a {
     touch-action: manipulation;
   }
+
+  button {
+    font-family: var(--font-head);
+  }
+
+  input, textarea, select {
+    font-family: var(--font-body);
+  }
+
+  code, kbd, samp, pre {
+    font-family: var(--font-mono);
+  }
 }
 
+/* Typography Hierarchy Utilities */
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: 0.03em;
+}
+
+.font-head {
+  font-family: var(--font-head);
+}
+
+.font-body {
+  font-family: var(--font-body);
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+/* Backward-compatibility aliases mapped to new system */
 .font-orbitron {
-  font-family: 'Orbitron', 'JetBrains Mono', monospace, sans-serif;
+  font-family: var(--font-display);
+  letter-spacing: 0.04em;
 }
 
 .font-rajdhani {
-  font-family: 'Rajdhani', sans-serif;
+  font-family: var(--font-head);
 }
 
 .material-symbols-outlined {

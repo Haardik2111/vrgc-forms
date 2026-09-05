@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
@@ -376,6 +377,20 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
       return matchesSearch && matchesTeam && matchesPosition;
     });
   }, [members, searchQuery, selectedTeam, selectedPosition]);
+
+  // Page limit for progressive loading (load 12 at a time, exactly like ID card loading system)
+  const PAGE_SIZE = 12;
+  const [pageLimit, setPageLimit] = useState<number>(PAGE_SIZE);
+
+  // Reset page limit back to PAGE_SIZE whenever user searches or changes filter
+  useEffect(() => {
+    setPageLimit(PAGE_SIZE);
+  }, [searchQuery, selectedTeam, selectedPosition]);
+
+  // Paginated visible members slice
+  const visibleMembers = useMemo(() => {
+    return filteredMembers.slice(0, pageLimit);
+  }, [filteredMembers, pageLimit]);
 
   // Dynamic available domains combining member's current domain, Firestore metadata, and system defaults
   const availableDomains = useMemo(() => {
@@ -812,7 +827,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
   };
 
   return (
-    <div className="flex-grow min-h-screen bg-transparent p-3 sm:p-6 md:p-8 pb-36 sm:pb-16 text-left text-white select-none">
+    <div className="flex-grow w-full max-w-full overflow-x-clip bg-transparent p-3 sm:p-6 md:p-8 pb-12 sm:pb-16 text-left text-white select-none">
       <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8">
         
         {/* Hidden File Input for CSV/Excel */}
@@ -827,17 +842,17 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
         {/* Page Header */}
         <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 border-b border-[#262626]">
           <div>
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
               <span className="px-3 py-1 rounded-md text-[10px] font-black bg-purple-900/60 text-purple-300 border border-purple-600 flex items-center gap-1.5 shadow-[0_0_12px_rgba(147,51,234,0.2)]">
                 <span className="material-symbols-outlined text-[13px]">groups</span>
                 VRGC CHAPTER ROSTER
               </span>
-              <span className="text-[11px] text-slate-400 font-mono">STUDENT LEADERSHIP &amp; CREW DIRECTORY</span>
+              <span className="text-[10px] sm:text-[11px] text-slate-400 font-mono">STUDENT LEADERSHIP &amp; CREW DIRECTORY</span>
             </div>
-            <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight">
               Club Members &amp; Team Breakdown
             </h1>
-            <p className="text-slate-400 text-sm mt-1 max-w-2xl">
+            <p className="text-slate-400 text-xs sm:text-sm mt-1 max-w-2xl">
               Official organizational structure of Virtual Reality &amp; Gaming Club with total strength, team subdivisions, and student governance.
             </p>
           </div>
@@ -935,7 +950,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
                 <button
                   key={teamName}
                   onClick={() => setSelectedTeam(isSelected ? 'ALL' : teamName)}
-                  className={`p-3 sm:p-4 rounded-2xl border text-left transition-all duration-200 cursor-pointer flex flex-col justify-between ${
+                  className={`p-3 sm:p-4 rounded-2xl border text-left transition-all duration-200 cursor-pointer flex flex-col justify-between min-w-0 ${
                     isSelected
                       ? 'bg-purple-950 border-purple-500 shadow-[0_0_20px_rgba(147,51,234,0.3)]'
                       : 'bg-[#141414] border-[#262626] hover:border-purple-600/60'
@@ -1055,8 +1070,8 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
 
           <div className="flex items-center justify-between text-xs text-slate-400 px-1">
             <span>
-              Showing <strong className="text-white">{filteredMembers.length}</strong> of{' '}
-              <strong className="text-purple-300">{members.length}</strong> total crew members
+              Showing <strong className="text-white">{visibleMembers.length}</strong> of{' '}
+              <strong className="text-purple-300">{filteredMembers.length}</strong> {filteredMembers.length !== members.length ? `filtered (from ${members.length} total)` : 'total crew members'}
             </span>
             {!canManage && (
               <span className="text-[11px] text-slate-500 font-mono">
@@ -1094,7 +1109,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
           </div>
         ) : viewMode === 'grid' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filteredMembers.map((m) => {
+            {visibleMembers.map((m) => {
               const isLead = m.isCoPresident || m.isCoordinator || m.isLead;
 
               return (
@@ -1189,8 +1204,9 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
           </div>
         ) : (
           /* Table View */
-          <div className="bg-[#141414] border border-[#262626] rounded-2xl overflow-hidden shadow-xl">
-            <div className="overflow-x-auto custom-scrollbar">
+          <div className="bg-transparent md:bg-[#141414] border-0 md:border md:border-[#262626] rounded-2xl md:overflow-hidden md:shadow-xl">
+            {/* Desktop Table (>= md) */}
+            <div className="hidden md:block overflow-x-auto custom-scrollbar">
               <table className="w-full min-w-[720px] text-left text-xs text-slate-300">
                 <thead className="bg-[#181818] text-purple-300 font-bold border-b border-[#262626]">
                   <tr>
@@ -1204,7 +1220,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#222222]">
-                  {filteredMembers.map((m) => (
+                  {visibleMembers.map((m) => (
                     <tr key={m.id || m.email} className="hover:bg-[#1c1c1c] transition-colors">
                       <td className="py-3 px-4 flex items-center gap-2.5 font-bold text-white">
                         <img
@@ -1254,12 +1270,126 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
                 </tbody>
               </table>
             </div>
+
+            {/* Mobile Responsive Roster List (< md) - Subtle Gapping between Cards */}
+            <div className="md:hidden space-y-2.5">
+              {visibleMembers.map((m) => (
+                <div
+                  key={m.id || m.email}
+                  className="p-3.5 space-y-2.5 bg-[#141414] border border-[#262626] hover:border-purple-500/40 rounded-2xl transition-all shadow-sm"
+                >
+                  {/* Top Bar: Avatar + Name + Reg No + Role Badge */}
+                  <div className="flex items-center justify-between gap-2.5">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <img
+                        src={m.avatarUrl}
+                        alt={m.name}
+                        className="w-9 h-9 rounded-lg object-cover bg-purple-950 border border-purple-500/40 shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-black text-white truncate">{m.name}</h4>
+                        <div className="text-[10px] font-mono text-purple-300 font-bold tracking-wider">
+                          {m.registrationNumber || '—'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <span
+                      className={`px-2 py-0.5 rounded text-[9px] font-bold border shrink-0 ${
+                        m.isCoPresident
+                          ? 'bg-amber-950/60 text-amber-300 border-amber-600'
+                          : m.isCoordinator
+                          ? 'bg-indigo-950/60 text-indigo-300 border-indigo-600'
+                          : m.isLead
+                          ? 'bg-purple-950/60 text-purple-200 border border-purple-600'
+                          : 'bg-[#222222] text-slate-300 border-[#333333]'
+                      }`}
+                    >
+                      {m.position}
+                    </span>
+                  </div>
+
+                  {/* Metadata: Domain + Email + Phone */}
+                  <div className="space-y-1 text-[11px] text-slate-400 font-mono">
+                    <div className="flex items-center gap-1.5 text-slate-300">
+                      <span className="text-[9.5px] text-purple-400 font-bold uppercase tracking-wider font-sans">
+                        DOMAIN:
+                      </span>
+                      <span className="font-sans font-semibold text-xs text-purple-200 truncate">
+                        {m.team}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span className="text-[9.5px] text-slate-500 font-bold">MAIL:</span>
+                      <span className="text-slate-300 truncate">{m.email}</span>
+                    </div>
+
+                    {m.phone && (
+                      <div className="flex items-center gap-1.5 truncate">
+                        <span className="text-[9.5px] text-slate-500 font-bold">TEL:</span>
+                        <span className="text-slate-300">{m.phone}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Bottom: Action Buttons for Admins or Active Status */}
+                  <div className="pt-2 border-t border-[#222222] flex items-center justify-between">
+                    <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Active Member
+                    </span>
+
+                    {canManage && (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => openMemberModal(m)}
+                          className="px-2.5 py-1 bg-[#222222] hover:bg-purple-700 text-white rounded text-[10.5px] font-bold transition-colors cursor-pointer flex items-center gap-1"
+                        >
+                          <span className="material-symbols-outlined text-[12px]">edit</span>
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => setDeleteConfirmMember(m)}
+                          className="px-2.5 py-1 bg-rose-950/50 hover:bg-rose-900 text-rose-300 rounded text-[10.5px] font-bold border border-rose-800/40 transition-colors cursor-pointer flex items-center gap-1"
+                        >
+                          <span className="material-symbols-outlined text-[12px]">delete</span>
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Load More Members Button (Progressive Pagination like ID Card Portal) */}
+        {!loading && filteredMembers.length > 0 && (
+          <div className="space-y-2 pt-2">
+            {visibleMembers.length < filteredMembers.length && (
+              <div className="text-center pt-4 pb-2 relative z-20">
+                <button
+                  type="button"
+                  onClick={() => setPageLimit((prev) => prev + PAGE_SIZE)}
+                  className="px-6 py-2.5 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-bold uppercase tracking-wider hover:bg-purple-500/20 hover:border-purple-500/50 hover:text-white transition-all duration-300 shadow-[0_0_15px_rgba(168,85,247,0.15)] active:scale-95 inline-flex items-center gap-2 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-sm">expand_more</span>
+                  <span>LOAD MORE MEMBERS ({filteredMembers.length - visibleMembers.length} REMAINING)</span>
+                </button>
+              </div>
+            )}
+            {visibleMembers.length >= filteredMembers.length && filteredMembers.length > PAGE_SIZE && (
+              <div className="text-center pt-4 pb-2 text-[11px] font-mono text-slate-500">
+                All {filteredMembers.length} members loaded
+              </div>
+            )}
           </div>
         )}
       </div>
 
       {/* ─── MODAL 1: CSV/XLSX Import & Clash Resolution ──────────────────────── */}
-      {importModalOpen && (
+      {importModalOpen && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-6 bg-black/90 backdrop-blur-md">
           <div className="w-full max-w-4xl max-h-[88vh] flex flex-col bg-[#121212] border border-purple-600 rounded-2xl shadow-[0_0_50px_rgba(147,51,234,0.3)] overflow-hidden text-left mx-1 sm:mx-0">
             {/* Modal Header */}
@@ -1486,11 +1616,12 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ─── MODAL 2: Manual Edit Inside Clash ────────────────────────────────── */}
-      {clashEditTarget && (
+      {clashEditTarget && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/95">
           <div className="w-full max-w-md bg-[#161616] border border-purple-600 rounded-2xl p-6 space-y-4 text-left shadow-[0_0_40px_rgba(147,51,234,0.3)]">
             <h4 className="text-sm font-black text-white uppercase tracking-wider">
@@ -1601,11 +1732,12 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ─── MODAL 3: Manual Add / Edit Member ────────────────────────────────── */}
-      {memberModalOpen && (
+      {memberModalOpen && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-4 bg-black/90 backdrop-blur-md">
           <div className="w-full max-w-lg max-h-[88vh] overflow-y-auto custom-scrollbar bg-[#141414] border border-purple-600 rounded-2xl p-6 space-y-4 text-left shadow-[0_0_40px_rgba(147,51,234,0.3)] mx-1 sm:mx-0">
             <div className="flex items-center justify-between pb-3 border-b border-[#262626]">
@@ -1760,11 +1892,12 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ─── MODAL 4: Delete Member Confirmation ──────────────────────────────── */}
-      {deleteConfirmMember && (
+      {deleteConfirmMember && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/90">
           <div className="w-full max-w-sm bg-[#161616] border border-rose-600/60 rounded-2xl p-6 text-center space-y-4 shadow-[0_0_40px_rgba(225,29,72,0.3)]">
             <div className="w-12 h-12 rounded-full bg-rose-950 border border-rose-600 flex items-center justify-center mx-auto text-rose-400">
@@ -1794,11 +1927,12 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ─── MODAL 5: Quick Add Domain or Role (Delegated Metadata) ─────────────── */}
-      {quickAddModalType && (
+      {quickAddModalType && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
           <form
             onSubmit={handleSaveQuickAdd}
@@ -1851,7 +1985,8 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
               </button>
             </div>
           </form>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

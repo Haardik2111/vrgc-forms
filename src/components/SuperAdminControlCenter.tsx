@@ -6,6 +6,7 @@ import {
   ClubMetadata,
   ALL_PAGE_IDS,
   PageId,
+  PagePermission,
   fetchPermissionsConfig,
   savePermissionsConfig,
   fetchClubMetadata,
@@ -40,6 +41,23 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
   currentUserEmail,
 }) => {
   const [activeTab, setActiveTab] = useState<'permissions' | 'roles' | 'metadata' | 'faculty'>('permissions');
+  const [selectedMobileRole, setSelectedMobileRole] = useState<string>('Members');
+  const [mobileViewMode, setMobileViewMode] = useState<'by_role' | 'by_portal'>('by_role');
+  const [selectedMobilePortal, setSelectedMobilePortal] = useState<PageId>('members');
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+
+  // Close permission dropdowns on click outside
+  useEffect(() => {
+    if (!openDropdownId) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.perm-dropdown-container')) {
+        setOpenDropdownId(null);
+      }
+    };
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, [openDropdownId]);
 
   // ─── 1. Permissions Matrix State ──────────────────────────────────────────
   const [permissions, setPermissions] = useState<PermissionsConfig>(DEFAULT_PERMISSIONS_CONFIG);
@@ -251,6 +269,109 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
           },
         },
       };
+    });
+  };
+
+  // Set composite Access Level: 'none' (Locked), 'view' (View Only), 'edit' (View & Edit)
+  const handleSetTierAccessLevel = (
+    tierKey: 'members' | 'faculty',
+    pageId: PageId,
+    level: 'none' | 'view' | 'edit'
+  ) => {
+    setPermissions((prev) => {
+      const current = prev.tiers[tierKey]?.[pageId] || { canView: false, canEdit: false, bypassMaintenance: false };
+      return {
+        ...prev,
+        tiers: {
+          ...prev.tiers,
+          [tierKey]: {
+            ...prev.tiers[tierKey],
+            [pageId]: {
+              ...current,
+              canView: level !== 'none',
+              canEdit: level === 'edit',
+              bypassMaintenance: level === 'none' ? false : current.bypassMaintenance,
+            },
+          },
+        },
+      };
+    });
+  };
+
+  const handleSetRoleAccessLevel = (
+    roleName: string,
+    pageId: PageId,
+    level: 'none' | 'view' | 'edit'
+  ) => {
+    setPermissions((prev) => {
+      const currentRoleMap = prev.roles[roleName] || createDefaultPagePermissionsMap(true, false, false);
+      const currentPagePerm = currentRoleMap[pageId] || { canView: false, canEdit: false, bypassMaintenance: false };
+      return {
+        ...prev,
+        roles: {
+          ...prev.roles,
+          [roleName]: {
+            ...currentRoleMap,
+            [pageId]: {
+              ...currentPagePerm,
+              canView: level !== 'none',
+              canEdit: level === 'edit',
+              bypassMaintenance: level === 'none' ? false : currentPagePerm.bypassMaintenance,
+            },
+          },
+        },
+      };
+    });
+  };
+
+  // Quick preset helper to apply to all 5 portals for a role or tier in 1 tap
+  const handleApplyRolePreset = (
+    target: 'members' | 'faculty' | string,
+    preset: 'view_all' | 'edit_all' | 'lock_all'
+  ) => {
+    const canView = preset !== 'lock_all';
+    const canEdit = preset === 'edit_all';
+
+    setPermissions((prev) => {
+      if (target === 'members' || target === 'faculty') {
+        const currentTier = (prev.tiers[target] || {}) as Record<PageId, PagePermission>;
+        const updatedTier = { ...currentTier } as Record<PageId, PagePermission>;
+        ALL_PAGE_IDS.forEach((p) => {
+          const cur = updatedTier[p.id] || { canView: false, canEdit: false, bypassMaintenance: false };
+          updatedTier[p.id] = {
+            ...cur,
+            canView,
+            canEdit,
+            bypassMaintenance: preset === 'lock_all' ? false : cur.bypassMaintenance,
+          };
+        });
+        return {
+          ...prev,
+          tiers: {
+            ...prev.tiers,
+            [target]: updatedTier,
+          },
+        };
+      } else {
+        const currentRole = (prev.roles[target] || {}) as Record<PageId, PagePermission>;
+        const updatedRole = { ...currentRole } as Record<PageId, PagePermission>;
+        ALL_PAGE_IDS.forEach((p) => {
+          const cur = updatedRole[p.id] || { canView: false, canEdit: false, bypassMaintenance: false };
+          updatedRole[p.id] = {
+            ...cur,
+            canView,
+            canEdit,
+            bypassMaintenance: preset === 'lock_all' ? false : cur.bypassMaintenance,
+          };
+        });
+        return {
+          ...prev,
+          roles: {
+            ...prev.roles,
+            [target]: updatedRole,
+          },
+        };
+      }
     });
   };
 
@@ -646,9 +767,177 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
   // All roles available for matrix and assignment
   const allRolesList = ['Admin', 'Payment Admin', 'Technical', ...(permissions.customRoles || [])];
 
+  // Modern Dropdown + Bypass permission control cell renderer
+  const renderPermissionControl = (
+    cellId: string,
+    perm: PagePermission,
+    onSetLevel: (level: 'none' | 'view' | 'edit') => void,
+    onToggleBypass: () => void,
+    options?: { compact?: boolean; openUpward?: boolean }
+  ) => {
+    const isLocked = !perm.canView;
+    const isEdit = perm.canView && perm.canEdit;
+    const isViewOnly = perm.canView && !perm.canEdit;
+    const isDropdownOpen = openDropdownId === cellId;
+
+    // Config for the current active level pill
+    const levelConfig = isLocked
+      ? {
+          label: 'No Access',
+          icon: 'lock',
+          color: 'bg-rose-950/70 border-rose-600/50 text-rose-300 hover:border-rose-400',
+        }
+      : isEdit
+      ? {
+          label: 'View & Edit',
+          icon: 'edit',
+          color: 'bg-emerald-950/70 border-emerald-500/60 text-emerald-200 hover:border-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.18)]',
+        }
+      : {
+          label: 'View Only',
+          icon: 'visibility',
+          color: 'bg-purple-950/70 border-purple-500/60 text-purple-200 hover:border-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.18)]',
+        };
+
+    return (
+      <div className="inline-flex items-center gap-1.5 perm-dropdown-container relative">
+        {/* Dropdown Menu Trigger Button */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpenDropdownId(isDropdownOpen ? null : cellId);
+            }}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer select-none ${
+              levelConfig.color
+            } ${options?.compact ? 'text-[11px] py-1 px-2' : ''}`}
+            title="Click to change access level"
+          >
+            <span className="material-symbols-outlined text-sm shrink-0">
+              {levelConfig.icon}
+            </span>
+            <span className="whitespace-nowrap">{levelConfig.label}</span>
+            <span
+              className={`material-symbols-outlined text-xs transition-transform duration-200 opacity-70 ${
+                isDropdownOpen ? 'rotate-180' : ''
+              }`}
+            >
+              expand_more
+            </span>
+          </button>
+
+          {/* Floating Dropdown Popover */}
+          {isDropdownOpen && (
+            <div
+              className={`absolute right-0 z-50 w-44 rounded-xl bg-[#0e071c] border border-purple-500/40 shadow-[0_10px_30px_rgba(0,0,0,0.8),0_0_20px_rgba(147,51,234,0.25)] p-1.5 space-y-1 backdrop-blur-md animate-in fade-in zoom-in-95 duration-150 ${
+                options?.openUpward ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+              }`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Option 1: No Access */}
+              <button
+                type="button"
+                onClick={() => {
+                  onSetLevel('none');
+                  setOpenDropdownId(null);
+                }}
+                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                  isLocked
+                    ? 'bg-rose-950/60 text-rose-300 border border-rose-800/60'
+                    : 'text-slate-300 hover:bg-rose-950/30 hover:text-rose-200'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-sm text-rose-400">lock</span>
+                  <span>No Access</span>
+                </div>
+                {isLocked && (
+                  <span className="material-symbols-outlined text-xs text-rose-400">check</span>
+                )}
+              </button>
+
+              {/* Option 2: View Only */}
+              <button
+                type="button"
+                onClick={() => {
+                  onSetLevel('view');
+                  setOpenDropdownId(null);
+                }}
+                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                  isViewOnly
+                    ? 'bg-purple-950/60 text-purple-300 border border-purple-800/60'
+                    : 'text-slate-300 hover:bg-purple-950/30 hover:text-purple-200'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-sm text-purple-400">visibility</span>
+                  <span>View Only</span>
+                </div>
+                {isViewOnly && (
+                  <span className="material-symbols-outlined text-xs text-purple-400">check</span>
+                )}
+              </button>
+
+              {/* Option 3: View & Edit */}
+              <button
+                type="button"
+                onClick={() => {
+                  onSetLevel('edit');
+                  setOpenDropdownId(null);
+                }}
+                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                  isEdit
+                    ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/60'
+                    : 'text-slate-300 hover:bg-emerald-950/30 hover:text-emerald-200'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-sm text-emerald-400">edit</span>
+                  <span>View &amp; Edit</span>
+                </div>
+                {isEdit && (
+                  <span className="material-symbols-outlined text-xs text-emerald-400">check</span>
+                )}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Bypass Maintenance Quick Toggle Chip */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleBypass();
+          }}
+          className={`flex items-center gap-1 rounded-xl border font-mono font-bold transition-all cursor-pointer ${
+            perm.bypassMaintenance
+              ? 'bg-amber-950/80 border-amber-500 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.3)] hover:bg-amber-900/80'
+              : 'bg-[#10071f] border-[#2b1642] text-slate-500 hover:text-slate-300 hover:border-slate-700'
+          } ${
+            options?.compact
+              ? 'px-2 py-1 text-[10px]'
+              : 'px-2.5 py-1.5 text-[11px]'
+          }`}
+          title={
+            perm.bypassMaintenance
+              ? 'Bypass Active: Can access during maintenance'
+              : 'Click to allow bypassing maintenance mode'
+          }
+        >
+          <span className="material-symbols-outlined text-xs">
+            {perm.bypassMaintenance ? 'verified_user' : 'shield'}
+          </span>
+          <span className={options?.compact ? 'hidden sm:inline' : 'inline'}>Bypass</span>
+        </button>
+      </div>
+    );
+  };
+
   return (
-    <div className="flex-grow min-h-screen bg-transparent p-3 sm:p-6 md:p-8 pb-36 sm:pb-16 text-left text-white select-none">
-      <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8">
+    <div className="flex-grow w-full max-w-full bg-transparent p-3 sm:p-6 md:p-8 pb-12 sm:pb-16 text-left text-white select-none overflow-x-hidden">
+      <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8 w-full min-w-0">
         
         {/* Enclave Header */}
         <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 sm:p-6 bg-[#0e0618] border border-purple-600/50 rounded-2xl sm:rounded-3xl shadow-[0_0_40px_rgba(147,51,234,0.18)]">
@@ -682,7 +971,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
         </header>
 
         {/* Tab Navigation Strip - Smooth Touch Horizontal Scroll */}
-        <div className="flex border-b border-[#231238] gap-1 sm:gap-2 overflow-x-auto no-scrollbar flex-nowrap scroll-smooth pb-1 -mx-2 px-2 sm:mx-0 sm:px-0">
+        <div className="flex border-b border-[#231238] gap-1 sm:gap-2 overflow-x-auto no-scrollbar flex-nowrap scroll-smooth pb-1 w-full max-w-full">
           <button
             onClick={() => setActiveTab('permissions')}
             className={`px-3 sm:px-5 py-2.5 rounded-t-xl text-xs font-black tracking-wider uppercase flex items-center gap-2 transition-all shrink-0 border-b-2 cursor-pointer ${
@@ -805,8 +1094,289 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
               </div>
             </div>
 
-            {/* Matrix Table with horizontal scroll */}
-            <div className="bg-[#0c0517] border border-[#2b1642] rounded-2xl overflow-hidden shadow-lg overflow-x-auto custom-scrollbar">
+            {/* Mobile & Tablet Role-by-Role Card View (Zero Excessive Scrolling) */}
+            <div className="xl:hidden space-y-4">
+              {/* Header with View Mode Switcher */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-[#0e071c] border border-purple-500/25 rounded-2xl shadow-md">
+                <div className="text-xs font-bold text-white flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-300">
+                    <span className="material-symbols-outlined text-base">tune</span>
+                  </div>
+                  <div>
+                    <div>Mobile Access Manager</div>
+                    <div className="text-[10px] text-slate-400 font-normal">Switch tabs to configure without scrolling</div>
+                  </div>
+                </div>
+                {/* View Mode Toggle: By Role vs By Portal */}
+                <div className="inline-flex rounded-xl bg-black/50 p-1 border border-white/10 text-[11px] font-bold font-mono self-start sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => setMobileViewMode('by_role')}
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                      mobileViewMode === 'by_role'
+                        ? 'bg-purple-600 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    By Role
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMobileViewMode('by_portal')}
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                      mobileViewMode === 'by_portal'
+                        ? 'bg-purple-600 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    By Portal
+                  </button>
+                </div>
+              </div>
+
+              {/* Mode A: Configure by Role */}
+              {mobileViewMode === 'by_role' && (
+                <div className="space-y-3">
+                  {/* Sticky Scrollable Role Pills */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 w-full max-w-full">
+                    {[
+                      { id: 'Members', label: 'Members', icon: 'groups' },
+                      { id: 'Faculty', label: 'Faculty', icon: 'school' },
+                      ...allRolesList.map((r) => ({ id: r, label: r, icon: 'shield_person' })),
+                    ].map((roleItem) => (
+                      <button
+                        key={roleItem.id}
+                        type="button"
+                        onClick={() => setSelectedMobileRole(roleItem.id)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+                          selectedMobileRole === roleItem.id
+                            ? 'bg-purple-600 text-white shadow-[0_0_12px_rgba(168,85,247,0.4)] border border-purple-400/50'
+                            : 'bg-[#140b24] border border-[#2b1642] text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-sm">{roleItem.icon}</span>
+                        <span>{roleItem.label}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Active Role Card: Shows ONLY this role's 5 portals in compact horizontal rows */}
+                  {(() => {
+                    const roleId = selectedMobileRole;
+                    const isMembers = roleId === 'Members';
+                    const isFaculty = roleId === 'Faculty';
+                    const title = isMembers ? 'Chapter Members' : isFaculty ? 'Faculty Advisory' : roleId;
+                    const sub = isMembers
+                      ? 'Authenticated Student Tier'
+                      : isFaculty
+                      ? 'Academic Mentors Tier'
+                      : ['Admin', 'Payment Admin', 'Technical'].includes(roleId)
+                      ? 'Core Administrative Role'
+                      : 'Custom Role';
+                    const dotColor = isMembers ? 'bg-cyan-400' : isFaculty ? 'bg-indigo-400' : 'bg-purple-500';
+
+                    return (
+                      <div className="p-4 rounded-2xl bg-[#0e071c] border border-purple-500/30 space-y-3 shadow-lg">
+                        {/* Role Header with Quick Presets */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-white/10 pb-3">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-3 h-3 rounded-full ${dotColor} shrink-0`} />
+                            <div>
+                              <h4 className="font-black text-white text-sm">{title}</h4>
+                              <span className="text-[10px] text-slate-400 font-mono">{sub}</span>
+                            </div>
+                          </div>
+
+                          {/* 1-Tap Role Presets */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleApplyRolePreset(isMembers ? 'members' : isFaculty ? 'faculty' : roleId, 'view_all')
+                              }
+                              className="px-2 py-1 rounded-lg text-[10px] font-mono font-bold bg-purple-900/40 border border-purple-500/30 text-purple-300 hover:bg-purple-900/80 cursor-pointer transition-colors"
+                              title="Grant View Only on all 5 portals"
+                            >
+                              View All
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleApplyRolePreset(isMembers ? 'members' : isFaculty ? 'faculty' : roleId, 'edit_all')
+                              }
+                              className="px-2 py-1 rounded-lg text-[10px] font-mono font-bold bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-950/80 cursor-pointer transition-colors"
+                              title="Grant Full Edit on all 5 portals"
+                            >
+                              Full All
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleApplyRolePreset(isMembers ? 'members' : isFaculty ? 'faculty' : roleId, 'lock_all')
+                              }
+                              className="px-2 py-1 rounded-lg text-[10px] font-mono font-bold bg-black/40 border border-white/10 text-slate-400 hover:text-rose-300 hover:border-rose-500/40 cursor-pointer transition-colors"
+                              title="Lock all 5 portals for this role"
+                            >
+                              Lock All
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* 5 Compact Portal Rows (Zero vertical scrolling needed!) */}
+                        <div className="space-y-2">
+                          {ALL_PAGE_IDS.map((p) => {
+                            const perm: PagePermission = isMembers
+                              ? permissions.tiers.members?.[p.id] || { canView: false, canEdit: false, bypassMaintenance: false }
+                              : isFaculty
+                              ? permissions.tiers.faculty?.[p.id] || { canView: false, canEdit: false, bypassMaintenance: false }
+                              : permissions.roles[roleId]?.[p.id] || { canView: false, canEdit: false, bypassMaintenance: false };
+
+                            const setLevel = (level: 'none' | 'view' | 'edit') => {
+                              if (isMembers) handleSetTierAccessLevel('members', p.id, level);
+                              else if (isFaculty) handleSetTierAccessLevel('faculty', p.id, level);
+                              else handleSetRoleAccessLevel(roleId, p.id, level);
+                            };
+
+                            const toggleBypass = () => {
+                              if (isMembers) handleToggleTierPermission('members', p.id, 'bypassMaintenance');
+                              else if (isFaculty) handleToggleTierPermission('faculty', p.id, 'bypassMaintenance');
+                              else handleToggleRolePermission(roleId, p.id, 'bypassMaintenance');
+                            };
+
+                            const cellId = `mobile_${roleId}_${p.id}`;
+
+                            return (
+                              <div
+                                key={p.id}
+                                className="p-2.5 sm:p-3 rounded-xl bg-[#140b24] border border-[#2b1642] flex items-center justify-between gap-2 hover:border-purple-500/30 transition-all"
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <span className="material-symbols-outlined text-purple-400 text-base shrink-0">{p.icon}</span>
+                                  <div className="min-w-0">
+                                    <span className="font-extrabold text-white text-xs truncate block">{p.label}</span>
+                                    <span className="text-[9px] font-mono text-slate-400 block truncate">
+                                      {!perm.canView ? 'Locked' : perm.canEdit ? 'Full Write Authority' : 'Member Read-Only'}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="shrink-0">
+                                  {renderPermissionControl(cellId, perm, setLevel, toggleBypass, { compact: true })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Mode B: Configure by Portal */}
+              {mobileViewMode === 'by_portal' && (
+                <div className="space-y-3">
+                  {/* Portal Selection Tabs */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 w-full max-w-full">
+                    {ALL_PAGE_IDS.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => setSelectedMobilePortal(p.id)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+                          selectedMobilePortal === p.id
+                            ? 'bg-purple-600 text-white shadow-[0_0_12px_rgba(168,85,247,0.4)] border border-purple-400/50'
+                            : 'bg-[#140b24] border border-[#2b1642] text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-sm">{p.icon}</span>
+                        <span>{p.label}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Active Portal Card: Shows all roles for that portal in compact rows */}
+                  {(() => {
+                    const portal = ALL_PAGE_IDS.find((p) => p.id === selectedMobilePortal) || ALL_PAGE_IDS[0];
+                    const roleItems = [
+                      { id: 'Members', label: 'Chapter Members', tier: 'members' as const, sub: 'Authenticated Student Tier', dot: 'bg-cyan-400' },
+                      { id: 'Faculty', label: 'Faculty Advisory', tier: 'faculty' as const, sub: 'Academic Mentors Tier', dot: 'bg-indigo-400' },
+                      ...allRolesList.map((r) => ({
+                        id: r,
+                        label: r,
+                        tier: null,
+                        sub: ['Admin', 'Payment Admin', 'Technical'].includes(r) ? 'Core Administrative Role' : 'Custom Role',
+                        dot: 'bg-purple-500',
+                      })),
+                    ];
+
+                    return (
+                      <div className="p-4 rounded-2xl bg-[#0e071c] border border-purple-500/30 space-y-3 shadow-lg">
+                        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                          <div className="flex items-center gap-2.5">
+                            <span className="material-symbols-outlined text-purple-400 text-xl">{portal.icon}</span>
+                            <div>
+                              <h4 className="font-black text-white text-sm">{portal.label}</h4>
+                              <span className="text-[10px] text-slate-400 font-mono">Role Access Governance</span>
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-purple-950 text-purple-300 border border-purple-600/40">
+                            {roleItems.length} Roles
+                          </span>
+                        </div>
+
+                        <div className="space-y-2">
+                          {roleItems.map((r) => {
+                            const perm: PagePermission =
+                              r.tier === 'members'
+                                ? permissions.tiers.members?.[portal.id] || { canView: false, canEdit: false, bypassMaintenance: false }
+                                : r.tier === 'faculty'
+                                ? permissions.tiers.faculty?.[portal.id] || { canView: false, canEdit: false, bypassMaintenance: false }
+                                : permissions.roles[r.id]?.[portal.id] || { canView: false, canEdit: false, bypassMaintenance: false };
+
+                            const setLevel = (level: 'none' | 'view' | 'edit') => {
+                              if (r.tier === 'members') handleSetTierAccessLevel('members', portal.id, level);
+                              else if (r.tier === 'faculty') handleSetTierAccessLevel('faculty', portal.id, level);
+                              else handleSetRoleAccessLevel(r.id, portal.id, level);
+                            };
+
+                            const toggleBypass = () => {
+                              if (r.tier === 'members') handleToggleTierPermission('members', portal.id, 'bypassMaintenance');
+                              else if (r.tier === 'faculty') handleToggleTierPermission('faculty', portal.id, 'bypassMaintenance');
+                              else handleToggleRolePermission(r.id, portal.id, 'bypassMaintenance');
+                            };
+
+                            const cellId = `portal_${portal.id}_${r.id}`;
+
+                            return (
+                              <div
+                                key={r.id}
+                                className="p-2.5 sm:p-3 rounded-xl bg-[#140b24] border border-[#2b1642] flex items-center justify-between gap-2 hover:border-purple-500/30 transition-all"
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <span className={`w-2.5 h-2.5 rounded-full ${r.dot} shrink-0`} />
+                                  <div className="min-w-0">
+                                    <span className="font-extrabold text-white text-xs truncate block">{r.label}</span>
+                                    <span className="text-[9px] font-mono text-slate-400 block truncate">{r.sub}</span>
+                                  </div>
+                                </div>
+
+                                <div className="shrink-0">
+                                  {renderPermissionControl(cellId, perm, setLevel, toggleBypass, { compact: true })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+
+            {/* Matrix Table (Desktop only, hidden on mobile & tablet) */}
+            <div className="hidden xl:block bg-[#0c0517] border border-[#2b1642] rounded-2xl overflow-hidden shadow-lg overflow-x-auto custom-scrollbar">
               <table className="w-full text-left text-xs min-w-[880px]">
                 <thead className="bg-[#140b24] border-b border-[#2b1642] text-slate-300 font-bold uppercase tracking-wider text-[10px]">
                   <tr>
@@ -815,7 +1385,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                       <th
                         key={p.id}
                         className="p-3 text-center"
-                        title={`Configure access for ${p.label}. Hover over checkboxes below to customize View, Edit/Admin Desk, and Maintenance Bypass.`}
+                        title={`Configure access for ${p.label}`}
                       >
                         <div className="flex flex-col items-center gap-0.5">
                           <span className="material-symbols-outlined text-sm text-purple-400">{p.icon}</span>
@@ -840,44 +1410,13 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                       const perm = permissions.tiers.members?.[p.id] || { canView: false, canEdit: false, bypassMaintenance: false };
                       return (
                         <td key={p.id} className="p-3 text-center">
-                          <div className="flex flex-col items-center gap-1.5">
-                            <label
-                              className="flex items-center gap-1 cursor-pointer text-[10px]"
-                              title={`VIEW: When checked, Chapter Members can view the ${p.label} portal.`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={perm.canView}
-                                onChange={() => handleToggleTierPermission('members', p.id, 'canView')}
-                                className="accent-purple-600 rounded cursor-pointer"
-                              />
-                              <span className={perm.canView ? 'text-white font-bold' : 'text-slate-500'}>View</span>
-                            </label>
-                            <label
-                              className="flex items-center gap-1 cursor-pointer text-[10px]"
-                              title={`EDIT (ADMIN DESK): When checked, Chapter Members get Admin Desk access on ${p.label}. Turn OFF to restrict to regular member submissions.`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={perm.canEdit}
-                                onChange={() => handleToggleTierPermission('members', p.id, 'canEdit')}
-                                className="accent-purple-600 rounded cursor-pointer"
-                              />
-                              <span className={perm.canEdit ? 'text-emerald-400 font-bold' : 'text-slate-500'}>Edit</span>
-                            </label>
-                            <label
-                              className="flex items-center gap-1 cursor-pointer text-[10px]"
-                              title={`BYPASS: When checked, Chapter Members can access ${p.label} during maintenance.`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={perm.bypassMaintenance}
-                                onChange={() => handleToggleTierPermission('members', p.id, 'bypassMaintenance')}
-                                className="accent-amber-500 rounded cursor-pointer"
-                              />
-                              <span className={perm.bypassMaintenance ? 'text-amber-300 font-bold' : 'text-slate-600'}>Bypass</span>
-                            </label>
-                          </div>
+                          {renderPermissionControl(
+                            `desktop_members_${p.id}`,
+                            perm,
+                            (level) => handleSetTierAccessLevel('members', p.id, level),
+                            () => handleToggleTierPermission('members', p.id, 'bypassMaintenance'),
+                            { openUpward: false }
+                          )}
                         </td>
                       );
                     })}
@@ -896,108 +1435,51 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                       const perm = permissions.tiers.faculty?.[p.id] || { canView: false, canEdit: false, bypassMaintenance: false };
                       return (
                         <td key={p.id} className="p-3 text-center">
-                          <div className="flex flex-col items-center gap-1.5">
-                            <label
-                              className="flex items-center gap-1 cursor-pointer text-[10px]"
-                              title={`VIEW: When checked, Faculty can view the ${p.label} portal.`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={perm.canView}
-                                onChange={() => handleToggleTierPermission('faculty', p.id, 'canView')}
-                                className="accent-indigo-600 rounded cursor-pointer"
-                              />
-                              <span className={perm.canView ? 'text-white font-bold' : 'text-slate-500'}>View</span>
-                            </label>
-                            <label
-                              className="flex items-center gap-1 cursor-pointer text-[10px]"
-                              title={`EDIT (ADMIN DESK): When checked, Faculty get Admin Desk & management access on ${p.label}.`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={perm.canEdit}
-                                onChange={() => handleToggleTierPermission('faculty', p.id, 'canEdit')}
-                                className="accent-indigo-600 rounded cursor-pointer"
-                              />
-                              <span className={perm.canEdit ? 'text-emerald-400 font-bold' : 'text-slate-500'}>Edit</span>
-                            </label>
-                            <label
-                              className="flex items-center gap-1 cursor-pointer text-[10px]"
-                              title={`BYPASS: When checked, Faculty can access ${p.label} during maintenance.`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={perm.bypassMaintenance}
-                                onChange={() => handleToggleTierPermission('faculty', p.id, 'bypassMaintenance')}
-                                className="accent-amber-500 rounded cursor-pointer"
-                              />
-                              <span className={perm.bypassMaintenance ? 'text-amber-300 font-bold' : 'text-slate-600'}>Bypass</span>
-                            </label>
-                          </div>
+                          {renderPermissionControl(
+                            `desktop_faculty_${p.id}`,
+                            perm,
+                            (level) => handleSetTierAccessLevel('faculty', p.id, level),
+                            () => handleToggleTierPermission('faculty', p.id, 'bypassMaintenance'),
+                            { openUpward: false }
+                          )}
                         </td>
                       );
                     })}
                   </tr>
 
                   {/* Rows: All Roles (System + Custom) */}
-                  {allRolesList.map((roleName) => (
-                    <tr key={roleName} className="hover:bg-[#150a29] transition-colors">
-                      <td className="p-4">
-                        <div className="font-black text-purple-300 flex items-center gap-2">
-                          <span className="w-2.5 h-2.5 rounded-full bg-purple-500" />
-                          <span>{roleName}</span>
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-mono">
-                          {['Admin', 'Payment Admin', 'Technical'].includes(roleName) ? 'Core Administrative Role' : 'Custom Role'}
-                        </div>
-                      </td>
-                      {ALL_PAGE_IDS.map((p) => {
-                        const perm = permissions.roles[roleName]?.[p.id] || { canView: false, canEdit: false, bypassMaintenance: false };
-                        return (
-                          <td key={p.id} className="p-3 text-center">
-                            <div className="flex flex-col items-center gap-1.5">
-                              <label
-                                className="flex items-center gap-1 cursor-pointer text-[10px]"
-                                title={`VIEW: When checked, ${roleName} can view and access the ${p.label} portal.`}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={perm.canView}
-                                  onChange={() => handleToggleRolePermission(roleName, p.id, 'canView')}
-                                  className="accent-purple-600 rounded cursor-pointer"
-                                />
-                                <span className={perm.canView ? 'text-white font-bold' : 'text-slate-500'}>View</span>
-                              </label>
-                              <label
-                                className="flex items-center gap-1 cursor-pointer text-[10px]"
-                                title={`EDIT (ADMIN DESK): When checked, ${roleName} gets Admin Desk & write authority on ${p.label}. When unchecked, Admin Desk is hidden and locked.`}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={perm.canEdit}
-                                  onChange={() => handleToggleRolePermission(roleName, p.id, 'canEdit')}
-                                  className="accent-purple-600 rounded cursor-pointer"
-                                />
-                                <span className={perm.canEdit ? 'text-emerald-400 font-bold' : 'text-slate-500'}>Edit</span>
-                              </label>
-                              <label
-                                className="flex items-center gap-1 cursor-pointer text-[10px]"
-                                title={`BYPASS: When checked, ${roleName} can access ${p.label} during maintenance mode.`}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={perm.bypassMaintenance}
-                                  onChange={() => handleToggleRolePermission(roleName, p.id, 'bypassMaintenance')}
-                                  className="accent-amber-500 rounded cursor-pointer"
-                                />
-                                <span className={perm.bypassMaintenance ? 'text-amber-300 font-bold' : 'text-slate-600'}>Bypass</span>
-                              </label>
-                            </div>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
+                  {allRolesList.map((roleName, rIdx) => {
+                    const isNearBottom = rIdx >= allRolesList.length - 2;
+                    return (
+                      <tr key={roleName} className="hover:bg-[#150a29] transition-colors">
+                        <td className="p-4">
+                          <div className="font-black text-purple-300 flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-purple-500" />
+                            <span>{roleName}</span>
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono">
+                            {['Admin', 'Payment Admin', 'Technical'].includes(roleName)
+                              ? 'Core Administrative Role'
+                              : 'Custom Role'}
+                          </div>
+                        </td>
+                        {ALL_PAGE_IDS.map((p) => {
+                          const perm = permissions.roles[roleName]?.[p.id] || { canView: false, canEdit: false, bypassMaintenance: false };
+                          return (
+                            <td key={p.id} className="p-3 text-center">
+                              {renderPermissionControl(
+                                `desktop_${roleName}_${p.id}`,
+                                perm,
+                                (level) => handleSetRoleAccessLevel(roleName, p.id, level),
+                                () => handleToggleRolePermission(roleName, p.id, 'bypassMaintenance'),
+                                { openUpward: isNearBottom }
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1213,8 +1695,107 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
               </form>
             )}
 
-            {/* Table */}
-            <div className="border border-[#2b1442] rounded-2xl overflow-hidden bg-[#0c0517] overflow-x-auto custom-scrollbar shadow-md">
+            {/* Mobile Cards (Zero Horizontal Scroll) */}
+            <div className="md:hidden space-y-3">
+              {loadingAdmins ? (
+                <div className="p-8 text-center text-slate-400 bg-[#0c0517] border border-[#2b1442] rounded-2xl">
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="w-6 h-6 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
+                    <span className="text-xs">Loading Firestore admins...</span>
+                  </div>
+                </div>
+              ) : filteredAdmins.length === 0 ? (
+                <div className="p-6 text-center text-slate-400 bg-[#0c0517] border border-[#2b1442] rounded-2xl text-xs">
+                  No admin records match the search.
+                </div>
+              ) : (
+                filteredAdmins.map((adm) => {
+                  const isCurrent = adm.email.toLowerCase() === currentUserEmail.toLowerCase();
+                  return (
+                    <div key={adm.id} className="p-4 rounded-2xl bg-[#0c0517] border border-[#2b1442] space-y-3 shadow-md w-full min-w-0">
+                      {/* Top: Name, Tier Badge */}
+                      <div className="flex items-start justify-between gap-2 min-w-0">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-8 h-8 rounded-xl bg-purple-950 border border-purple-600 flex items-center justify-center text-purple-300 font-black text-xs shrink-0">
+                            {adm.name ? adm.name.charAt(0).toUpperCase() : 'A'}
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="font-bold text-white text-xs sm:text-sm truncate">{adm.name || 'Admin Member'}</h4>
+                            <div className="text-[11px] text-purple-400 font-mono truncate">{adm.email}</div>
+                          </div>
+                        </div>
+                        <div className="shrink-0">
+                          {adm.isSuperAdmin ? (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-900/80 text-purple-200 border border-purple-600">
+                              SUPER ADMIN
+                            </span>
+                          ) : (
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              adm.role === 'Technical'
+                                ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-600/50'
+                                : adm.role === 'Payment Admin'
+                                ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-600/50'
+                                : 'bg-purple-950/80 text-purple-300 border border-purple-600/50'
+                            }`}>
+                              {adm.role ? adm.role.toUpperCase() : 'ADMIN'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Role Selector */}
+                      <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-[#140b24] border border-[#261238] text-xs">
+                        <span className="text-[10px] text-slate-400 uppercase font-mono font-bold shrink-0">ASSIGNED ROLE:</span>
+                        {adm.isSuperAdmin ? (
+                          <span className="text-xs font-bold text-purple-300">Super Administrator</span>
+                        ) : (
+                          <select
+                            value={adm.role || 'Admin'}
+                            onChange={(e) => handleUpdateAdminRole(adm.email, e.target.value)}
+                            className="px-2.5 py-1 bg-[#160b26] border border-purple-900/60 rounded text-xs font-semibold text-white focus:outline-none focus:border-purple-500 cursor-pointer min-w-0 flex-1 text-right"
+                            title="Change role in Firestore"
+                          >
+                            {allRolesList.map((r) => (
+                              <option key={r} value={r}>
+                                {r}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+
+                      {/* Footer: Added By & Action */}
+                      <div className="flex items-center justify-between gap-2 pt-1 border-t border-purple-500/10">
+                        <span className="text-[10px] font-mono text-slate-400">
+                          Added by: <strong className="text-slate-300">{adm.addedBy || 'System Env'}</strong>
+                        </span>
+                        {isCurrent ? (
+                          <span className="text-[10px] font-semibold text-slate-500 italic">Current Session</span>
+                        ) : (
+                          <button
+                            onClick={() =>
+                              setDeleteConfirm({
+                                type: 'admin',
+                                id: adm.email,
+                                label: `Admin: ${adm.name} (${adm.email})`,
+                              })
+                            }
+                            className="px-3 py-1 bg-rose-950/50 hover:bg-rose-900 text-rose-300 text-xs font-bold rounded-lg border border-rose-800/50 transition-colors cursor-pointer flex items-center gap-1"
+                            title="Drop Admin Privileges"
+                          >
+                            <span className="material-symbols-outlined text-xs">person_remove</span>
+                            <span>Drop Admin</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Desktop Table (hidden on mobile) */}
+            <div className="hidden md:block border border-[#2b1442] rounded-2xl overflow-hidden bg-[#0c0517] overflow-x-auto custom-scrollbar shadow-md">
               <table className="w-full text-left text-xs min-w-[640px]">
                 <thead className="bg-[#140b24] border-b border-[#2b1442] text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                   <tr>
@@ -1371,9 +1952,9 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                     key={dom}
                     className="flex items-center justify-between p-3 rounded-xl bg-[#140b24] border border-[#2b1442] text-xs font-bold text-white hover:border-purple-500/50 transition-colors"
                   >
-                    <div className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-purple-400 text-base">folder_special</span>
-                      <span>{dom}</span>
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="material-symbols-outlined text-purple-400 text-base shrink-0">folder_special</span>
+                      <span className="truncate">{dom}</span>
                     </div>
                     <button
                       onClick={() =>
@@ -1433,9 +2014,9 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                     key={pos}
                     className="flex items-center justify-between p-3 rounded-xl bg-[#140b24] border border-[#2b1442] text-xs font-bold text-white hover:border-purple-500/50 transition-colors"
                   >
-                    <div className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-indigo-400 text-base">workspace_premium</span>
-                      <span>{pos}</span>
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="material-symbols-outlined text-indigo-400 text-base shrink-0">workspace_premium</span>
+                      <span className="truncate">{pos}</span>
                     </div>
                     <button
                       onClick={() =>
@@ -1584,8 +2165,82 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
             </form>
           )}
 
-          {/* Faculty Table */}
-          <div className="border border-[#2b1442] rounded-2xl overflow-hidden bg-[#0c0517] overflow-x-auto custom-scrollbar shadow-md">
+            {/* Mobile Cards (Zero Horizontal Scroll) */}
+            <div className="md:hidden space-y-3">
+              {loadingFaculty ? (
+                <div className="p-8 text-center text-slate-400 bg-[#0c0517] border border-[#2b1442] rounded-2xl">
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="w-6 h-6 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
+                    <span className="text-xs">Loading Faculty records...</span>
+                  </div>
+                </div>
+              ) : filteredFaculty.length === 0 ? (
+                <div className="p-6 text-center text-slate-400 bg-[#0c0517] border border-[#2b1442] rounded-2xl text-xs">
+                  No faculty records match the search.
+                </div>
+              ) : (
+                filteredFaculty.map((f) => (
+                  <div key={f.email} className="p-4 rounded-2xl bg-[#0c0517] border border-[#2b1442] space-y-3 shadow-md w-full min-w-0">
+                    {/* Top: Name, Designation */}
+                    <div className="flex items-start justify-between gap-2 min-w-0">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-xl bg-indigo-950 border border-indigo-600 flex items-center justify-center text-indigo-300 shrink-0">
+                          <span className="material-symbols-outlined text-base">school</span>
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="font-bold text-white text-xs sm:text-sm truncate">{f.name}</h4>
+                          <div className="text-[11px] text-indigo-400 font-mono truncate">{f.email}</div>
+                        </div>
+                      </div>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-950/80 text-indigo-300 border border-indigo-600/50 shrink-0">
+                        {f.designation || 'Faculty Advisor'}
+                      </span>
+                    </div>
+
+                    {/* Department & Phone */}
+                    <div className="grid grid-cols-2 gap-2 text-[11px] font-mono bg-[#140b24] border border-[#261238] p-2.5 rounded-xl">
+                      <div>
+                        <span className="text-slate-400 block text-[9px] uppercase font-bold">DEPT:</span>
+                        <span className="text-slate-200 truncate block">{f.department || '—'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[9px] uppercase font-bold">PHONE:</span>
+                        <span className="text-slate-200 truncate block">{f.phone || '—'}</span>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center justify-end gap-2 pt-1 border-t border-purple-500/10">
+                      <button
+                        onClick={() => openFacultyForm(f)}
+                        className="px-3 py-1 bg-indigo-950/60 hover:bg-indigo-900 text-indigo-300 text-xs font-bold rounded-lg border border-indigo-800/50 transition-colors cursor-pointer flex items-center gap-1"
+                        title="Edit Faculty Record"
+                      >
+                        <span className="material-symbols-outlined text-xs">edit</span>
+                        <span>Edit</span>
+                      </button>
+                      <button
+                        onClick={() =>
+                          setDeleteConfirm({
+                            type: 'faculty',
+                            id: f.email,
+                            label: `Faculty: ${f.name} (${f.email})`,
+                          })
+                        }
+                        className="px-3 py-1 bg-rose-950/50 hover:bg-rose-900 text-rose-300 text-xs font-bold rounded-lg border border-rose-800/50 transition-colors cursor-pointer flex items-center gap-1"
+                        title="Delete Faculty Record"
+                      >
+                        <span className="material-symbols-outlined text-xs">delete</span>
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Desktop Table (hidden on mobile) */}
+            <div className="hidden md:block border border-[#2b1442] rounded-2xl overflow-hidden bg-[#0c0517] overflow-x-auto custom-scrollbar shadow-md">
             <table className="w-full text-left text-xs min-w-[650px]">
               <thead className="bg-[#140b24] border-b border-[#2b1442] text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                 <tr>

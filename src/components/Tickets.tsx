@@ -98,7 +98,7 @@ const Tickets: React.FC<TicketsProps> = ({ onRedirect }) => {
   };
 
   return (
-    <main className="flex-grow pt-8 pb-12 px-4 md:px-8 min-h-screen bg-mesh text-left">
+    <div className="flex-grow w-full pt-6 pb-12 px-3 sm:px-6 md:px-8 bg-mesh text-left">
       <div className="max-w-3xl mx-auto space-y-8">
         {/* Breadcrumbs & Intro */}
         <div className="stagger-in">
@@ -259,7 +259,7 @@ const Tickets: React.FC<TicketsProps> = ({ onRedirect }) => {
           </form>
         </div>
       </div>
-    </main>
+    </div>
   );
 };
 

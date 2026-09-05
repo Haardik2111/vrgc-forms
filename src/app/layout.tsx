@@ -1,34 +1,38 @@
 import type { Metadata } from "next";
-import { Orbitron, Outfit, JetBrains_Mono, Rajdhani } from 'next/font/google';
+import { Bebas_Neue, Space_Grotesk, Inter, JetBrains_Mono } from 'next/font/google';
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
 import GlobalBackground from "@/components/GlobalBackground";
 
-const orbitron = Orbitron({
+const bebasNeue = Bebas_Neue({
   subsets: ['latin'],
-  weight: ['400', '600', '800', '900'],
-  variable: '--font-orbitron',
+  weight: '400',
+  variable: '--font-display',
+  fallback: ['Impact', 'Space Grotesk', 'sans-serif'],
   display: 'swap',
 });
 
-const outfit = Outfit({
+const spaceGrotesk = Space_Grotesk({
   subsets: ['latin'],
-  weight: ['300', '400', '600', '700', '800'],
-  variable: '--font-outfit',
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-head',
+  fallback: ['-apple-system', 'sans-serif'],
+  display: 'swap',
+});
+
+const inter = Inter({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-body',
+  fallback: ['-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
   display: 'swap',
 });
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
-  weight: ['400', '700'],
-  variable: '--font-jetbrains',
-  display: 'swap',
-});
-
-const rajdhani = Rajdhani({
-  subsets: ['latin'],
-  weight: ['500', '600', '700'],
-  variable: '--font-rajdhani',
+  weight: ['400', '500', '700'],
+  variable: '--font-mono',
+  fallback: ['monospace'],
   display: 'swap',
 });
 
@@ -48,7 +52,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`dark ${orbitron.variable} ${outfit.variable} ${jetbrainsMono.variable} ${rajdhani.variable}`} suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`dark ${bebasNeue.variable} ${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <link rel="icon" type="image/svg+xml" href="/icon.svg" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -61,9 +69,9 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap"
         />
       </head>
-      <body className="bg-[#03010A] text-[#e2e8f0] antialiased min-h-screen selection:bg-purple-500 selection:text-white relative">
+      <body className="bg-[#03010A] text-[#e2e8f0] antialiased min-h-screen selection:bg-purple-500 selection:text-white relative overflow-x-clip max-w-full w-full">
         <GlobalBackground />
-        <div className="relative z-10 min-h-screen flex flex-col">
+        <div className="relative z-10 min-h-screen flex flex-col w-full max-w-full overflow-x-clip">
           <AuthProvider>
             {children}
           </AuthProvider>

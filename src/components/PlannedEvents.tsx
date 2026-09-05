@@ -272,7 +272,7 @@ const PlannedEvents: React.FC<PlannedEventsProps> = ({
   };
 
   return (
-    <div className="flex-grow min-h-screen bg-mesh p-4 md:p-8 text-left text-white select-none">
+    <div className="flex-grow w-full bg-mesh p-3 sm:p-6 md:p-8 text-left text-white select-none pb-12 sm:pb-16">
       <div className="max-w-6xl mx-auto space-y-8">
         {/* Page Header */}
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-purple-500/20">

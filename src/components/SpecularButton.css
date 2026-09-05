@@ -1,4 +1,4 @@
-.specular-button {
+:where(.specular-button) {
   --sb-radius: 18px;
   --sb-tint: #ffffff;
   --sb-tint-opacity: 0;
@@ -48,22 +48,22 @@
   transform: none;
 }
 
-.specular-button--xs {
+:where(.specular-button--xs) {
   font-size: 0.75rem;
   padding: 6px 14px;
 }
 
-.specular-button--sm {
+:where(.specular-button--sm) {
   font-size: 0.825rem;
   padding: 8px 18px;
 }
 
-.specular-button--md {
+:where(.specular-button--md) {
   font-size: 0.925rem;
   padding: 12px 24px;
 }
 
-.specular-button--lg {
+:where(.specular-button--lg) {
   font-size: 1.05rem;
   padding: 15px 32px;
 }

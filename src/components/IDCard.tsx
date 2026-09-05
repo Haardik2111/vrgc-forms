@@ -920,7 +920,7 @@ const IDCard: React.FC<IDCardProps> = ({
 
   if (authLoading) {
     return (
-      <main className="flex-grow min-h-[70vh] flex items-center justify-center">
+      <div className="flex-grow min-h-[calc(100dvh-132px)] md:min-h-[70vh] flex items-center justify-center">
         <div className="text-center space-y-4">
           <span className="material-symbols-outlined text-[64px] text-primary animate-spin">
             sync
@@ -929,13 +929,13 @@ const IDCard: React.FC<IDCardProps> = ({
             VALIDATING REGISTERED IDENTITY...
           </p>
         </div>
-      </main>
+      </div>
     );
   }
 
   if (!currentUser || !isAuthorized) {
     return (
-      <main className="flex-grow min-h-screen flex items-center justify-center p-6 relative overflow-hidden text-left bg-mesh">
+      <div className="flex-grow min-h-[calc(100dvh-132px)] md:min-h-[calc(100vh-76px)] flex items-center justify-center p-4 sm:p-6 relative overflow-hidden text-left bg-mesh">
         <div className="glass-panel p-10 md:p-12 rounded-2xl max-w-lg w-full text-center space-y-6 border border-purple-500/20 relative z-10 shadow-[0_0_50px_rgba(168,85,247,0.15)] bg-black/70 backdrop-blur-xl">
           <div className="space-y-3">
             <span className="font-label-caps text-xs text-purple-400 tracking-widest block font-bold">IDENTITY CONFIRMATION</span>
@@ -975,12 +975,12 @@ const IDCard: React.FC<IDCardProps> = ({
             </button>
           </div>
         </div>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="flex-grow min-h-screen relative overflow-hidden text-left bg-mesh">
+    <div className="flex-grow w-full relative overflow-hidden text-left bg-mesh pb-12 sm:pb-16">
       <section className="max-w-6xl mx-auto px-4 py-12 md:py-20">
 
         {/* Header Section */}
@@ -3136,7 +3136,7 @@ const IDCard: React.FC<IDCardProps> = ({
         </div>
       )}
 
-    </main>
+    </div>
   );
 };
 

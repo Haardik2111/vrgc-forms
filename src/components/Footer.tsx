@@ -2,22 +2,17 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { Code2, Headset, Sparkles, Info } from 'lucide-react';
-import { SupportModal } from './SupportModal';
+import { Code2, Sparkles, Mail, ShieldCheck } from 'lucide-react';
 import { AboutModal } from './AboutModal';
+import { useAuth } from '@/lib/auth-context';
 
 const Footer: React.FC = () => {
-  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isAboutOpen, setIsAboutOpen] = useState<boolean>(false);
+  const { isSuperAdmin, isAdmin, userRole } = useAuth();
+  const canResolveTickets = isSuperAdmin || isAdmin || userRole === 'Technical';
 
   return (
-    <footer className="w-full sticky bottom-[60px] md:bottom-0 z-40 bg-[#070212]/80 backdrop-blur-xl border-t border-purple-500/20 text-[#cbd5e1] shadow-[0_-10px_40px_rgba(107,33,168,0.1)] transition-all duration-300">
-
-      {/* Support Desk Modal */}
-      <SupportModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-      />
+    <footer className="w-full relative md:sticky md:bottom-0 z-40 bg-[#070212]/80 backdrop-blur-xl border-t border-purple-500/20 text-[#cbd5e1] shadow-[0_-10px_40px_rgba(107,33,168,0.1)] pb-16 md:pb-0 transition-all duration-300">
 
       {/* VRGC Tech Team About Modal */}
       <AboutModal
@@ -50,14 +45,27 @@ const Footer: React.FC = () => {
 
         {/* Right: Actions */}
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="px-3 py-1.5 rounded-lg bg-purple-600/20 hover:bg-purple-600/40 text-purple-200 border border-purple-500/40 hover:border-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.2)] transition-all flex items-center gap-1.5 text-[10px] sm:text-[11px] font-bold shrink-0"
-            title="Open Technical Support Desk"
+          <Link
+            href="/contact"
+            className="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 transition-all flex items-center gap-1.5 text-[10px] sm:text-[11px] font-bold shrink-0"
+            title="Open Contact Us Page"
           >
-            <Headset className="w-3.5 h-3.5 text-purple-300 animate-pulse" />
-            <span>Contact Support</span>
-          </button>
+            <Mail className="w-3.5 h-3.5 text-purple-400" />
+            <span className="hidden sm:inline">Contact Us</span>
+            <span className="sm:hidden">Contact</span>
+          </Link>
+
+          {/* Only visible to Admin, Super Admin, and Technical Team */}
+          {canResolveTickets && (
+            <Link
+              href="/contact?tab=resolve"
+              className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-amber-950/60 hover:bg-amber-900/80 text-amber-200 border border-amber-500/50 hover:border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.25)] transition-all flex items-center gap-1.5 text-[10px] sm:text-[11px] font-bold shrink-0 cursor-pointer"
+              title="Open Support Ticket Resolution Enclave"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+              <span>Resolve Tickets</span>
+            </Link>
+          )}
         </div>
 
       </div>

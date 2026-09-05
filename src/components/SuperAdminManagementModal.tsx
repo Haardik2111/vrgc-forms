@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { db } from '@/lib/firebase';
 import {
   collection,
@@ -41,7 +42,12 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
   onClose,
   currentUserEmail,
 }) => {
+  const [mounted, setMounted] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'admins' | 'faculty'>('admins');
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Admins state
   const [admins, setAdmins] = useState<AdminRecord[]>([]);
@@ -403,9 +409,11 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
       (f.facultyId && f.facultyId.toLowerCase().includes(facultySearch.toLowerCase()))
   );
 
-  return (
+  if (!isOpen || !mounted || typeof document === 'undefined') return null;
+
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-black/85 backdrop-blur-md select-none">
-      <div className="w-full max-w-5xl max-h-[88vh] flex flex-col bg-[#0f0f0f] border border-purple-600/40 rounded-2xl shadow-[0_0_50px_rgba(147,51,234,0.2)] overflow-hidden text-white text-left mx-1 sm:mx-0">
+      <div className="w-full max-w-5xl max-w-[calc(100vw-1rem)] max-h-[88vh] flex flex-col bg-[#0f0f0f] border border-purple-600/40 rounded-2xl shadow-[0_0_50px_rgba(147,51,234,0.2)] overflow-hidden text-white text-left mx-1 sm:mx-0">
         {/* Header */}
         <div className="p-4 sm:p-6 bg-[#161616] border-b border-[#262626] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
@@ -459,7 +467,7 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-6 bg-[#0a0a0a] space-y-6">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-6 bg-[#0a0a0a] space-y-6">
           {/* TAB 1: ADMINS */}
           {activeTab === 'admins' && (
             <div className="space-y-4">
@@ -568,8 +576,95 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
                 </form>
               )}
 
-              {/* Admins Table with mobile scroll */}
-              <div className="border border-[#222222] rounded-xl overflow-hidden bg-[#111111] overflow-x-auto custom-scrollbar">
+              {/* Mobile Cards (Zero Horizontal Scroll) */}
+              <div className="md:hidden space-y-3">
+                {loadingAdmins ? (
+                  <div className="p-8 text-center text-slate-400 bg-[#111111] border border-[#222222] rounded-xl">
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-6 h-6 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
+                      <span className="text-xs">Loading Firestore admins...</span>
+                    </div>
+                  </div>
+                ) : filteredAdmins.length === 0 ? (
+                  <div className="p-6 text-center text-slate-400 bg-[#111111] border border-[#222222] rounded-xl text-xs">
+                    No admin records found in database.
+                  </div>
+                ) : (
+                  filteredAdmins.map((adm) => {
+                    const isCurrent = adm.email.toLowerCase() === currentUserEmail.toLowerCase();
+                    return (
+                      <div key={adm.id} className="p-4 rounded-xl bg-[#111111] border border-[#222222] space-y-3 shadow-md w-full min-w-0">
+                        <div className="flex items-start justify-between gap-2 min-w-0">
+                          <div className="min-w-0">
+                            <h4 className="font-bold text-white text-xs sm:text-sm truncate">{adm.name || 'Admin'}</h4>
+                            <div className="text-[11px] text-purple-400 font-mono truncate">{adm.email}</div>
+                          </div>
+                          <div className="shrink-0">
+                            {adm.isSuperAdmin ? (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-900/60 text-purple-300 border border-purple-600">
+                                SUPER ADMIN
+                              </span>
+                            ) : (
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                adm.role === 'Technical'
+                                  ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-600/50'
+                                  : adm.role === 'Payment Admin'
+                                  ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-600/50'
+                                  : 'bg-purple-950/80 text-purple-300 border border-purple-600/50'
+                              }`}>
+                                {adm.role ? adm.role.toUpperCase() : 'ADMIN'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-[#181818] border border-[#262626] text-xs">
+                          <span className="text-[10px] text-slate-400 uppercase font-mono font-bold shrink-0">ROLE:</span>
+                          {adm.isSuperAdmin ? (
+                            <span className="font-bold text-purple-300 text-xs">Super Admin</span>
+                          ) : (
+                            <select
+                              value={adm.role === 'Payment Admin' || adm.role === 'Technical' ? adm.role : 'Admin'}
+                              onChange={(e) => handleUpdateAdminRole(adm.email, e.target.value as any)}
+                              className="px-2 py-1 bg-[#1a1a1a] border border-[#333333] rounded text-xs font-semibold text-white focus:outline-none focus:border-purple-500 cursor-pointer min-w-0 flex-1 text-right"
+                              title="Change role in Firebase"
+                            >
+                              <option value="Admin">Admin</option>
+                              <option value="Payment Admin">Payment Admin</option>
+                              <option value="Technical">Technical</option>
+                            </select>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/5">
+                          <span className="text-[10px] font-mono text-slate-400">
+                            Added: <strong className="text-slate-300">{adm.addedBy || 'System Env'}</strong>
+                          </span>
+                          {isCurrent ? (
+                            <span className="text-[10px] font-semibold text-slate-500 italic">Current Session</span>
+                          ) : (
+                            <button
+                              onClick={() =>
+                                setDeleteConfirm({
+                                  type: 'admin',
+                                  id: adm.id,
+                                  label: `${adm.name || 'Admin'} (${adm.email})`,
+                                })
+                              }
+                              className="px-3 py-1 bg-rose-950/50 hover:bg-rose-900 text-rose-300 text-xs font-bold rounded border border-rose-800/50 transition-colors cursor-pointer"
+                            >
+                              Drop Admin
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Desktop Admins Table (hidden on mobile) */}
+              <div className="hidden md:block border border-[#222222] rounded-xl overflow-hidden bg-[#111111] overflow-x-auto custom-scrollbar">
                 <table className="w-full text-left text-xs min-w-[550px]">
                   <thead className="bg-[#181818] border-b border-[#222222] text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                     <tr>
@@ -692,8 +787,71 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
                 </button>
               </div>
 
-              {/* Faculty Table */}
-              <div className="border border-[#222222] rounded-xl overflow-hidden bg-[#111111] overflow-x-auto custom-scrollbar">
+              {/* Mobile Cards (Zero Horizontal Scroll) */}
+              <div className="md:hidden space-y-3">
+                {loadingFaculty ? (
+                  <div className="p-8 text-center text-slate-400 bg-[#111111] border border-[#222222] rounded-xl">
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-6 h-6 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
+                      <span className="text-xs">Loading Firestore faculty records...</span>
+                    </div>
+                  </div>
+                ) : filteredFaculty.length === 0 ? (
+                  <div className="p-6 text-center text-slate-400 bg-[#111111] border border-[#222222] rounded-xl text-xs">
+                    No faculty records found in database.
+                  </div>
+                ) : (
+                  filteredFaculty.map((fac) => (
+                    <div key={fac.id || fac.email} className="p-4 rounded-xl bg-[#111111] border border-[#222222] space-y-3 shadow-md w-full min-w-0">
+                      <div className="flex items-start justify-between gap-2 min-w-0">
+                        <div className="min-w-0">
+                          <h4 className="font-bold text-white text-xs sm:text-sm truncate">{fac.name}</h4>
+                          <div className="text-[11px] text-purple-300 font-mono truncate">{fac.email}</div>
+                          <div className="text-[10px] text-slate-400 font-mono">{fac.facultyId || 'FAC-ID'}</div>
+                        </div>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-900/60 text-purple-300 border border-purple-700 shrink-0">
+                          {fac.designation || 'Faculty Mentor'}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-[11px] font-mono bg-[#181818] border border-[#262626] p-2 rounded-lg">
+                        <div>
+                          <span className="text-slate-400 block text-[9px] uppercase font-bold">DEPT:</span>
+                          <span className="text-slate-200 truncate block">{fac.department || 'General'}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[9px] uppercase font-bold">PHONE:</span>
+                          <span className="text-slate-200 truncate block">{fac.phone || '—'}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 pt-1 border-t border-white/5">
+                        <button
+                          onClick={() => openFacultyForm(fac)}
+                          className="px-3 py-1 bg-[#262626] hover:bg-purple-700 text-white text-xs font-bold rounded transition-colors cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() =>
+                            setDeleteConfirm({
+                              type: 'faculty',
+                              id: fac.email,
+                              label: `${fac.name} (${fac.email})`,
+                            })
+                          }
+                          className="px-3 py-1 bg-rose-950/50 hover:bg-rose-900 text-rose-300 text-xs font-bold rounded border border-rose-800/50 transition-colors cursor-pointer"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Desktop Faculty Table (hidden on mobile) */}
+              <div className="hidden md:block border border-[#222222] rounded-xl overflow-hidden bg-[#111111] overflow-x-auto custom-scrollbar">
                 <table className="w-full text-left text-xs min-w-[640px]">
                   <thead className="bg-[#181818] border-b border-[#222222] text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                     <tr>
@@ -939,7 +1097,8 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
           </div>
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   );
 };
 

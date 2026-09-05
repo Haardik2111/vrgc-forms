@@ -2,6 +2,8 @@
 
 import React, { useRef, useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import MagicBento, { BentoCardItem } from './MagicBento';
+import { cleanFullName } from '@/lib/userUtils';
 
 interface DashboardProps {
   onPageChange: (page: string) => void;
@@ -63,59 +65,179 @@ const Dashboard: React.FC<DashboardProps> = ({ onPageChange, onOpenSuperAdminMod
 
   // Personalized user info calculation
   const rawFullName = memberData?.name || user?.displayName || (userEmail ? userEmail.split('@')[0] : 'Member');
-  const firstName = rawFullName.trim().split(' ')[0] || 'Member';
+  const cleanName = cleanFullName(rawFullName, memberData?.registrationNumber);
+  const firstName = cleanName.trim().split(' ')[0] || 'Member';
   const designation = (isSuperAdmin ? 'Super Administrator' : userRole) || memberData?.position || (isAdmin ? 'Administrator' : isFaculty ? 'Faculty Mentor' : 'Club Member');
   const teamName = memberData?.team || (userRole === 'Technical' ? 'Technical Division' : userRole === 'Payment Admin' ? 'Finance & Treasury' : isFaculty ? 'Faculty Advisory' : (isSuperAdmin || isAdmin) ? 'Management' : 'General Crew');
   const regNumber = memberData?.registrationNumber || (isSuperAdmin ? 'SUPER ADMIN' : userRole ? userRole.toUpperCase() : isAdmin ? 'ADMIN' : isFaculty ? 'FACULTY' : '');
 
+  const dashboardCards: BentoCardItem[] = [
+    {
+      id: 'idcard',
+      title: 'Digital ID Card',
+      description: 'Claim your VRGC Digital ID credentials. Submit profile photo and generate high-res pass.',
+      label: 'Identity Pass',
+      icon: 'badge',
+      actionText: 'GENERATE CARD',
+      color: '#120F17',
+      glowColor: '147, 51, 234',
+      iconBg: 'bg-purple-950/90 border-purple-800 text-purple-300',
+      tagColor: 'bg-purple-950/80 text-purple-300 border border-purple-800',
+      iconColor: 'text-purple-300',
+      btnBg: 'bg-purple-700 hover:bg-purple-600',
+      onClick: () => onPageChange('idcard'),
+    },
+    {
+      id: 'payments',
+      title: 'Payments & Dues',
+      description: 'Manage club membership fees, active dues, automated transactions, and verified receipts.',
+      label: 'Finance Desk',
+      icon: 'account_balance_wallet',
+      actionText: 'PAY DUES',
+      color: '#120F17',
+      glowColor: '16, 185, 129',
+      iconBg: 'bg-emerald-950/90 border-emerald-800 text-emerald-300',
+      tagColor: 'bg-emerald-950/80 text-emerald-300 border border-emerald-800',
+      iconColor: 'text-emerald-300',
+      btnBg: 'bg-emerald-700 hover:bg-emerald-600',
+      onClick: () => onPageChange('payments'),
+    },
+    {
+      id: 'referrals',
+      title: 'Referrals',
+      description: 'Invite your friends to the club, earn referral points, and climb the club outreach leaderboard.',
+      label: 'Outreach',
+      featuredPill: 'POPULAR',
+      icon: 'share',
+      actionText: 'SHARE LINK',
+      color: '#120F17',
+      glowColor: '6, 182, 212',
+      iconBg: 'bg-cyan-950/90 border-cyan-800 text-cyan-300',
+      tagColor: 'bg-cyan-950/80 text-cyan-300 border border-cyan-800',
+      iconColor: 'text-cyan-300',
+      btnBg: 'bg-cyan-700 hover:bg-cyan-600',
+      onClick: () => onPageChange('referrals'),
+    },
+    {
+      id: 'planned_events',
+      title: 'Planned Events',
+      description: 'Explore proposed tournaments, gaming jams, VR demos, and track upcoming faculty authorizations.',
+      label: 'Event Pipeline',
+      icon: 'event_upcoming',
+      actionText: 'VIEW EVENTS',
+      color: '#120F17',
+      glowColor: '245, 158, 11',
+      iconBg: 'bg-amber-950/90 border-amber-800 text-amber-300',
+      tagColor: 'bg-amber-950/80 text-amber-300 border border-amber-800',
+      iconColor: 'text-amber-300',
+      btnBg: 'bg-amber-700 hover:bg-amber-600',
+      onClick: () => onPageChange('planned_events'),
+    },
+    {
+      id: 'members',
+      title: 'Members Roster',
+      description: 'View full official roster of club members, division leads, and coordinators with domain filtering.',
+      label: 'Directory',
+      icon: 'groups',
+      actionText: 'EXPLORE ROSTER',
+      color: '#120F17',
+      glowColor: '147, 51, 234',
+      iconBg: 'bg-purple-950/90 border-purple-800 text-purple-300',
+      tagColor: 'bg-purple-950/80 text-purple-300 border border-purple-800',
+      iconColor: 'text-purple-300',
+      btnBg: 'bg-purple-700 hover:bg-purple-600',
+      onClick: () => onPageChange('members'),
+    },
+  ];
+
+  if (isSuperAdmin) {
+    dashboardCards.push({
+      id: 'superadmin',
+      title: 'Super Admin Console',
+      description: 'Add/drop admins, manage roles (Admin, Payment Admin, Technical), and modify faculty records.',
+      label: 'SUPER ADMIN',
+      icon: 'admin_panel_settings',
+      actionText: 'OPEN CONSOLE',
+      color: '#120F17',
+      glowColor: '168, 85, 247',
+      iconBg: 'bg-purple-900 border-purple-500 text-white',
+      tagColor: 'bg-purple-900 text-purple-200 border border-purple-500',
+      iconColor: 'text-purple-300',
+      btnBg: 'bg-purple-700 hover:bg-purple-600',
+      onClick: () => {
+        if (onOpenSuperAdminModal) {
+          onOpenSuperAdminModal();
+        } else {
+          onPageChange('superadmin');
+        }
+      },
+    });
+  } else if (isAdmin) {
+    dashboardCards.push({
+      id: 'admin_desk',
+      title: 'Member Roster Desk',
+      description: 'Manage active registrations, import CSV rosters, and inspect member submissions.',
+      label: 'ADMIN DESK',
+      icon: 'admin_panel_settings',
+      actionText: 'MANAGE CLUB',
+      color: '#120F17',
+      glowColor: '168, 85, 247',
+      iconBg: 'bg-purple-900 border-purple-500 text-white',
+      tagColor: 'bg-purple-900 text-purple-200 border border-purple-500',
+      iconColor: 'text-purple-300',
+      btnBg: 'bg-purple-700 hover:bg-purple-600',
+      onClick: () => onPageChange('members'),
+    });
+  }
+
   return (
-    <div className="flex-grow min-h-[calc(100vh-117px)] overflow-y-auto p-3 sm:p-6 md:p-8 bg-transparent relative text-left select-none">
+    <div className="flex-grow w-full p-3 sm:p-6 md:p-8 bg-transparent relative text-left select-none pb-12 sm:pb-16">
       <div className="max-w-6xl mx-auto space-y-6 sm:space-y-8">
         
         {/* Personalized Welcome & Hero Section (Strictly SOLID colors - NO GRADIENTS) */}
         <section className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-5 p-4 sm:p-6 lg:p-7 bg-[#121212] border border-[#2b193d] rounded-2xl sm:rounded-3xl shadow-[0_0_30px_rgba(0,0,0,0.6)]">
           <div className="space-y-3 max-w-2xl text-left w-full">
             {/* Top Status Badges */}
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-md text-[9px] sm:text-[10px] font-black tracking-widest uppercase bg-purple-700 text-white border border-purple-500 flex items-center gap-1.5 shadow-[0_0_10px_rgba(147,51,234,0.3)]">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+              <span className="px-2 sm:px-2.5 py-0.5 rounded-md text-[8.5px] sm:text-[10px] font-black tracking-widest uppercase bg-purple-700 text-white border border-purple-500 flex items-center gap-1 sm:gap-1.5 shadow-[0_0_10px_rgba(147,51,234,0.3)] shrink-0 whitespace-nowrap">
                 <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                 COMMAND CENTER
               </span>
 
               {isSuperAdmin ? (
-                <span className="px-2.5 py-0.5 rounded-md text-[9px] sm:text-[10px] font-black tracking-widest uppercase bg-purple-950 text-purple-200 border border-purple-600 flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[12px]">verified_user</span>
+                <span className="px-2 sm:px-2.5 py-0.5 rounded-md text-[8.5px] sm:text-[10px] font-black tracking-widest uppercase bg-purple-950 text-purple-200 border border-purple-600 flex items-center gap-1 shrink-0 whitespace-nowrap">
+                  <span className="material-symbols-outlined text-[11px] sm:text-[12px]">verified_user</span>
                   SUPER ADMIN
                 </span>
               ) : userRole === 'Payment Admin' ? (
-                <span className="px-2.5 py-0.5 rounded-md text-[9px] sm:text-[10px] font-black tracking-widest uppercase bg-emerald-950 text-emerald-300 border border-emerald-700 flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[12px]">account_balance_wallet</span>
+                <span className="px-2 sm:px-2.5 py-0.5 rounded-md text-[8.5px] sm:text-[10px] font-black tracking-widest uppercase bg-emerald-950 text-emerald-300 border border-emerald-700 flex items-center gap-1 shrink-0 whitespace-nowrap">
+                  <span className="material-symbols-outlined text-[11px] sm:text-[12px]">account_balance_wallet</span>
                   PAYMENT ADMIN
                 </span>
               ) : userRole === 'Technical' ? (
-                <span className="px-2.5 py-0.5 rounded-md text-[9px] sm:text-[10px] font-black tracking-widest uppercase bg-cyan-950 text-cyan-300 border border-cyan-700 flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[12px]">terminal</span>
+                <span className="px-2 sm:px-2.5 py-0.5 rounded-md text-[8.5px] sm:text-[10px] font-black tracking-widest uppercase bg-cyan-950 text-cyan-300 border border-cyan-700 flex items-center gap-1 shrink-0 whitespace-nowrap">
+                  <span className="material-symbols-outlined text-[11px] sm:text-[12px]">terminal</span>
                   TECHNICAL
                 </span>
               ) : isAdmin ? (
-                <span className="px-2.5 py-0.5 rounded-md text-[9px] sm:text-[10px] font-black tracking-widest uppercase bg-[#1f162b] text-purple-300 border border-purple-700/60 flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[12px]">shield</span>
+                <span className="px-2 sm:px-2.5 py-0.5 rounded-md text-[8.5px] sm:text-[10px] font-black tracking-widest uppercase bg-[#1f162b] text-purple-300 border border-purple-700/60 flex items-center gap-1 shrink-0 whitespace-nowrap">
+                  <span className="material-symbols-outlined text-[11px] sm:text-[12px]">shield</span>
                   CLUB ADMIN
                 </span>
               ) : isFaculty ? (
-                <span className="px-2.5 py-0.5 rounded-md text-[9px] sm:text-[10px] font-black tracking-widest uppercase bg-[#141b2d] text-indigo-300 border border-indigo-600 flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[12px]">school</span>
+                <span className="px-2 sm:px-2.5 py-0.5 rounded-md text-[8.5px] sm:text-[10px] font-black tracking-widest uppercase bg-[#141b2d] text-indigo-300 border border-indigo-600 flex items-center gap-1 shrink-0 whitespace-nowrap">
+                  <span className="material-symbols-outlined text-[11px] sm:text-[12px]">school</span>
                   FACULTY MENTOR
                 </span>
               ) : (
-                <span className="px-2.5 py-0.5 rounded-md text-[9px] sm:text-[10px] font-black tracking-widest uppercase bg-[#181818] text-slate-300 border border-[#333333] flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[12px]">badge</span>
+                <span className="px-2 sm:px-2.5 py-0.5 rounded-md text-[8.5px] sm:text-[10px] font-black tracking-widest uppercase bg-[#181818] text-slate-300 border border-[#333333] flex items-center gap-1 shrink-0 whitespace-nowrap">
+                  <span className="material-symbols-outlined text-[11px] sm:text-[12px]">badge</span>
                   VERIFIED MEMBER
                 </span>
               )}
 
               {regNumber && (
-                <span className="px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-mono font-bold bg-[#1a1a1a] text-purple-300 border border-[#2e2e2e]">
+                <span className="px-1.5 sm:px-2 py-0.5 rounded-md text-[8.5px] sm:text-[10px] font-mono font-bold bg-[#1a1a1a] text-purple-300 border border-[#2e2e2e] shrink-0 whitespace-nowrap">
                   {regNumber}
                 </span>
               )}
@@ -158,230 +280,20 @@ const Dashboard: React.FC<DashboardProps> = ({ onPageChange, onOpenSuperAdminMod
           </div>
         </section>
 
-        {/* Navigation Bento Grid (Strictly Solid Colors, No Gradients, Mobile Optimized) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
-
-          {/* 1. Digital ID Card Card */}
-          <button
-            onClick={() => onPageChange('idcard')}
-            className="group relative flex flex-col justify-between p-5 sm:p-6 bg-[#141414] hover:bg-[#191919] border border-[#292929] hover:border-purple-500 rounded-2xl transition-all duration-200 text-left min-h-[190px] sm:min-h-[220px] shadow-sm hover:shadow-[0_0_20px_rgba(147,51,234,0.2)] cursor-pointer"
-          >
-            <div className="space-y-3 w-full">
-              <div className="flex items-center justify-between w-full">
-                <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-purple-950 border border-purple-800 flex items-center justify-center text-purple-300">
-                  <span className="material-symbols-outlined text-2xl">badge</span>
-                </div>
-                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-800">
-                  Identity Pass
-                </span>
-              </div>
-
-              <div>
-                <h3 className="text-lg sm:text-xl text-white font-black tracking-tight group-hover:text-purple-300 transition-colors">
-                  Digital ID Card
-                </h3>
-                <p className="text-slate-400 text-xs leading-relaxed mt-1">
-                  Claim your VRGC Digital ID credentials. Submit profile photo and generate high-res pass.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 w-full flex items-center justify-between pt-3 border-t border-[#262626]">
-              <span className="text-[10px] sm:text-[11px] text-purple-300 font-extrabold tracking-widest uppercase">
-                GENERATE CARD
-              </span>
-              <div className="w-7 h-7 rounded-lg bg-purple-700 group-hover:bg-purple-600 flex items-center justify-center text-white transition-all shadow-[0_0_8px_rgba(147,51,234,0.3)]">
-                <span className="material-symbols-outlined text-sm">arrow_forward</span>
-              </div>
-            </div>
-          </button>
-
-          {/* 2. Payments & Dues Portal Card */}
-          <button
-            onClick={() => onPageChange('payments')}
-            className="group relative flex flex-col justify-between p-5 sm:p-6 bg-[#141414] hover:bg-[#191919] border border-[#292929] hover:border-emerald-500 rounded-2xl transition-all duration-200 text-left min-h-[190px] sm:min-h-[220px] shadow-sm hover:shadow-[0_0_20px_rgba(16,185,129,0.2)] cursor-pointer"
-          >
-            <div className="space-y-3 w-full">
-              <div className="flex items-center justify-between w-full">
-                <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-emerald-950 border border-emerald-800 flex items-center justify-center text-emerald-300">
-                  <span className="material-symbols-outlined text-2xl">account_balance_wallet</span>
-                </div>
-                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800">
-                  Finance Desk
-                </span>
-              </div>
-
-              <div>
-                <h3 className="text-lg sm:text-xl text-white font-black tracking-tight group-hover:text-emerald-300 transition-colors">
-                  Payments &amp; Dues
-                </h3>
-                <p className="text-slate-400 text-xs leading-relaxed mt-1">
-                  Manage club membership fees, active dues, automated transactions, and verified receipts.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 w-full flex items-center justify-between pt-3 border-t border-[#262626]">
-              <span className="text-[10px] sm:text-[11px] text-emerald-300 font-extrabold tracking-widest uppercase">
-                PAY DUES
-              </span>
-              <div className="w-7 h-7 rounded-lg bg-emerald-700 group-hover:bg-emerald-600 flex items-center justify-center text-white transition-all shadow-[0_0_8px_rgba(16,185,129,0.3)]">
-                <span className="material-symbols-outlined text-sm">arrow_forward</span>
-              </div>
-            </div>
-          </button>
-
-          {/* 3. Referral Program Card */}
-          <button
-            onClick={() => onPageChange('referrals')}
-            className="group relative flex flex-col justify-between p-5 sm:p-6 bg-[#141414] hover:bg-[#191919] border border-[#292929] hover:border-cyan-500 rounded-2xl transition-all duration-200 text-left min-h-[190px] sm:min-h-[220px] shadow-sm hover:shadow-[0_0_20px_rgba(6,182,212,0.2)] cursor-pointer"
-          >
-            <div className="space-y-3 w-full">
-              <div className="flex items-center justify-between w-full">
-                <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-cyan-950 border border-cyan-800 flex items-center justify-center text-cyan-300">
-                  <span className="material-symbols-outlined text-2xl">share</span>
-                </div>
-                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-800">
-                  Outreach
-                </span>
-              </div>
-
-              <div>
-                <h3 className="text-lg sm:text-xl text-white font-black tracking-tight group-hover:text-cyan-300 transition-colors">
-                  Referrals
-                </h3>
-                <p className="text-slate-400 text-xs leading-relaxed mt-1">
-                  Invite your friends to the club, earn referral points, and climb the club outreach leaderboard.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 w-full flex items-center justify-between pt-3 border-t border-[#262626]">
-              <span className="text-[10px] sm:text-[11px] text-cyan-300 font-extrabold tracking-widest uppercase">
-                SHARE LINK
-              </span>
-              <div className="w-7 h-7 rounded-lg bg-cyan-700 group-hover:bg-cyan-600 flex items-center justify-center text-white transition-all shadow-[0_0_8px_rgba(6,182,212,0.3)]">
-                <span className="material-symbols-outlined text-sm">arrow_forward</span>
-              </div>
-            </div>
-          </button>
-
-          {/* 4. Planned Future Events Card */}
-          <button
-            onClick={() => onPageChange('planned_events')}
-            className="group relative flex flex-col justify-between p-5 sm:p-6 bg-[#141414] hover:bg-[#191919] border border-[#292929] hover:border-amber-500 rounded-2xl transition-all duration-200 text-left min-h-[190px] sm:min-h-[220px] shadow-sm hover:shadow-[0_0_20px_rgba(245,158,11,0.2)] cursor-pointer"
-          >
-            <div className="space-y-3 w-full">
-              <div className="flex items-center justify-between w-full">
-                <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-amber-950 border border-amber-800 flex items-center justify-center text-amber-300">
-                  <span className="material-symbols-outlined text-2xl">event_upcoming</span>
-                </div>
-                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800">
-                  Event Pipeline
-                </span>
-              </div>
-
-              <div>
-                <h3 className="text-lg sm:text-xl text-white font-black tracking-tight group-hover:text-amber-300 transition-colors">
-                  Planned Events
-                </h3>
-                <p className="text-slate-400 text-xs leading-relaxed mt-1">
-                  Explore proposed tournaments, gaming jams, VR demos, and track upcoming faculty authorizations.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 w-full flex items-center justify-between pt-3 border-t border-[#262626]">
-              <span className="text-[10px] sm:text-[11px] text-amber-300 font-extrabold tracking-widest uppercase">
-                VIEW EVENTS
-              </span>
-              <div className="w-7 h-7 rounded-lg bg-amber-700 group-hover:bg-amber-600 flex items-center justify-center text-white transition-all shadow-[0_0_8px_rgba(245,158,11,0.3)]">
-                <span className="material-symbols-outlined text-sm">arrow_forward</span>
-              </div>
-            </div>
-          </button>
-
-          {/* 5. Members Roster Card */}
-          <button
-            onClick={() => onPageChange('members')}
-            className="group relative flex flex-col justify-between p-5 sm:p-6 bg-[#141414] hover:bg-[#191919] border border-[#292929] hover:border-purple-500 rounded-2xl transition-all duration-200 text-left min-h-[190px] sm:min-h-[220px] shadow-sm hover:shadow-[0_0_20px_rgba(147,51,234,0.2)] cursor-pointer"
-          >
-            <div className="space-y-3 w-full">
-              <div className="flex items-center justify-between w-full">
-                <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-purple-950 border border-purple-800 flex items-center justify-center text-purple-300">
-                  <span className="material-symbols-outlined text-2xl">groups</span>
-                </div>
-                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-800">
-                  Directory
-                </span>
-              </div>
-
-              <div>
-                <h3 className="text-lg sm:text-xl text-white font-black tracking-tight group-hover:text-purple-300 transition-colors">
-                  Members Roster
-                </h3>
-                <p className="text-slate-400 text-xs leading-relaxed mt-1">
-                  View full official roster of club members, division leads, and coordinators with domain filtering.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 w-full flex items-center justify-between pt-3 border-t border-[#262626]">
-              <span className="text-[10px] sm:text-[11px] text-purple-300 font-extrabold tracking-widest uppercase">
-                EXPLORE ROSTER
-              </span>
-              <div className="w-7 h-7 rounded-lg bg-purple-700 group-hover:bg-purple-600 flex items-center justify-center text-white transition-all shadow-[0_0_8px_rgba(147,51,234,0.3)]">
-                <span className="material-symbols-outlined text-sm">arrow_forward</span>
-              </div>
-            </div>
-          </button>
-
-          {/* 6. Super Admin / Admin Command Center Card (Conditional) */}
-          {(isSuperAdmin || isAdmin) && (
-            <button
-              onClick={() => {
-                if (isSuperAdmin && onOpenSuperAdminModal) {
-                  onOpenSuperAdminModal();
-                } else {
-                  onPageChange('members');
-                }
-              }}
-              className="group relative flex flex-col justify-between p-5 sm:p-6 bg-[#141414] hover:bg-[#191919] border border-purple-600/40 hover:border-purple-400 rounded-2xl transition-all duration-200 text-left min-h-[190px] sm:min-h-[220px] shadow-sm hover:shadow-[0_0_20px_rgba(147,51,234,0.25)] cursor-pointer"
-            >
-              <div className="space-y-3 w-full">
-                <div className="flex items-center justify-between w-full">
-                  <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-purple-900 border border-purple-500 flex items-center justify-center text-white">
-                    <span className="material-symbols-outlined text-2xl">admin_panel_settings</span>
-                  </div>
-                  <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-purple-900 text-purple-200 border border-purple-500">
-                    {isSuperAdmin ? 'SUPER ADMIN' : 'ADMIN DESK'}
-                  </span>
-                </div>
-
-                <div>
-                  <h3 className="text-lg sm:text-xl text-white font-black tracking-tight group-hover:text-purple-300 transition-colors">
-                    {isSuperAdmin ? 'Super Admin Console' : 'Member Roster Desk'}
-                  </h3>
-                  <p className="text-slate-400 text-xs leading-relaxed mt-1">
-                    {isSuperAdmin
-                      ? 'Add/drop admins, manage roles (Admin, Payment Admin, Technical), and modify faculty records.'
-                      : 'Manage active registrations, import CSV rosters, and inspect member submissions.'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-4 w-full flex items-center justify-between pt-3 border-t border-[#262626]">
-                <span className="text-[10px] sm:text-[11px] text-purple-300 font-extrabold tracking-widest uppercase">
-                  {isSuperAdmin ? 'OPEN CONSOLE' : 'MANAGE CLUB'}
-                </span>
-                <div className="w-7 h-7 rounded-lg bg-purple-700 group-hover:bg-purple-600 flex items-center justify-center text-white transition-all shadow-[0_0_8px_rgba(147,51,234,0.3)]">
-                  <span className="material-symbols-outlined text-sm">arrow_forward</span>
-                </div>
-              </div>
-            </button>
-          )}
-
-        </div>
+        {/* Navigation Bento Grid powered by React Bits MagicBento */}
+        <MagicBento
+          cards={dashboardCards}
+          textAutoHide={true}
+          enableStars={true}
+          enableSpotlight={true}
+          enableBorderGlow={true}
+          enableTilt={true}
+          enableMagnetism={true}
+          clickEffect={true}
+          spotlightRadius={330}
+          particleCount={12}
+          glowColor="132, 0, 255"
+        />
       </div>
     </div>
   );
