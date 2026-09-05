@@ -10,16 +10,27 @@ import IDCard from '@/components/IDCard';
 import Referrals from '@/components/Referrals';
 import Tickets from '@/components/Tickets';
 import Payments from '@/components/Payments';
-import Lobby25MemberEntry from '@/components/Lobby25MemberEntry';
-import Lobby24MemberEntry from '@/components/Lobby24MemberEntry';
 import Footer from '@/components/Footer';
+import SpecularButton from '@/components/SpecularButton';
 import MaintenanceModal, {
   MaintenanceConfigState,
   MAINTENANCE_CATEGORIES,
 } from '@/components/MaintenanceModal';
+import PlannedEvents from '@/components/PlannedEvents';
+import SuperAdminManagementModal from '@/components/SuperAdminManagementModal';
+import SuperAdminControlCenter from '@/components/SuperAdminControlCenter';
+import UnderMaintenanceCard from '@/components/UnderMaintenanceCard';
 import { useAuth } from '@/lib/auth-context';
 import { auth, db } from '@/lib/firebase';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import {
+  PermissionsConfig,
+  DEFAULT_PERMISSIONS_CONFIG,
+  resolveUserPagePermission,
+  PageId,
+} from '@/lib/permissions';
+import LoadingScreen from '@/components/LoadingScreen';
+import { cleanFullName } from '@/lib/userUtils';
 
 // ── Under-maintenance screen (shown instead of the locked section) ────────────
 const MaintenanceScreen = ({
@@ -29,55 +40,108 @@ const MaintenanceScreen = ({
   section: string;
   onBack?: () => void;
 }) => (
-  <div className="flex-1 flex items-center justify-center p-6 select-none">
-    <div className="max-w-md w-full bg-[#0e0518] border border-purple-500/40 rounded-3xl p-8 sm:p-10 shadow-[0_0_60px_rgba(168,85,247,0.2)] flex flex-col items-center gap-5 text-center">
-      <div className="w-16 h-16 rounded-2xl bg-purple-600/20 border border-purple-500/40 flex items-center justify-center text-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.3)]">
-        <span className="material-symbols-outlined text-3xl">construction</span>
-      </div>
-      <div className="space-y-2">
-        <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-          TEMPORARY SYSTEM UPGRADE
-        </div>
-        <h2 className="text-2xl font-black text-white tracking-tight">Under Maintenance</h2>
-        <p className="text-slate-300 text-xs leading-relaxed">
-          The <span className="text-purple-300 font-bold">{section}</span> section is currently undergoing scheduled maintenance &amp; improvements.
-        </p>
-        <p className="text-slate-500 text-[11px]">
-          Please check back shortly or explore other available club services.
-        </p>
-      </div>
+  <UnderMaintenanceCard
+    sectionName={section}
+    isEmbedded={true}
+    onBack={onBack}
+  />
+);
 
-      {onBack && (
-        <button
-          onClick={onBack}
-          className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-[0_0_15px_rgba(168,85,247,0.3)] transition-all flex items-center gap-2 cursor-pointer mt-2"
-        >
-          <span className="material-symbols-outlined text-sm">arrow_back</span>
-          Return to Dashboard
-        </button>
-      )}
-    </div>
-  </div>
+// ── Restricted module screen (shown when Super Admin has toggled off visibility for this role) ──
+const RestrictedModuleScreen = ({
+  pageTitle,
+  onBack,
+}: {
+  pageTitle: string;
+  onBack?: () => void;
+}) => (
+  <UnderMaintenanceCard
+    sectionName={pageTitle}
+    title="Module Restricted"
+    statusPillText="ACCESS RESTRICTED"
+    icon="lock"
+    primaryMessage={
+      <>
+        Access to the <strong className="maintenance-highlight">{pageTitle}</strong> section is currently restricted for your role by the Club Super Administrator.
+      </>
+    }
+    secondaryMessage="Please contact your team lead or Super Administrator to request permission."
+    buttonText="Return to Dashboard"
+    onBack={onBack}
+    isEmbedded={true}
+  />
 );
 
 function AppContent() {
   const {
     user,
     userEmail,
+    isSuperAdmin,
     isAdmin,
     isPaymentAdmin,
     isFaculty,
     isAuthorized,
     memberData,
+    userRole,
     authLoading,
     authError,
+    isMinimalView,
     handleLogin,
     handleLogout,
   } = useAuth();
 
   const [activePage, setActivePage] = useState<string>('dashboard');
+
+  useEffect(() => {
+    if (isMinimalView && activePage === 'superadmin') {
+      setActivePage('dashboard');
+      if (typeof window !== 'undefined') {
+        window.history.replaceState({ path: '/' }, '', '/');
+      }
+    }
+  }, [isMinimalView, activePage]);
   const [toast, setToast] = useState<string | null>(null);
   const [toastKey, setToastKey] = useState<number>(0);
+  const [isSuperAdminModalOpen, setIsSuperAdminModalOpen] = useState<boolean>(false);
+  const [introFinished, setIntroFinished] = useState<boolean>(false);
+
+  const handleIntroFinished = () => {
+    setIntroFinished(true);
+  };
+
+  // ── Real-time Dynamic Page Permissions Matrix ───────────────────────────
+  const [permissionsConfig, setPermissionsConfig] = useState<PermissionsConfig>(DEFAULT_PERMISSIONS_CONFIG);
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'config', 'permissions'), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data() as PermissionsConfig;
+        setPermissionsConfig({
+          roles: { ...DEFAULT_PERMISSIONS_CONFIG.roles, ...(data.roles || {}) },
+          tiers: {
+            members: { ...DEFAULT_PERMISSIONS_CONFIG.tiers.members, ...(data.tiers?.members || {}) },
+            faculty: { ...DEFAULT_PERMISSIONS_CONFIG.tiers.faculty, ...(data.tiers?.faculty || {}) },
+          },
+          customRoles: data.customRoles || [],
+          allowedMetadataRoles: data.allowedMetadataRoles || DEFAULT_PERMISSIONS_CONFIG.allowedMetadataRoles,
+        });
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  const getPagePermission = (pageKey: string) => {
+    if (pageKey === 'dashboard') return { canView: true, canEdit: true, bypassMaintenance: true };
+    if (pageKey === 'superadmin') return { canView: isSuperAdmin, canEdit: isSuperAdmin, bypassMaintenance: true };
+    return resolveUserPagePermission(
+      pageKey as PageId,
+      permissionsConfig,
+      userRole,
+      isSuperAdmin,
+      isFaculty,
+      isAuthorized
+    );
+  };
 
   // ── Maintenance mode — read from Firestore in real time ───────────────────
   const [maintenanceConfig, setMaintenanceConfig] = useState<MaintenanceConfigState & { enabled?: boolean }>({
@@ -122,8 +186,10 @@ function AppContent() {
   };
 
   const isSectionLocked = (sectionKey: string): boolean => {
-    // Admins bypass lock to inspect/test freely
-    if (isAdmin || isPaymentAdmin) return false;
+    const perm = getPagePermission(sectionKey);
+    // If the role/tier has bypassMaintenance granted by Super Admin, never lock
+    if (perm.bypassMaintenance) return false;
+
     if (maintenanceConfig.all || maintenanceConfig.enabled) return true;
     return !!maintenanceConfig.sections?.[sectionKey];
   };
@@ -142,18 +208,22 @@ function AppContent() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // Parse initial tab from clean URL path (e.g. /referrals, /idcard, /payments, /members, /planned_events)
+  // Parse initial tab from clean URL path (e.g. /referrals, /idcard, /payments, /members, /planned_events, /superadmin)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const path = window.location.pathname.replace(/^\//, '');
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get('tab');
-      const validPaths = ['referrals', 'idcard', 'payments', 'dashboard', 'batch24', 'batch25', 'members'];
+      const validPaths = ['referrals', 'idcard', 'payments', 'dashboard', 'members', 'planned_events', 'superadmin'];
 
       if (path && validPaths.includes(path)) {
         setActivePage(path);
+      } else if (tabParam === 'contact') {
+        window.location.href = '/contact';
       } else if (tabParam && validPaths.includes(tabParam)) {
         setActivePage(tabParam);
+        const cleanPath = tabParam === 'dashboard' ? '/' : `/${tabParam}`;
+        window.history.replaceState({ path: cleanPath }, '', cleanPath);
       } else {
         setActivePage('dashboard');
       }
@@ -177,90 +247,20 @@ function AppContent() {
     switch (activePage) {
       case 'dashboard': return isFaculty ? 'Faculty Dashboard' : 'Dashboard';
       case 'members': return 'Members Roster';
-      case 'batch25': return 'Lobby 25';
-      case 'batch24': return 'Lobby 24';
+      case 'planned_events': return 'Planned Events';
       case 'referrals': return 'Referrals';
       case 'idcard': return 'ID Card Portal';
       case 'payments': return isFaculty ? 'Faculty Payments Ledger' : 'Payments & Dues Portal';
+      case 'superadmin': return 'Super Admin Enclave';
       case 'tickets': return 'Tickets';
       default: return 'Command Center';
     }
   };
 
-  // ── Global loading screen ──────────────────────────────────────────────
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-[#05010a] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
-          <span className="text-purple-300 text-sm font-semibold tracking-widest uppercase">Authenticating…</span>
-        </div>
-      </div>
-    );
-  }
-
-  // ── 1. Require Sign In on initial load if user is not logged in ─────────────────
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-[#05010a] flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-[#0e0518]/90 border border-purple-500/30 rounded-3xl p-8 sm:p-10 backdrop-blur-xl shadow-[0_0_60px_rgba(168,85,247,0.2)] flex flex-col items-center gap-6 text-center animate-in fade-in duration-300">
-          <div className="w-16 h-16 rounded-2xl bg-purple-600 flex items-center justify-center shadow-[0_0_30px_rgba(168,85,247,0.5)]">
-            <span className="material-symbols-outlined text-white text-3xl">login</span>
-          </div>
-          <div className="space-y-2">
-            <h2 className="text-2xl font-black text-white tracking-tight">VRGC Forms Portal</h2>
-            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              Sign in with your official <span className="text-purple-400 font-bold">@vitbhopal.ac.in</span> institutional account or authorized faculty Google account.
-            </p>
-            {authError && (
-              <p className="text-rose-400 text-xs bg-rose-950/40 border border-rose-500/30 rounded-xl px-3 py-2 mt-2 font-medium">{authError}</p>
-            )}
-          </div>
-          <button
-            onClick={handleLogin}
-            className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-100 text-slate-900 font-bold py-3.5 px-6 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl active:scale-95 text-sm cursor-pointer"
-          >
-            <svg className="w-5 h-5" viewBox="0 0 24 24">
-              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-            </svg>
-            Sign in with Google
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ── 2. Access denied screen (shown when non-member / unauthorized user signs in) ──
-  if (authError && !isAuthorized) {
-    return (
-      <div className="min-h-screen bg-[#05010a] flex items-center justify-center px-4">
-        <div className="max-w-md w-full bg-[#0e0518]/80 border border-rose-500/30 rounded-2xl p-8 backdrop-blur-xl shadow-[0_0_60px_rgba(244,63,94,0.1)] flex flex-col items-center gap-6 text-center">
-          <div className="w-16 h-16 rounded-full bg-rose-950 border border-rose-500/50 flex items-center justify-center">
-            <span className="text-rose-400 text-3xl">🔒</span>
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-rose-400 mb-1">Access Denied</h2>
-            <p className="text-slate-400 text-sm">{authError}</p>
-            <p className="text-slate-500 text-xs mt-1">Signed in as: {user.email}</p>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="px-6 py-2.5 bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 text-rose-300 font-semibold rounded-xl transition-all text-sm cursor-pointer"
-          >
-            Sign Out &amp; Try Another Account
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   // Helper for rendering sign-in prompt on restricted sub-pages when not signed in
   const renderRestrictedSignIn = (pageName: string) => (
-    <div className="flex-1 flex items-center justify-center p-6 my-auto">
-      <div className="max-w-md w-full bg-[#0e0518]/90 border border-purple-500/30 rounded-2xl p-8 backdrop-blur-xl shadow-[0_0_60px_rgba(168,85,247,0.15)] flex flex-col items-center gap-6 text-center">
+    <div className="flex-1 min-h-[calc(100dvh-132px)] md:min-h-[calc(100vh-76px)] flex items-center justify-center p-4 sm:p-6 my-auto">
+      <div className="max-w-md w-full bg-[#0e0518]/95 border border-purple-500/30 rounded-2xl p-6 sm:p-8 backdrop-blur-xl shadow-[0_0_60px_rgba(168,85,247,0.15)] flex flex-col items-center gap-6 text-center">
         <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-600 to-fuchsia-600 flex items-center justify-center shadow-[0_0_30px_rgba(168,85,247,0.5)]">
           <span className="material-symbols-outlined text-white text-3xl">lock</span>
         </div>
@@ -273,38 +273,138 @@ function AppContent() {
             <p className="text-rose-400 text-xs bg-rose-950/40 border border-rose-500/30 rounded-lg px-3 py-2 mt-2">{authError}</p>
           )}
         </div>
-        <button
+        <SpecularButton
+          size="md"
+          radius={14}
+          tint="#ffffff"
+          tintOpacity={0.95}
+          lineColor="#c084fc"
+          baseColor="#581c87"
+          intensity={1.2}
+          textColor="#0f172a"
           onClick={handleLogin}
-          className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-100 text-gray-900 font-bold py-3 px-6 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl cursor-pointer"
+          className="w-full font-bold shadow-[0_0_25px_rgba(255,255,255,0.2)]"
         >
-          <svg className="w-5 h-5" viewBox="0 0 24 24">
+          <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
             <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
             <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
             <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
           </svg>
-          Sign in with Google
-        </button>
+          <span>Sign in with Google</span>
+        </SpecularButton>
         <p className="text-xs text-slate-500">Only authorized VRGC members and faculty can access this section.</p>
       </div>
     </div>
   );
 
-  // ── Main app shell ──────────────────────────────────────────────────────────
+  const isStatusScreen =
+    (activePage !== 'dashboard' && !getPagePermission(activePage).canView) ||
+    (activePage === 'superadmin' && !isSuperAdmin) ||
+    isSectionLocked(activePage) ||
+    ((activePage === 'referrals' || activePage === 'idcard' || activePage === 'payments') && !isAuthorized);
+
+  // ── Unified view return: LoadingScreen overlays on top of pre-rendered target view ──
   return (
-    <div className="min-h-screen bg-[#05010a] text-[#e2e8f0] flex flex-col custom-scrollbar">
+    <>
+      {!introFinished && (
+        <LoadingScreen
+          isAppReady={!authLoading}
+          onFinished={handleIntroFinished}
+        />
+      )}
+
+      {authLoading ? (
+        introFinished ? (
+          <div className="min-h-screen bg-[#03010A] flex items-center justify-center">
+            <div className="w-12 h-12 rounded-full border-2 border-purple-500/30 border-t-purple-500 animate-spin" />
+          </div>
+        ) : null
+      ) : !user ? (
+        <div className="min-h-screen bg-transparent flex items-center justify-center p-4">
+          <div className="max-w-md w-full bg-[#0e0518]/95 border border-purple-500/40 rounded-3xl p-8 sm:p-10 backdrop-blur-2xl shadow-[0_0_60px_rgba(168,85,247,0.25)] flex flex-col items-center gap-6 text-center animate-in fade-in duration-300">
+            <div className="w-16 h-16 rounded-2xl bg-purple-600 flex items-center justify-center shadow-[0_0_30px_rgba(168,85,247,0.5)]">
+              <span className="material-symbols-outlined text-white text-3xl">login</span>
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-black text-white tracking-tight">VRGC Forms Portal</h2>
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                Sign in with your official <span className="text-purple-400 font-bold">@vitbhopal.ac.in</span> institutional account or authorized faculty Google account.
+              </p>
+              {authError && (
+                <p className="text-rose-400 text-xs bg-rose-950/40 border border-rose-500/30 rounded-xl px-3 py-2 mt-2 font-medium">{authError}</p>
+              )}
+            </div>
+            <SpecularButton
+              size="md"
+              radius={16}
+              tint="#ffffff"
+              tintOpacity={0.95}
+              lineColor="#c084fc"
+              baseColor="#581c87"
+              intensity={1.2}
+              textColor="#0f172a"
+              onClick={handleLogin}
+              className="w-full font-bold shadow-[0_0_25px_rgba(255,255,255,0.2)]"
+            >
+              <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+              </svg>
+              <span>Sign in with Google</span>
+            </SpecularButton>
+          </div>
+        </div>
+      ) : authError && !isAuthorized ? (
+        <div className="min-h-screen bg-transparent flex items-center justify-center px-4">
+          <div className="max-w-md w-full bg-[#0e0518]/90 border border-rose-500/30 rounded-2xl p-8 backdrop-blur-xl shadow-[0_0_60px_rgba(244,63,94,0.1)] flex flex-col items-center gap-6 text-center">
+            <div className="w-16 h-16 rounded-full bg-rose-950 border border-rose-500/50 flex items-center justify-center">
+              <span className="text-rose-400 text-3xl">🔒</span>
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-rose-400 mb-1">Access Denied</h2>
+              <p className="text-slate-400 text-sm">{authError}</p>
+              <p className="text-slate-500 text-xs mt-1">Signed in as: {user.email}</p>
+            </div>
+            <SpecularButton
+              size="sm"
+              radius={12}
+              tint="#e11d48"
+              tintOpacity={0.2}
+              lineColor="#fb7185"
+              baseColor="#881337"
+              intensity={1.1}
+              onClick={handleLogout}
+              className="font-semibold text-rose-300"
+            >
+              Sign Out &amp; Try Another Account
+            </SpecularButton>
+          </div>
+        </div>
+      ) : (
+        <div className={`bg-transparent text-[#e2e8f0] flex flex-col custom-scrollbar ${
+          isStatusScreen
+            ? 'h-[100dvh] max-h-[100dvh] overflow-hidden'
+            : 'min-h-screen'
+        }`}>
       <Navbar
         pageTitle={getPageTitle()}
+        activePage={activePage}
         userEmail={userEmail}
         user={user}
         memberData={memberData}
         isAdmin={isAdmin}
+        isSuperAdmin={isSuperAdmin}
         isFaculty={isFaculty}
+        userRole={userRole}
         onLogout={handleLogout}
         onLogin={handleLogin}
+        onOpenSuperAdminModal={() => setIsSuperAdminModalOpen(true)}
+        onPageChange={handlePageChange}
+        onOpenMaintenanceModal={() => setIsMaintenanceModalOpen(true)}
       />
-
-
 
       {/* Admin Notice when currently viewing a category that is locked for members */}
       {isPaymentAdmin && isSectionUnderMaintenanceForAdmin(activePage) && (
@@ -316,16 +416,31 @@ function AppContent() {
         </div>
       )}
 
-      <div className="flex flex-1">
+      <div className={`flex flex-1 ${isStatusScreen ? 'h-full max-h-full overflow-hidden' : ''}`}>
         <Sidebar
           activePage={activePage}
           onPageChange={handlePageChange}
           isAdmin={isAdmin}
+          isSuperAdmin={isSuperAdmin}
           isFaculty={isFaculty}
           isAuthorized={isAuthorized}
+          userRole={userRole}
+          permissionsConfig={permissionsConfig}
         />
 
-        <main className="flex-grow min-w-0 pb-24 md:pb-12 min-h-[calc(100vh-76px)] flex flex-col">
+        <main className={`flex-grow min-w-0 flex flex-col ${
+          isStatusScreen
+            ? 'h-[calc(100dvh-56px-56px)] max-h-[calc(100dvh-56px-56px)] overflow-hidden pb-0'
+            : 'pb-16 md:pb-12 min-h-[calc(100dvh-132px)] md:min-h-[calc(100vh-76px)]'
+        }`}>
+          {/* Permission restriction check across modules */}
+          {activePage !== 'dashboard' && !getPagePermission(activePage).canView && (
+            <RestrictedModuleScreen
+              pageTitle={getPageTitle()}
+              onBack={() => handlePageChange('dashboard')}
+            />
+          )}
+
           {activePage === 'dashboard' && (
             isFaculty ? (
               <FacultyDashboard
@@ -334,50 +449,59 @@ function AppContent() {
                 facultyEmail={userEmail}
               />
             ) : (
-              <Dashboard onPageChange={handlePageChange} />
+              <Dashboard
+                onPageChange={handlePageChange}
+                onOpenSuperAdminModal={() => handlePageChange('superadmin')}
+              />
             )
           )}
 
-          {activePage === 'members' && (
+          {activePage === 'superadmin' && (
+            isSuperAdmin ? (
+              <SuperAdminControlCenter
+                onRedirect={() => handlePageChange('dashboard')}
+                currentUserEmail={userEmail || ''}
+              />
+            ) : (
+              <RestrictedModuleScreen
+                pageTitle="Super Admin Enclave"
+                onBack={() => handlePageChange('dashboard')}
+              />
+            )
+          )}
+
+          {activePage === 'members' && getPagePermission('members').canView && (
             isSectionLocked('members') ? (
               <MaintenanceScreen
                 section="Members Roster"
                 onBack={() => handlePageChange('dashboard')}
               />
-            ) : isAuthorized ? (
-              <MembersRoster onRedirect={() => handlePageChange('dashboard')} />
             ) : (
-              renderRestrictedSignIn('Members Roster')
+              <MembersRoster
+                onRedirect={() => handlePageChange('dashboard')}
+                isAdmin={getPagePermission('members').canEdit}
+              />
             )
           )}
 
-          {activePage === 'batch25' && (
-            isSectionLocked('batch25') ? (
+          {activePage === 'planned_events' && getPagePermission('planned_events').canView && (
+            isSectionLocked('planned_events') ? (
               <MaintenanceScreen
-                section="Lobby 25 Member Entry"
+                section="Planned Events"
                 onBack={() => handlePageChange('dashboard')}
               />
-            ) : isAuthorized ? (
-              <Lobby25MemberEntry onRedirect={() => handlePageChange('dashboard')} />
             ) : (
-              renderRestrictedSignIn('Lobby 25')
-            )
-          )}
-
-          {activePage === 'batch24' && (
-            isSectionLocked('batch24') ? (
-              <MaintenanceScreen
-                section="Lobby 24 Member Entry"
-                onBack={() => handlePageChange('dashboard')}
+              <PlannedEvents
+                onRedirect={() => handlePageChange('dashboard')}
+                isAdmin={getPagePermission('planned_events').canEdit}
+                isFaculty={isFaculty}
+                userEmail={userEmail}
+                userName={cleanFullName(memberData?.name || user?.displayName || undefined, memberData?.registrationNumber)}
               />
-            ) : isAuthorized ? (
-              <Lobby24MemberEntry onRedirect={() => handlePageChange('dashboard')} />
-            ) : (
-              renderRestrictedSignIn('Lobby 24')
             )
           )}
 
-          {activePage === 'referrals' && (
+          {activePage === 'referrals' && getPagePermission('referrals').canView && (
             isSectionLocked('referrals') ? (
               <MaintenanceScreen
                 section="Referrals Portal"
@@ -388,7 +512,7 @@ function AppContent() {
                 onRedirect={() => handlePageChange('dashboard')}
                 externalUser={user}
                 externalMemberData={memberData}
-                externalIsAdmin={isAdmin}
+                externalIsAdmin={getPagePermission('referrals').canEdit}
                 externalIsAuthorized={isAuthorized}
               />
             ) : (
@@ -396,7 +520,7 @@ function AppContent() {
             )
           )}
 
-          {activePage === 'idcard' && (
+          {activePage === 'idcard' && getPagePermission('idcard').canView && (
             isSectionLocked('idcard') ? (
               <MaintenanceScreen
                 section="ID Card Portal & Form"
@@ -407,7 +531,7 @@ function AppContent() {
                 onRedirect={() => handlePageChange('dashboard')}
                 externalUser={user}
                 externalMemberData={memberData}
-                externalIsAdmin={isAdmin}
+                externalIsAdmin={getPagePermission('idcard').canEdit}
                 externalIsAuthorized={isAuthorized}
                 onLogout={handleLogout}
               />
@@ -416,7 +540,7 @@ function AppContent() {
             )
           )}
 
-          {activePage === 'payments' && (
+          {activePage === 'payments' && getPagePermission('payments').canView && (
             isSectionLocked('payments') ? (
               <MaintenanceScreen
                 section="Payments & Dues Portal"
@@ -427,7 +551,7 @@ function AppContent() {
                 onRedirect={() => handlePageChange('dashboard')}
                 externalUser={user}
                 externalUserEmail={userEmail}
-                externalIsAdmin={isPaymentAdmin}
+                externalIsAdmin={getPagePermission('payments').canEdit}
                 externalIsFaculty={isFaculty}
               />
             ) : (
@@ -448,56 +572,118 @@ function AppContent() {
         saving={savingMaintenance}
       />
 
-      {/* Mobile Bottom Nav */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[#0e0518]/95 backdrop-blur-lg border-t border-purple-500/30 flex justify-around py-3 z-50 select-none">
+      {/* Super Admin Command Center Modal */}
+      {isSuperAdmin && (
+        <SuperAdminManagementModal
+          isOpen={isSuperAdminModalOpen}
+          onClose={() => setIsSuperAdminModalOpen(false)}
+          currentUserEmail={userEmail}
+        />
+      )}
+
+      {/* Mobile Bottom Nav - Sleek, Compact, Non-Intrusive */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-14 bg-[#090214]/95 backdrop-blur-xl border-t border-[#2b1442] flex items-center justify-around px-1 z-40 select-none shadow-[0_-5px_20px_rgba(0,0,0,0.8)]">
         {isFaculty ? (
           <>
-            <button onClick={() => handlePageChange('dashboard')} className={`flex flex-col items-center gap-1 ${activePage === 'dashboard' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
-              <span className="material-symbols-outlined text-xl">dashboard</span>
-              <span className="font-label-caps text-[9px]">HOME</span>
+            <button
+              onClick={() => handlePageChange('dashboard')}
+              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
+                activePage === 'dashboard' ? 'text-purple-400 font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <span className="material-symbols-outlined text-lg">dashboard</span>
+              <span className="font-mono text-[8px] tracking-wider uppercase">HOME</span>
             </button>
-            <button onClick={() => handlePageChange('members')} className={`flex flex-col items-center gap-1 ${activePage === 'members' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
-              <span className="material-symbols-outlined text-xl">groups</span>
-              <span className="font-label-caps text-[9px]">ROSTER</span>
+            <button
+              onClick={() => handlePageChange('members')}
+              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
+                activePage === 'members' ? 'text-purple-400 font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <span className="material-symbols-outlined text-lg">groups</span>
+              <span className="font-mono text-[8px] tracking-wider uppercase">ROSTER</span>
             </button>
-            <button onClick={() => handlePageChange('payments')} className={`flex flex-col items-center gap-1 ${activePage === 'payments' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
-              <span className="material-symbols-outlined text-xl">payments</span>
-              <span className="font-label-caps text-[9px]">PAYMENTS</span>
+            <button
+              onClick={() => handlePageChange('planned_events')}
+              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
+                activePage === 'planned_events' ? 'text-purple-400 font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <span className="material-symbols-outlined text-lg">event_upcoming</span>
+              <span className="font-mono text-[8px] tracking-wider uppercase">EVENTS</span>
+            </button>
+            <button
+              onClick={() => handlePageChange('payments')}
+              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
+                activePage === 'payments' ? 'text-purple-400 font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <span className="material-symbols-outlined text-lg">payments</span>
+              <span className="font-mono text-[8px] tracking-wider uppercase">PAYMENTS</span>
             </button>
           </>
         ) : (
           <>
-            <button onClick={() => handlePageChange('dashboard')} className={`flex flex-col items-center gap-1 ${activePage === 'dashboard' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
-              <span className="material-symbols-outlined text-xl">dashboard</span>
-              <span className="font-label-caps text-[9px]">HOME</span>
+            <button
+              onClick={() => handlePageChange('dashboard')}
+              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
+                activePage === 'dashboard' ? 'text-purple-400 font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <span className="material-symbols-outlined text-lg">dashboard</span>
+              <span className="font-mono text-[8px] tracking-wider uppercase">HOME</span>
             </button>
-            <button onClick={() => handlePageChange('referrals')} className={`flex flex-col items-center gap-1 ${activePage === 'referrals' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
-              <span className="material-symbols-outlined text-xl">share</span>
-              <span className="font-label-caps text-[9px]">REFER</span>
+            <button
+              onClick={() => handlePageChange('members')}
+              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
+                activePage === 'members' ? 'text-purple-400 font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <span className="material-symbols-outlined text-lg">groups</span>
+              <span className="font-mono text-[8px] tracking-wider uppercase">ROSTER</span>
             </button>
-            <button onClick={() => handlePageChange('idcard')} className={`flex flex-col items-center gap-1 ${activePage === 'idcard' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
-              <span className="material-symbols-outlined text-xl">badge</span>
-              <span className="font-label-caps text-[9px]">ID CARD</span>
+            <button
+              onClick={() => handlePageChange('planned_events')}
+              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
+                activePage === 'planned_events' ? 'text-purple-400 font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <span className="material-symbols-outlined text-lg">event_upcoming</span>
+              <span className="font-mono text-[8px] tracking-wider uppercase">EVENTS</span>
             </button>
-            <button onClick={() => handlePageChange('payments')} className={`flex flex-col items-center gap-1 ${activePage === 'payments' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}>
-              <span className="material-symbols-outlined text-xl">payments</span>
-              <span className="font-label-caps text-[9px]">PAYMENTS</span>
+            <button
+              onClick={() => handlePageChange('idcard')}
+              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
+                activePage === 'idcard' ? 'text-purple-400 font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <span className="material-symbols-outlined text-lg">badge</span>
+              <span className="font-mono text-[8px] tracking-wider uppercase">ID CARD</span>
+            </button>
+            <button
+              onClick={() => handlePageChange('payments')}
+              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
+                activePage === 'payments' ? 'text-purple-400 font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <span className="material-symbols-outlined text-lg">payments</span>
+              <span className="font-mono text-[8px] tracking-wider uppercase">PAY</span>
             </button>
           </>
         )}
       </nav>
 
-      {/* Floating Maintenance Toolset FAB Logo — bottom right (Payment Admin) */}
+      {/* Floating Maintenance Toolset FAB Logo — Solid Dark/Purple */}
       {isPaymentAdmin && (
         <button
           onClick={() => setIsMaintenanceModalOpen(true)}
           title="Configure Maintenance Mode"
-          className="fixed bottom-24 md:bottom-14 right-6 z-50 p-3.5 rounded-full bg-gradient-to-r from-purple-600 via-fuchsia-600 to-purple-700 hover:from-purple-500 hover:to-fuchsia-500 text-white shadow-[0_0_25px_rgba(168,85,247,0.5)] border border-purple-400/40 transition-all duration-300 hover:scale-110 active:scale-95 flex items-center justify-center group cursor-pointer"
+          className="fixed bottom-24 md:bottom-20 right-6 md:right-8 z-40 p-2.5 sm:p-3.5 rounded-full bg-purple-700 hover:bg-purple-600 text-white shadow-[0_0_20px_rgba(147,51,234,0.4)] border border-purple-400 transition-all duration-200 hover:scale-105 active:scale-95 flex items-center justify-center group cursor-pointer"
         >
-          <span className="material-symbols-outlined text-xl group-hover:rotate-45 transition-transform duration-300">
+          <span className="material-symbols-outlined text-lg sm:text-xl group-hover:rotate-45 transition-transform duration-300">
             construction
           </span>
-          <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-300 whitespace-nowrap text-xs font-bold font-mono pl-0 group-hover:pl-2">
+          <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-300 whitespace-nowrap text-[11px] font-bold font-mono pl-0 group-hover:pl-2">
             Maintenance Desk
           </span>
         </button>
@@ -510,8 +696,12 @@ function AppContent() {
           <span className="text-xs font-bold">{toast}</span>
         </div>
       )}
-      <Footer />
+      <div className={isStatusScreen ? 'hidden md:block' : 'block'}>
+        <Footer />
+      </div>
     </div>
+      )}
+    </>
   );
 }
 

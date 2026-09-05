@@ -1,16 +1,21 @@
 "use client";
 
 import React, { useRef, useState, useEffect } from 'react';
+import { useAuth } from '@/lib/auth-context';
+import MagicBento, { BentoCardItem } from './MagicBento';
+import { cleanFullName } from '@/lib/userUtils';
 
 interface DashboardProps {
   onPageChange: (page: string) => void;
+  onOpenSuperAdminModal?: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ onPageChange }) => {
+const Dashboard: React.FC<DashboardProps> = ({ onPageChange, onOpenSuperAdminModal }) => {
+  const { user, userEmail, memberData, isAdmin, isSuperAdmin, isFaculty, userRole } = useAuth();
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [transformStyle, setTransformStyle] = useState<React.CSSProperties>({});
 
-  // Mouse tilt handlers for desktop
+  // Mouse tilt handlers for desktop (solid 3D feel)
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const card = cardRef.current;
     if (!card) return;
@@ -20,12 +25,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onPageChange }) => {
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
 
-    // Calculate rotation degree (max 15 degrees)
-    const rotateY = ((x - centerX) / centerX) * 15;
-    const rotateX = -((y - centerY) / centerY) * 15;
+    const rotateY = ((x - centerX) / centerX) * 8;
+    const rotateX = -((y - centerY) / centerY) * 8;
 
     setTransformStyle({
-      transform: `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.05, 1.05, 1.05)`,
+      transform: `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.02, 1.02, 1.02)`,
       transition: 'transform 0.1s ease-out',
     });
   };
@@ -40,19 +44,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onPageChange }) => {
   // Device orientation tilt handler for mobile
   useEffect(() => {
     const handleOrientation = (e: DeviceOrientationEvent) => {
-      const { beta, gamma } = e; // beta: -180 to 180 (X-axis), gamma: -90 to 90 (Y-axis)
+      const { beta, gamma } = e;
       if (beta === null || gamma === null) return;
-      
-      // Limit beta and gamma to reasonable tilt range (e.g. -30 to 30)
       const clampedBeta = Math.min(Math.max(beta, -30), 30);
       const clampedGamma = Math.min(Math.max(gamma, -30), 30);
-      
-      // Map to rotation degrees (max 12deg)
-      const rotateX = (clampedBeta / 30) * 12;
-      const rotateY = (clampedGamma / 30) * 12;
+      const rotateX = (clampedBeta / 30) * 8;
+      const rotateY = (clampedGamma / 30) * 8;
 
       setTransformStyle({
-        transform: `perspective(1000px) rotateX(${-rotateX}deg) rotateY(${rotateY}deg) scale3d(1.02, 1.02, 1.02)`,
+        transform: `perspective(1000px) rotateX(${-rotateX}deg) rotateY(${rotateY}deg) scale3d(1.01, 1.01, 1.01)`,
         transition: 'transform 0.2s ease-out',
       });
     };
@@ -63,163 +63,237 @@ const Dashboard: React.FC<DashboardProps> = ({ onPageChange }) => {
     };
   }, []);
 
+  // Personalized user info calculation
+  const rawFullName = memberData?.name || user?.displayName || (userEmail ? userEmail.split('@')[0] : 'Member');
+  const cleanName = cleanFullName(rawFullName, memberData?.registrationNumber);
+  const firstName = cleanName.trim().split(' ')[0] || 'Member';
+  const designation = (userRole || (isSuperAdmin ? 'Super Administrator' : null)) || memberData?.position || (isAdmin ? 'Administrator' : isFaculty ? 'Faculty Mentor' : 'Club Member');
+  const teamName = memberData?.team || (userRole === 'Technical' ? 'Technical Division' : userRole === 'Payment Admin' ? 'Finance & Treasury' : isFaculty ? 'Faculty Advisory' : (isSuperAdmin || isAdmin) ? 'Management' : 'General Crew');
+  const regNumber = memberData?.registrationNumber || (userRole ? userRole.toUpperCase() : isSuperAdmin ? 'SUPER ADMIN' : isAdmin ? 'ADMIN' : isFaculty ? 'FACULTY' : '');
+
+  const dashboardCards: BentoCardItem[] = [
+    {
+      id: 'idcard',
+      title: 'Digital ID Card',
+      description: 'Claim your VRGC Digital ID credentials. Submit profile photo and generate high-res pass.',
+      label: 'Identity Pass',
+      icon: 'badge',
+      actionText: 'GENERATE CARD',
+      color: '#120F17',
+      glowColor: '147, 51, 234',
+      iconBg: 'bg-purple-950/90 border-purple-800 text-purple-300',
+      tagColor: 'bg-purple-950/80 text-purple-300 border border-purple-800',
+      iconColor: 'text-purple-300',
+      btnBg: 'bg-purple-700 hover:bg-purple-600',
+      onClick: () => onPageChange('idcard'),
+    },
+    {
+      id: 'payments',
+      title: 'Payments & Dues',
+      description: 'Manage club membership fees, active dues, automated transactions, and verified receipts.',
+      label: 'Finance Desk',
+      icon: 'account_balance_wallet',
+      actionText: 'PAY DUES',
+      color: '#120F17',
+      glowColor: '16, 185, 129',
+      iconBg: 'bg-emerald-950/90 border-emerald-800 text-emerald-300',
+      tagColor: 'bg-emerald-950/80 text-emerald-300 border border-emerald-800',
+      iconColor: 'text-emerald-300',
+      btnBg: 'bg-emerald-700 hover:bg-emerald-600',
+      onClick: () => onPageChange('payments'),
+    },
+    {
+      id: 'referrals',
+      title: 'Referrals',
+      description: 'Invite your friends to the club, earn referral points, and climb the club outreach leaderboard.',
+      label: 'Outreach',
+      featuredPill: 'POPULAR',
+      icon: 'share',
+      actionText: 'SHARE LINK',
+      color: '#120F17',
+      glowColor: '6, 182, 212',
+      iconBg: 'bg-cyan-950/90 border-cyan-800 text-cyan-300',
+      tagColor: 'bg-cyan-950/80 text-cyan-300 border border-cyan-800',
+      iconColor: 'text-cyan-300',
+      btnBg: 'bg-cyan-700 hover:bg-cyan-600',
+      onClick: () => onPageChange('referrals'),
+    },
+    {
+      id: 'planned_events',
+      title: 'Planned Events',
+      description: 'Explore proposed tournaments, gaming jams, VR demos, and track upcoming faculty authorizations.',
+      label: 'Event Pipeline',
+      icon: 'event_upcoming',
+      actionText: 'VIEW EVENTS',
+      color: '#120F17',
+      glowColor: '245, 158, 11',
+      iconBg: 'bg-amber-950/90 border-amber-800 text-amber-300',
+      tagColor: 'bg-amber-950/80 text-amber-300 border border-amber-800',
+      iconColor: 'text-amber-300',
+      btnBg: 'bg-amber-700 hover:bg-amber-600',
+      onClick: () => onPageChange('planned_events'),
+    },
+    {
+      id: 'members',
+      title: 'Members Roster',
+      description: 'View full official roster of club members, division leads, and coordinators with domain filtering.',
+      label: 'Directory',
+      icon: 'groups',
+      actionText: 'EXPLORE ROSTER',
+      color: '#120F17',
+      glowColor: '147, 51, 234',
+      iconBg: 'bg-purple-950/90 border-purple-800 text-purple-300',
+      tagColor: 'bg-purple-950/80 text-purple-300 border border-purple-800',
+      iconColor: 'text-purple-300',
+      btnBg: 'bg-purple-700 hover:bg-purple-600',
+      onClick: () => onPageChange('members'),
+    },
+  ];
+
+  if (isSuperAdmin) {
+    dashboardCards.push({
+      id: 'superadmin',
+      title: 'Super Admin Console',
+      description: 'Add/drop admins, manage roles (Admin, Payment Admin, Technical), and modify faculty records.',
+      label: 'SUPER ADMIN',
+      icon: 'admin_panel_settings',
+      actionText: 'OPEN CONSOLE',
+      color: '#120F17',
+      glowColor: '168, 85, 247',
+      iconBg: 'bg-purple-900 border-purple-500 text-white',
+      tagColor: 'bg-purple-900 text-purple-200 border border-purple-500',
+      iconColor: 'text-purple-300',
+      btnBg: 'bg-purple-700 hover:bg-purple-600',
+      onClick: () => {
+        if (onOpenSuperAdminModal) {
+          onOpenSuperAdminModal();
+        } else {
+          onPageChange('superadmin');
+        }
+      },
+    });
+  } else if (isAdmin) {
+    dashboardCards.push({
+      id: 'admin_desk',
+      title: 'Member Roster Desk',
+      description: 'Manage active registrations, import CSV rosters, and inspect member submissions.',
+      label: 'ADMIN DESK',
+      icon: 'admin_panel_settings',
+      actionText: 'MANAGE CLUB',
+      color: '#120F17',
+      glowColor: '168, 85, 247',
+      iconBg: 'bg-purple-900 border-purple-500 text-white',
+      tagColor: 'bg-purple-900 text-purple-200 border border-purple-500',
+      iconColor: 'text-purple-300',
+      btnBg: 'bg-purple-700 hover:bg-purple-600',
+      onClick: () => onPageChange('members'),
+    });
+  }
+
   return (
-    <div className="flex-grow min-h-[calc(100vh-117px)] overflow-y-auto p-4 md:p-8 bg-mesh relative text-left select-none">
-      <div className="max-w-6xl mx-auto space-y-12">
-        {/* Header / Hero Section */}
-        <section className="flex flex-col md:flex-row items-center justify-between gap-8 stagger-in pb-8 border-b border-purple-500/10">
+    <div className="flex-grow w-full p-3 sm:p-6 md:p-8 bg-transparent relative text-left select-none pb-12 sm:pb-16">
+      <div className="max-w-6xl mx-auto space-y-6 sm:space-y-8">
+        
+        {/* Personalized Welcome & Hero Section (Strictly SOLID colors - NO GRADIENTS) */}
+        <section className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-5 p-4 sm:p-6 lg:p-7 bg-[#121212] border border-[#2b193d] rounded-2xl sm:rounded-3xl shadow-[0_0_30px_rgba(0,0,0,0.6)]">
           <div className="space-y-3 max-w-2xl text-left w-full">
-            <span className="font-label-caps text-xs text-purple-400 tracking-widest block font-bold">
-              COMMAND CENTER
-            </span>
-            <h2 className="font-display-lg text-3xl md:text-[40px] text-white font-extrabold uppercase tracking-tight">
-              Direct Access Portal
-            </h2>
-            <p className="font-body-lg text-slate-400 text-sm md:text-base leading-relaxed">
-              Streamlined navigation for the Elite Tier ecosystem. Select a destination to initiate your workflow.
+            {/* Top Status Badges */}
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+              <span className="px-2 sm:px-2.5 py-0.5 rounded-md text-[8.5px] sm:text-[10px] font-black tracking-widest uppercase bg-purple-700 text-white border border-purple-500 flex items-center gap-1 sm:gap-1.5 shadow-[0_0_10px_rgba(147,51,234,0.3)] shrink-0 whitespace-nowrap">
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                COMMAND CENTER
+              </span>
+
+              {isSuperAdmin ? (
+                <span className="px-2 sm:px-2.5 py-0.5 rounded-md text-[8.5px] sm:text-[10px] font-black tracking-widest uppercase bg-purple-950 text-purple-200 border border-purple-600 flex items-center gap-1 shrink-0 whitespace-nowrap">
+                  <span className="material-symbols-outlined text-[11px] sm:text-[12px]">verified_user</span>
+                  SUPER ADMIN
+                </span>
+              ) : userRole === 'Payment Admin' ? (
+                <span className="px-2 sm:px-2.5 py-0.5 rounded-md text-[8.5px] sm:text-[10px] font-black tracking-widest uppercase bg-emerald-950 text-emerald-300 border border-emerald-700 flex items-center gap-1 shrink-0 whitespace-nowrap">
+                  <span className="material-symbols-outlined text-[11px] sm:text-[12px]">account_balance_wallet</span>
+                  PAYMENT ADMIN
+                </span>
+              ) : userRole === 'Technical' ? (
+                <span className="px-2 sm:px-2.5 py-0.5 rounded-md text-[8.5px] sm:text-[10px] font-black tracking-widest uppercase bg-cyan-950 text-cyan-300 border border-cyan-700 flex items-center gap-1 shrink-0 whitespace-nowrap">
+                  <span className="material-symbols-outlined text-[11px] sm:text-[12px]">terminal</span>
+                  TECHNICAL
+                </span>
+              ) : isAdmin ? (
+                <span className="px-2 sm:px-2.5 py-0.5 rounded-md text-[8.5px] sm:text-[10px] font-black tracking-widest uppercase bg-[#1f162b] text-purple-300 border border-purple-700/60 flex items-center gap-1 shrink-0 whitespace-nowrap">
+                  <span className="material-symbols-outlined text-[11px] sm:text-[12px]">shield</span>
+                  CLUB ADMIN
+                </span>
+              ) : isFaculty ? (
+                <span className="px-2 sm:px-2.5 py-0.5 rounded-md text-[8.5px] sm:text-[10px] font-black tracking-widest uppercase bg-[#141b2d] text-indigo-300 border border-indigo-600 flex items-center gap-1 shrink-0 whitespace-nowrap">
+                  <span className="material-symbols-outlined text-[11px] sm:text-[12px]">school</span>
+                  FACULTY MENTOR
+                </span>
+              ) : (
+                <span className="px-2 sm:px-2.5 py-0.5 rounded-md text-[8.5px] sm:text-[10px] font-black tracking-widest uppercase bg-[#181818] text-slate-300 border border-[#333333] flex items-center gap-1 shrink-0 whitespace-nowrap">
+                  <span className="material-symbols-outlined text-[11px] sm:text-[12px]">badge</span>
+                  VERIFIED MEMBER
+                </span>
+              )}
+
+              {regNumber && (
+                <span className="px-1.5 sm:px-2 py-0.5 rounded-md text-[8.5px] sm:text-[10px] font-mono font-bold bg-[#1a1a1a] text-purple-300 border border-[#2e2e2e] shrink-0 whitespace-nowrap">
+                  {regNumber}
+                </span>
+              )}
+            </div>
+
+            {/* Main Personalized Greeting */}
+            <div>
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-white uppercase tracking-tight flex items-baseline gap-2 flex-wrap">
+                <span>Welcome,</span>
+                <span className="text-purple-400">{firstName}</span>
+              </h1>
+              
+              {/* Designation Strip */}
+              <div className="mt-1.5 inline-flex items-center gap-2 px-2.5 py-1 bg-[#1a1126] border border-purple-600/50 rounded-lg text-left">
+                <span className="material-symbols-outlined text-purple-400 text-base">workspace_premium</span>
+                <span className="text-xs sm:text-sm font-extrabold text-white tracking-wide uppercase">
+                  {designation}
+                </span>
+                <span className="text-purple-500 font-bold">•</span>
+                <span className="text-xs text-purple-300 font-bold tracking-wide">
+                  {teamName}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">
+              Direct access portal for the Virtual Reality &amp; Gaming Club ecosystem. Access digital ID passes, dues ledger, event planning proposals, and chapter roster.
             </p>
           </div>
-          {/* Mouse & Device Tilt Hero Logo Card */}
+
+          {/* Mouse & Device Tilt Hero Logo Card (Strictly Solid Background - NO GRADIENT) */}
           <div
             ref={cardRef}
             onMouseMove={handleMouseMove}
             onMouseLeave={handleMouseLeave}
             style={transformStyle}
-            className="w-full md:w-80 h-44 rounded-2xl overflow-hidden border border-purple-500/30 flex items-center justify-center bg-gradient-to-br from-[#0e0518] to-[#05010a] relative shadow-[0_0_40px_rgba(168,85,247,0.15)] flex-shrink-0 cursor-pointer select-none"
+            className="w-full lg:w-72 h-32 sm:h-36 lg:h-40 rounded-2xl overflow-hidden border border-purple-800/60 flex items-center justify-center bg-[#07020d] relative shadow-lg shrink-0 cursor-pointer select-none"
           >
             <img src="/vrgc-logo.png" alt="VRGC Hero Logo" className="w-full h-full object-cover opacity-85 pointer-events-none" />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#05010a] via-transparent to-transparent pointer-events-none"></div>
           </div>
         </section>
 
-        {/* Navigation Bento Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Referral Program Card */}
-          <button
-            onClick={() => onPageChange('referrals')}
-            className="group relative flex flex-col items-start p-8 bg-gradient-to-b from-[#130728] via-[#0b0318] to-[#06010d] border border-purple-500/25 hover:border-purple-500/60 rounded-3xl transition-all duration-300 text-left overflow-hidden h-[320px] w-full shadow-[0_0_25px_rgba(168,85,247,0.08)] hover:shadow-[0_0_35px_rgba(168,85,247,0.25)] hover:-translate-y-1.5"
-          >
-            {/* Ambient Background Glow Halos */}
-            <div className="absolute -top-24 -right-24 w-48 h-48 bg-purple-600/20 rounded-full blur-3xl pointer-events-none group-hover:bg-purple-500/35 transition-all duration-500" />
-            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 via-fuchsia-500 to-pink-500 opacity-60 group-hover:opacity-100 transition-opacity" />
-
-            <div className="absolute -right-6 -bottom-6 opacity-10 group-hover:opacity-20 group-hover:scale-110 transition-all duration-500">
-              <span className="material-symbols-outlined text-[170px] text-purple-400">share</span>
-            </div>
-
-            {/* Badge Pill */}
-            <div className="flex items-center justify-between w-full mb-4 z-10">
-              <div className="w-14 h-14 rounded-2xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center shadow-[0_0_15px_rgba(168,85,247,0.2)] group-hover:scale-110 group-hover:border-purple-400 transition-all duration-300">
-                <span className="material-symbols-outlined text-purple-300 text-3xl group-hover:rotate-12 transition-transform">loyalty</span>
-              </div>
-              <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30 shadow-[0_0_10px_rgba(168,85,247,0.2)]">
-                Recruitment
-              </span>
-            </div>
-
-            <div className="mb-auto z-10 space-y-2">
-              <h3 className="font-display-lg text-xl text-white font-extrabold tracking-tight group-hover:text-purple-300 transition-colors">
-                Referral Program
-              </h3>
-              <p className="text-slate-400 text-xs leading-relaxed">
-                Expand the VRGC network. Track candidate referral statuses, inspect submitted dossiers, and earn recognition.
-              </p>
-            </div>
-
-            <div className="mt-4 w-full flex items-center justify-between z-10 pt-4 border-t border-purple-500/15">
-              <span className="font-code-sm text-[11px] text-purple-300 font-extrabold tracking-widest uppercase flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                <span>OPEN PROGRAM</span>
-              </span>
-              <div className="w-8 h-8 rounded-full bg-purple-500/20 group-hover:bg-purple-600 border border-purple-500/40 flex items-center justify-center text-white transition-all shadow-[0_0_12px_rgba(168,85,247,0.3)]">
-                <span className="material-symbols-outlined text-base group-hover:translate-x-0.5 transition-transform">arrow_forward</span>
-              </div>
-            </div>
-          </button>
-
-          {/* Payments & Dues Portal Card */}
-          <button
-            onClick={() => onPageChange('payments')}
-            className="group relative flex flex-col items-start p-8 bg-gradient-to-b from-[#130728] via-[#0b0318] to-[#06010d] border border-purple-500/25 hover:border-emerald-500/60 rounded-3xl transition-all duration-300 text-left overflow-hidden h-[320px] w-full shadow-[0_0_25px_rgba(168,85,247,0.08)] hover:shadow-[0_0_35px_rgba(16,185,129,0.2)] hover:-translate-y-1.5"
-          >
-            {/* Ambient Background Glow Halos */}
-            <div className="absolute -top-24 -right-24 w-48 h-48 bg-emerald-600/15 rounded-full blur-3xl pointer-events-none group-hover:bg-emerald-500/30 transition-all duration-500" />
-            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 opacity-60 group-hover:opacity-100 transition-opacity" />
-
-            <div className="absolute -right-6 -bottom-6 opacity-10 group-hover:opacity-20 group-hover:scale-110 transition-all duration-500">
-              <span className="material-symbols-outlined text-[170px] text-emerald-400">payments</span>
-            </div>
-
-            {/* Badge Pill */}
-            <div className="flex items-center justify-between w-full mb-4 z-10">
-              <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shadow-[0_0_15px_rgba(16,185,129,0.2)] group-hover:scale-110 group-hover:border-emerald-400 transition-all duration-300">
-                <span className="material-symbols-outlined text-emerald-300 text-3xl group-hover:rotate-12 transition-transform">account_balance_wallet</span>
-              </div>
-              <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
-                Finance Desk
-              </span>
-            </div>
-
-            <div className="mb-auto z-10 space-y-2">
-              <h3 className="font-display-lg text-xl text-white font-extrabold tracking-tight group-hover:text-emerald-300 transition-colors">
-                Payments &amp; Dues
-              </h3>
-              <p className="text-slate-400 text-xs leading-relaxed">
-                Manage club membership fees, active dues, automated Razorpay transactions, and view verified payment receipts.
-              </p>
-            </div>
-
-            <div className="mt-4 w-full flex items-center justify-between z-10 pt-4 border-t border-emerald-500/15">
-              <span className="font-code-sm text-[11px] text-emerald-300 font-extrabold tracking-widest uppercase flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                <span>PAY DUES</span>
-              </span>
-              <div className="w-8 h-8 rounded-full bg-emerald-500/20 group-hover:bg-emerald-600 border border-emerald-500/40 flex items-center justify-center text-white transition-all shadow-[0_0_12px_rgba(16,185,129,0.3)]">
-                <span className="material-symbols-outlined text-base group-hover:translate-x-0.5 transition-transform">arrow_forward</span>
-              </div>
-            </div>
-          </button>
-
-          {/* ID Card Portal Card */}
-          <button
-            onClick={() => onPageChange('idcard')}
-            className="group relative flex flex-col items-start p-8 bg-gradient-to-b from-[#130728] via-[#0b0318] to-[#06010d] border border-purple-500/25 hover:border-amber-500/60 rounded-3xl transition-all duration-300 text-left overflow-hidden h-[320px] w-full shadow-[0_0_25px_rgba(168,85,247,0.08)] hover:shadow-[0_0_35px_rgba(245,158,11,0.2)] hover:-translate-y-1.5"
-          >
-            {/* Ambient Background Glow Halos */}
-            <div className="absolute -top-24 -right-24 w-48 h-48 bg-amber-600/15 rounded-full blur-3xl pointer-events-none group-hover:bg-amber-500/30 transition-all duration-500" />
-            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 via-orange-500 to-yellow-500 opacity-60 group-hover:opacity-100 transition-opacity" />
-
-            <div className="absolute -right-6 -bottom-6 opacity-10 group-hover:opacity-20 group-hover:scale-110 transition-all duration-500">
-              <span className="material-symbols-outlined text-[170px] text-amber-400">badge</span>
-            </div>
-
-            {/* Badge Pill */}
-            <div className="flex items-center justify-between w-full mb-4 z-10">
-              <div className="w-14 h-14 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shadow-[0_0_15px_rgba(245,158,11,0.2)] group-hover:scale-110 group-hover:border-amber-400 transition-all duration-300">
-                <span className="material-symbols-outlined text-amber-300 text-3xl group-hover:rotate-12 transition-transform">badge</span>
-              </div>
-              <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-[0_0_10px_rgba(245,158,11,0.2)]">
-                Identity Pass
-              </span>
-            </div>
-
-            <div className="mb-auto z-10 space-y-2">
-              <h3 className="font-display-lg text-xl text-white font-extrabold tracking-tight group-hover:text-amber-300 transition-colors">
-                Digital ID Card
-              </h3>
-              <p className="text-slate-400 text-xs leading-relaxed">
-                Claim your VRGC Digital ID credentials. Submit official profile photo and generate high-res ID pass.
-              </p>
-            </div>
-
-            <div className="mt-4 w-full flex items-center justify-between z-10 pt-4 border-t border-amber-500/15">
-              <span className="font-code-sm text-[11px] text-amber-300 font-extrabold tracking-widest uppercase flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                <span>GENERATE CARD</span>
-              </span>
-              <div className="w-8 h-8 rounded-full bg-amber-500/20 group-hover:bg-amber-600 border border-amber-500/40 flex items-center justify-center text-white transition-all shadow-[0_0_12px_rgba(245,158,11,0.3)]">
-                <span className="material-symbols-outlined text-base group-hover:translate-x-0.5 transition-transform">arrow_forward</span>
-              </div>
-            </div>
-          </button>
-        </div>
+        {/* Navigation Bento Grid powered by React Bits MagicBento */}
+        <MagicBento
+          cards={dashboardCards}
+          textAutoHide={true}
+          enableStars={true}
+          enableSpotlight={true}
+          enableBorderGlow={true}
+          enableTilt={true}
+          enableMagnetism={true}
+          clickEffect={true}
+          spotlightRadius={330}
+          particleCount={12}
+          glowColor="132, 0, 255"
+        />
       </div>
     </div>
   );

@@ -13,6 +13,7 @@ import { collection, query, where, getDocs, getDoc, doc } from 'firebase/firesto
 import { CONFIG } from '@/lib/config';
 
 import { checkIsFaculty, ensureDefaultTestFaculty } from '@/lib/faculty';
+import { getSuperAdminEmails } from '@/lib/superAdminsBridge';
 
 // Designated payment admin emails loaded from CONFIG
 export const PAYMENT_ADMIN_EMAILS = CONFIG.PAYMENT_ADMIN_EMAILS;
@@ -33,13 +34,17 @@ export interface MemberData {
 interface AuthContextType {
   user: User | null;
   userEmail: string;
+  isSuperAdmin: boolean;
   isAdmin: boolean;
   isPaymentAdmin: boolean;
+  userRole: 'Super Admin' | 'Admin' | 'Payment Admin' | 'Technical' | null;
   isFaculty: boolean;
   isAuthorized: boolean;
   memberData: MemberData | null;
   authLoading: boolean;
   authError: string;
+  isMinimalView: boolean;
+  toggleViewMode: () => void;
   handleLogin: () => Promise<void>;
   handleLogout: () => Promise<void>;
 }
@@ -47,13 +52,17 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   userEmail: '',
+  isSuperAdmin: false,
   isAdmin: false,
   isPaymentAdmin: false,
+  userRole: null,
   isFaculty: false,
   isAuthorized: false,
   memberData: null,
   authLoading: true,
   authError: '',
+  isMinimalView: false,
+  toggleViewMode: () => {},
   handleLogin: async () => {},
   handleLogout: async () => {},
 });
@@ -61,21 +70,49 @@ const AuthContext = createContext<AuthContextType>({
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [userEmail, setUserEmail] = useState('');
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isPaymentAdmin, setIsPaymentAdmin] = useState(false);
+  const [userRole, setUserRole] = useState<'Super Admin' | 'Admin' | 'Payment Admin' | 'Technical' | null>(null);
   const [isFaculty, setIsFaculty] = useState(false);
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [memberData, setMemberData] = useState<MemberData | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState('');
+  const [isMinimalView, setIsMinimalView] = useState(false);
+
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem('vrgc_elevated_session');
+      if (stored === 'true') {
+        setIsMinimalView(false);
+      }
+    } catch {}
+  }, []);
+
+  const toggleViewMode = useCallback(() => {
+    setIsMinimalView((prev) => {
+      const next = !prev;
+      try {
+        if (!next) {
+          sessionStorage.setItem('vrgc_elevated_session', 'true');
+        } else {
+          sessionStorage.removeItem('vrgc_elevated_session');
+        }
+      } catch {}
+      return next;
+    });
+  }, []);
 
   // Resolve user against Firestore Database
   const resolveUser = useCallback(async (firebaseUser: User | null) => {
     if (!firebaseUser || !firebaseUser.email) {
       setUser(null);
       setUserEmail('');
+      setIsSuperAdmin(false);
       setIsAdmin(false);
       setIsPaymentAdmin(false);
+      setUserRole(null);
       setIsFaculty(false);
       setIsAuthorized(false);
       setMemberData(null);
@@ -96,8 +133,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const facultyRecord = await checkIsFaculty(em);
       if (facultyRecord) {
         setIsFaculty(true);
+        setIsSuperAdmin(false);
         setIsAdmin(false);
         setIsPaymentAdmin(false);
+        setUserRole(null);
         setIsAuthorized(true);
         setMemberData({
           name: facultyRecord.name || firebaseUser.displayName || 'Faculty Member',
@@ -114,30 +153,90 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setIsFaculty(false);
 
-      // 2. Check Admin status (Firestore 'admins' collection OR Config env / payment admin)
+      // 2. Check Super Admin status (env variable, API bridge /api/auth/super-admins, or Firestore 'super_admins' collection or admins with role 'super_admin')
+      const bridgeSuperAdmins = await getSuperAdminEmails();
+      let isDbSuperAdmin = false;
+      try {
+        const superDoc = await getDoc(doc(db, 'super_admins', em));
+        if (superDoc.exists()) {
+          isDbSuperAdmin = true;
+        }
+      } catch (superErr) {
+        console.warn('Firestore super_admins check fallback:', superErr);
+      }
+      const superAdmin = isDbSuperAdmin || bridgeSuperAdmins.includes(em);
+      setIsSuperAdmin(superAdmin);
+
+      // 3. Check Admin & Role status (Firestore 'admins' and 'roles' collections)
       const configAdmins = CONFIG.ADMIN_EMAILS.map((e) => e.toLowerCase());
       let isDbAdmin = false;
+      let assignedRole: 'Super Admin' | 'Admin' | 'Payment Admin' | 'Technical' | null = null;
 
       try {
-        // Direct doc check (doc id = email)
+        // Direct doc check in admins collection
         const adminDoc = await getDoc(doc(db, 'admins', em));
         if (adminDoc.exists()) {
           isDbAdmin = true;
-        } else {
-          // Query check by 'email' field
-          const adminQuery = query(collection(db, 'admins'), where('email', '==', em));
-          const adminSnap = await getDocs(adminQuery);
-          if (!adminSnap.empty) {
-            isDbAdmin = true;
+          const adminDocData = adminDoc.data();
+          if (adminDocData?.role === 'super_admin' || adminDocData?.isSuperAdmin) {
+            setIsSuperAdmin(true);
+            assignedRole = 'Super Admin';
+          } else if (adminDocData?.role === 'Payment Admin') {
+            assignedRole = 'Payment Admin';
+          } else if (adminDocData?.role === 'Technical') {
+            assignedRole = 'Technical';
+          } else {
+            assignedRole = 'Admin';
+          }
+        }
+
+        // Direct doc check in roles table
+        const roleDoc = await getDoc(doc(db, 'roles', em));
+        if (roleDoc.exists()) {
+          const roleData = roleDoc.data();
+          isDbAdmin = true;
+          if (roleData?.role === 'Payment Admin') {
+            assignedRole = 'Payment Admin';
+          } else if (roleData?.role === 'Technical') {
+            assignedRole = 'Technical';
+          } else if (roleData?.role === 'Admin') {
+            assignedRole = 'Admin';
           }
         }
       } catch (adminErr) {
-        console.warn('Firestore admin check fallback:', adminErr);
+        console.warn('Firestore admin/role check fallback:', adminErr);
       }
 
-      const isPaymentAdminEmail = PAYMENT_ADMIN_EMAILS.includes(em);
-      const admin = isDbAdmin || isPaymentAdminEmail || em === PAYMENT_ADMIN_EMAIL || configAdmins.includes(em);
-      const paymentAdmin = isPaymentAdminEmail;
+      const isPaymentAdminEmail = PAYMENT_ADMIN_EMAILS.includes(em) || assignedRole === 'Payment Admin';
+      const admin = superAdmin || isDbAdmin || isPaymentAdminEmail || em === PAYMENT_ADMIN_EMAIL || configAdmins.includes(em);
+      const paymentAdmin = superAdmin || isPaymentAdminEmail;
+
+      if (superAdmin) {
+        // If a Super Admin has an explicitly assigned role in Firestore (e.g., 'Admin', 'Technical', 'Payment Admin'),
+        // respect their assigned display role while retaining full superAdmin authority
+        assignedRole = assignedRole || 'Super Admin';
+
+        // Check if user has an active elevated session
+        let hasElevated = false;
+        try {
+          hasElevated = sessionStorage.getItem('vrgc_elevated_session') === 'true';
+        } catch {}
+
+        // If their assigned role is 'Super Admin', they always show Super Admin directly.
+        // If their assigned role is a delegated sub-role (e.g. 'Admin', 'Technical'), default to minimal view unless elevated.
+        if (assignedRole === 'Super Admin') {
+          setIsMinimalView(false);
+        } else {
+          setIsMinimalView(!hasElevated);
+        }
+      } else if (!assignedRole && admin) {
+        assignedRole = 'Admin';
+        setIsMinimalView(false);
+      } else {
+        setIsMinimalView(false);
+      }
+
+      setUserRole(assignedRole);
       setIsAdmin(admin);
       setIsPaymentAdmin(paymentAdmin);
 
@@ -163,18 +262,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.warn('Firestore member check warning:', memberErr);
       }
 
+      // If not in members collection, also check id_cards collection
+      if (!memberRecord) {
+        try {
+          const idDoc = await getDoc(doc(db, 'id_cards', em));
+          if (idDoc.exists()) {
+            const d = idDoc.data();
+            memberRecord = {
+              name: d.name || firebaseUser.displayName || 'Member',
+              registrationNumber: d.regNo || d.registrationNumber || '',
+              phone: d.phone || '',
+              email: em,
+              team: d.team || 'General',
+              position: d.position || d.role || (admin ? 'Lead' : 'Member'),
+            };
+          } else {
+            const idQuery = query(collection(db, 'id_cards'), where('email', '==', em));
+            const idSnap = await getDocs(idQuery);
+            if (!idSnap.empty) {
+              const d = idSnap.docs[0].data();
+              memberRecord = {
+                name: d.name || firebaseUser.displayName || 'Member',
+                registrationNumber: d.regNo || d.registrationNumber || '',
+                phone: d.phone || '',
+                email: em,
+                team: d.team || 'General',
+                position: d.position || d.role || (admin ? 'Lead' : 'Member'),
+              };
+            }
+          }
+        } catch (idErr) {
+          console.warn('Firestore id_cards check warning:', idErr);
+        }
+      }
+
       if (memberRecord) {
         setMemberData(memberRecord);
         setIsAuthorized(true);
         setAuthError('');
       } else if (admin) {
         setMemberData({
-          name: firebaseUser.displayName || 'Administrator',
-          registrationNumber: 'ADMIN',
+          name: firebaseUser.displayName || (superAdmin ? 'Super Administrator' : 'Administrator'),
+          registrationNumber: superAdmin ? 'SUPER-ADMIN' : 'ADMIN',
           phone: '',
           email: em,
           team: 'Management',
-          position: 'Lead',
+          position: superAdmin ? 'Super Administrator' : 'Lead',
         });
         setIsAuthorized(true);
         setAuthError('');
@@ -227,18 +360,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const effectiveIsSuperAdmin = isSuperAdmin && !isMinimalView;
+
   return (
     <AuthContext.Provider
       value={{
         user,
         userEmail,
+        isSuperAdmin: effectiveIsSuperAdmin,
         isAdmin,
         isPaymentAdmin,
+        userRole,
         isFaculty,
         isAuthorized,
         memberData,
         authLoading,
         authError,
+        isMinimalView,
+        toggleViewMode,
         handleLogin,
         handleLogout,
       }}

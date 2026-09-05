@@ -6,6 +6,7 @@ import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/aut
 import { collection, onSnapshot, doc, deleteDoc, updateDoc, setDoc, getDoc, addDoc, getDocs, query, orderBy, limit } from 'firebase/firestore';
 import { supabase } from '../lib/supabase';
 import { CONFIG } from '../lib/config';
+import SpecularButton from './SpecularButton';
 
 interface IDCardProps {
   onRedirect: () => void;
@@ -174,7 +175,7 @@ const IDCard: React.FC<IDCardProps> = ({
       setCurrentUser(userToUse);
 
       const configAdmins = CONFIG.ADMIN_EMAILS.map(e => e.toLowerCase());
-      const adminStatus = configAdmins.includes(lowerEmail) || (externalIsAdmin ?? false);
+      const adminStatus = externalIsAdmin !== undefined ? externalIsAdmin : configAdmins.includes(lowerEmail);
       setIsAdmin(adminStatus);
 
       if (externalIsAuthorized !== undefined) {
@@ -203,11 +204,25 @@ const IDCard: React.FC<IDCardProps> = ({
 
     setLoadingData(true);
     const unsub = onSnapshot(collection(db, 'id_cards'), (snapshot) => {
-      const candidatesData: CandidateSubmission[] = [];
-      snapshot.forEach((doc) => {
-        candidatesData.push({ id: doc.id, ...doc.data() } as CandidateSubmission);
+      const candidatesMap = new Map<string, CandidateSubmission>();
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data() as CandidateSubmission;
+        const email = (data.email || docSnap.id || '').toLowerCase().trim();
+        if (email && email.includes('@')) {
+          const existing = candidatesMap.get(email);
+          if (!existing) {
+            candidatesMap.set(email, { id: docSnap.id, ...data });
+          } else {
+            const existingTime = new Date(existing.submittedAt || 0).getTime();
+            const currTime = new Date(data.submittedAt || 0).getTime();
+            if (currTime >= existingTime) {
+              candidatesMap.set(email, { id: docSnap.id, ...data });
+            }
+          }
+        }
       });
-      candidatesData.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+      const candidatesData = Array.from(candidatesMap.values());
+      candidatesData.sort((a, b) => new Date(b.submittedAt || 0).getTime() - new Date(a.submittedAt || 0).getTime());
       setCandidates(candidatesData);
       setLoadingData(false);
     }, (error) => {
@@ -222,8 +237,15 @@ const IDCard: React.FC<IDCardProps> = ({
   useEffect(() => {
     if (!isAdmin) return;
     const unsub = onSnapshot(collection(db, 'members'), (snapshot) => {
-      const count = snapshot.size;
-      setTotalMembers(count);
+      const uniqueEmails = new Set<string>();
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        const email = (data.email || data.Email || docSnap.id || '').toLowerCase().trim();
+        if (email && email.includes('@')) {
+          uniqueEmails.add(email);
+        }
+      });
+      setTotalMembers(uniqueEmails.size > 0 ? uniqueEmails.size : snapshot.size);
     }, (error) => {
       console.warn("Firestore members subscription notice:", error);
     });
@@ -293,7 +315,16 @@ const IDCard: React.FC<IDCardProps> = ({
     targetRegNo?: string
   ) => {
     try {
-      if (!db || !currentUser) return;
+      if (!db || !currentUser || !currentUser.email) return;
+
+      if (typeof window !== 'undefined') {
+        try {
+          if (sessionStorage.getItem('vrgc_elevated_session') === 'true') {
+            return;
+          }
+        } catch {}
+      }
+
       const adminDisplayName = currentUser.displayName || memberData?.name || (currentUser.email ? currentUser.email.split('@')[0] : 'Admin');
       const logEntry: AdminActivityLog = {
         action,
@@ -309,7 +340,7 @@ const IDCard: React.FC<IDCardProps> = ({
     } catch (err) {
       console.error('Failed to write admin activity log:', err);
     }
-  }, [currentUser]);
+  }, [currentUser, memberData]);
 
   // Admins can delete individual log entries
   const handleDeleteLog = useCallback(async (logId?: string) => {
@@ -898,7 +929,7 @@ const IDCard: React.FC<IDCardProps> = ({
 
   if (authLoading) {
     return (
-      <main className="flex-grow min-h-[70vh] flex items-center justify-center">
+      <div className="flex-grow min-h-[calc(100dvh-132px)] md:min-h-[70vh] flex items-center justify-center">
         <div className="text-center space-y-4">
           <span className="material-symbols-outlined text-[64px] text-primary animate-spin">
             sync
@@ -907,13 +938,13 @@ const IDCard: React.FC<IDCardProps> = ({
             VALIDATING REGISTERED IDENTITY...
           </p>
         </div>
-      </main>
+      </div>
     );
   }
 
   if (!currentUser || !isAuthorized) {
     return (
-      <main className="flex-grow min-h-screen flex items-center justify-center p-6 relative overflow-hidden text-left bg-mesh">
+      <div className="flex-grow min-h-[calc(100dvh-132px)] md:min-h-[calc(100vh-76px)] flex items-center justify-center p-4 sm:p-6 relative overflow-hidden text-left bg-mesh">
         <div className="glass-panel p-10 md:p-12 rounded-2xl max-w-lg w-full text-center space-y-6 border border-purple-500/20 relative z-10 shadow-[0_0_50px_rgba(168,85,247,0.15)] bg-black/70 backdrop-blur-xl">
           <div className="space-y-3">
             <span className="font-label-caps text-xs text-purple-400 tracking-widest block font-bold">IDENTITY CONFIRMATION</span>
@@ -953,12 +984,12 @@ const IDCard: React.FC<IDCardProps> = ({
             </button>
           </div>
         </div>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="flex-grow min-h-screen relative overflow-hidden text-left bg-mesh">
+    <div className="flex-grow w-full relative overflow-hidden text-left bg-mesh pb-12 sm:pb-16">
       <section className="max-w-6xl mx-auto px-4 py-12 md:py-20">
 
         {/* Header Section */}
@@ -976,13 +1007,20 @@ const IDCard: React.FC<IDCardProps> = ({
           </div>
 
           <div className="flex flex-wrap gap-4 self-start md:self-end z-20">
-            <button
+            <SpecularButton
+              size="xs"
+              radius={10}
+              tint="#e11d48"
+              tintOpacity={0.2}
+              lineColor="#fb7185"
+              baseColor="#881337"
+              intensity={1.1}
               onClick={handleLogout}
-              className="bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 hover:border-red-500/50 px-5 py-2.5 rounded-full text-xs font-label-caps tracking-wider transition-all flex items-center gap-2 font-bold"
+              className="font-bold text-rose-400 font-label-caps tracking-wider"
             >
               <span className="material-symbols-outlined text-sm">logout</span>
               <span>LOGOUT</span>
-            </button>
+            </SpecularButton>
           </div>
         </header>
 
@@ -3107,7 +3145,7 @@ const IDCard: React.FC<IDCardProps> = ({
         </div>
       )}
 
-    </main>
+    </div>
   );
 };
 

@@ -65,6 +65,14 @@ export const logAdminAction = async ({
   details,
 }: LogAdminActionParams): Promise<void> => {
   try {
+    if (typeof window !== 'undefined') {
+      try {
+        if (sessionStorage.getItem('vrgc_elevated_session') === 'true') {
+          return;
+        }
+      } catch {}
+    }
+
     await addDoc(collection(db, 'admin_logs'), {
       adminEmail,
       action,

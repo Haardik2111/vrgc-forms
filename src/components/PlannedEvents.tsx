@@ -10,6 +10,7 @@ import {
   submitFacultyDecision,
 } from '@/lib/faculty';
 import { FutureEventPlan, FacultyMember, FacultyApprovalStatus } from '@/types/faculty';
+import SpecularButton from './SpecularButton';
 
 interface PlannedEventsProps {
   isAdmin?: boolean;
@@ -271,7 +272,7 @@ const PlannedEvents: React.FC<PlannedEventsProps> = ({
   };
 
   return (
-    <div className="flex-grow min-h-screen bg-mesh p-4 md:p-8 text-left text-white select-none">
+    <div className="flex-grow w-full bg-mesh p-3 sm:p-6 md:p-8 text-left text-white select-none pb-12 sm:pb-16">
       <div className="max-w-6xl mx-auto space-y-8">
         {/* Page Header */}
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-purple-500/20">
@@ -296,13 +297,20 @@ const PlannedEvents: React.FC<PlannedEventsProps> = ({
           </div>
 
           {isAdmin && (
-            <button
+            <SpecularButton
+              size="sm"
+              radius={12}
+              tint="#9333ea"
+              tintOpacity={0.8}
+              lineColor="#c084fc"
+              baseColor="#581c87"
+              intensity={1.2}
               onClick={handleOpenCreateModal}
-              className="px-5 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-[0_0_20px_rgba(168,85,247,0.3)] transition-all flex items-center gap-2 self-start md:self-auto shrink-0"
+              className="font-bold text-white shadow-[0_0_20px_rgba(168,85,247,0.3)] self-start md:self-auto shrink-0"
             >
               <span className="material-symbols-outlined text-base">add_circle</span>
-              Propose Future Event
-            </button>
+              <span>Propose Future Event</span>
+            </SpecularButton>
           )}
         </header>
 

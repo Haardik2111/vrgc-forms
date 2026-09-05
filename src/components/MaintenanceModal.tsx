@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 export interface MaintenanceCategory {
   id: string;
@@ -46,18 +47,6 @@ export const MAINTENANCE_CATEGORIES: MaintenanceCategory[] = [
     description: 'Faculty advisory review desk and event proposals',
     icon: 'event_upcoming',
   },
-  {
-    id: 'batch25',
-    label: 'Lobby 25 Member Form',
-    description: 'Batch 2025 onboarding entry portal',
-    icon: 'group_add',
-  },
-  {
-    id: 'batch24',
-    label: 'Lobby 24 Member Form',
-    description: 'Batch 2024 onboarding entry portal',
-    icon: 'group_add',
-  },
 ];
 
 export interface MaintenanceConfigState {
@@ -84,8 +73,13 @@ const MaintenanceModal: React.FC<MaintenanceModalProps> = ({
   onSave,
   saving = false,
 }) => {
+  const [mounted, setMounted] = useState<boolean>(false);
   const [allCategories, setAllCategories] = useState<boolean>(false);
   const [sections, setSections] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -99,7 +93,7 @@ const MaintenanceModal: React.FC<MaintenanceModalProps> = ({
     }
   }, [isOpen, currentConfig]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted || typeof document === 'undefined') return null;
 
   const handleToggleSection = (sectionId: string) => {
     setSections((prev) => {
@@ -130,9 +124,9 @@ const MaintenanceModal: React.FC<MaintenanceModalProps> = ({
     onClose();
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[150] bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
-      <div className="bg-[#0e0518] border border-purple-500/40 rounded-3xl max-w-2xl w-full p-5 sm:p-7 space-y-5 shadow-[0_0_60px_rgba(168,85,247,0.25)] relative max-h-[92vh] flex flex-col text-left text-white">
+      <div className="bg-[#0e0518] border border-purple-500/40 rounded-3xl max-w-2xl max-w-[calc(100vw-1.5rem)] w-full p-5 sm:p-7 space-y-5 shadow-[0_0_60px_rgba(168,85,247,0.25)] relative max-h-[92vh] flex flex-col text-left text-white">
         {/* Header */}
         <div className="flex items-start justify-between border-b border-white/10 pb-4 shrink-0">
           <div className="space-y-1">
@@ -312,7 +306,8 @@ const MaintenanceModal: React.FC<MaintenanceModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
