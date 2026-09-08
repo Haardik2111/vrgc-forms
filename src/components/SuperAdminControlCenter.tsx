@@ -23,7 +23,9 @@ import { CONFIG } from '@/lib/config';
 import {
   SessionRecord,
   purgeAllAuditSessions,
+  getSuperAdminEmails
 } from '@/lib/sessionTracker';
+import { getSuperAdminEmails } from '@/lib/superAdminsBridge';
 
 interface SuperAdminControlCenterProps {
   onRedirect: () => void;
@@ -70,6 +72,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
 
   // ─── 2. Roles Governance State ────────────────────────────────────────────
   const [admins, setAdmins] = useState<AdminRecord[]>([]);
+  const [superAdminEmails, setSuperAdminEmails] = useState<string[]>([]);
   const [loadingAdmins, setLoadingAdmins] = useState<boolean>(false);
   const [adminSearch, setAdminSearch] = useState<string>('');
   const [isAddAdminOpen, setIsAddAdminOpen] = useState<boolean>(false);
@@ -275,6 +278,8 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
       setClubMetadata(meta);
 
       // 3. Admins
+      const bridgeSuperAdmins = await getSuperAdminEmails();
+      setSuperAdminEmails(bridgeSuperAdmins);
       const snap = await getDocs(collection(db, 'admins'));
       const adminMap = new Map<string, AdminRecord>();
       const duplicateDocIdsToDelete: string[] = [];
@@ -290,18 +295,20 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
         const isSuperAdmin = !!(
           data.role === 'super_admin' ||
           data.isSuperAdmin ||
-          (CONFIG.SUPER_ADMIN_EMAILS || []).some((se) => se.toLowerCase() === email)
+          bridgeSuperAdmins.some((se) => se.toLowerCase() === email)
         );
         const addedBy = data.addedBy || '';
         const createdAt = data.createdAt || data.created_at || '';
 
         const existing = adminMap.get(email);
+        const displayRole = role && role !== 'super_admin' ? role : (isSuperAdmin ? 'Super Administrator' : 'Admin');
+
         if (!existing) {
           adminMap.set(email, {
             id: d.id,
             email,
             name,
-            role: isSuperAdmin ? 'Super Administrator' : role,
+            role: displayRole,
             isSuperAdmin,
             addedBy,
             createdAt,
@@ -314,7 +321,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
               id: d.id,
               email,
               name: name !== fallbackName ? name : existing.name,
-              role: (isSuperAdmin || existing.isSuperAdmin) ? 'Super Administrator' : role,
+              role: role && role !== 'super_admin' ? role : ((isSuperAdmin || existing.isSuperAdmin) ? 'Super Administrator' : 'Admin'),
               isSuperAdmin: isSuperAdmin || existing.isSuperAdmin,
               addedBy: addedBy || existing.addedBy,
               createdAt: existing.createdAt || createdAt,
@@ -323,20 +330,25 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
             duplicateDocIdsToDelete.push(d.id);
             if (isSuperAdmin) {
               existing.isSuperAdmin = true;
-              existing.role = 'Super Administrator';
+              if (!existing.role) {
+                existing.role = 'Super Administrator';
+              }
             }
           }
         }
       });
 
-      // Also ensure all environment/config Super Admins are present and marked as Super Administrator
-      (CONFIG.SUPER_ADMIN_EMAILS || []).forEach((superEmail) => {
+      // Also ensure all environment/config Super Admins are present in the table
+      bridgeSuperAdmins.forEach((superEmail) => {
         const cleanSuper = superEmail.toLowerCase().trim();
         if (!cleanSuper) return;
         const existing = adminMap.get(cleanSuper);
         if (existing) {
           existing.isSuperAdmin = true;
-          existing.role = 'Super Administrator';
+          // Retain custom assigned role if set in Firestore, otherwise default to Super Administrator
+          if (!existing.role) {
+            existing.role = 'Super Administrator';
+          }
         } else {
           const fallbackName = cleanSuper.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
           adminMap.set(cleanSuper, {
@@ -1942,7 +1954,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                           </div>
                         </div>
                         <div className="shrink-0">
-                          {adm.isSuperAdmin ? (
+                          {adm.role === 'Super Administrator' ? (
                             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-900/80 text-purple-200 border border-purple-600">
                               SUPER ADMIN
                             </span>
@@ -1963,7 +1975,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                       {/* Role Selector */}
                       <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-[#140b24] border border-[#261238] text-xs">
                         <span className="text-[10px] text-slate-400 uppercase font-mono font-bold shrink-0">ASSIGNED ROLE:</span>
-                        {adm.isSuperAdmin ? (
+                        {adm.role === 'Super Administrator' ? (
                           <span className="text-xs font-bold text-purple-300">Super Administrator</span>
                         ) : (
                           <select
@@ -2049,7 +2061,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                             <div className="text-[11px] text-purple-400 font-mono">{adm.email}</div>
                           </td>
                           <td className="p-3.5">
-                            {adm.isSuperAdmin ? (
+                            {adm.role === 'Super Administrator' ? (
                               <span className="font-bold text-purple-300">Super Administrator</span>
                             ) : (
                               <select
@@ -2067,7 +2079,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                             )}
                           </td>
                           <td className="p-3.5">
-                            {adm.isSuperAdmin ? (
+                            {adm.role === 'Super Administrator' ? (
                               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-900/80 text-purple-200 border border-purple-600">
                                 SUPER ADMIN
                               </span>

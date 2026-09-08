@@ -13,6 +13,7 @@ import { collection, query, where, getDocs, getDoc, doc, onSnapshot } from 'fire
 import { CONFIG } from '@/lib/config';
 
 import { checkIsFaculty, ensureDefaultTestFaculty } from '@/lib/faculty';
+import { getSuperAdminEmails } from '@/lib/superAdminsBridge';
 
 // Designated payment admin emails loaded from CONFIG
 export const PAYMENT_ADMIN_EMAILS = CONFIG.PAYMENT_ADMIN_EMAILS;
@@ -43,6 +44,8 @@ interface AuthContextType {
   authLoading: boolean;
   authError: string;
   refreshUser: () => Promise<void>;
+  isMinimalView: boolean;
+  toggleViewMode: () => void;
   handleLogin: () => Promise<void>;
   handleLogout: () => Promise<void>;
 }
@@ -60,6 +63,8 @@ const AuthContext = createContext<AuthContextType>({
   authLoading: true,
   authError: '',
   refreshUser: async () => {},
+  isMinimalView: false,
+  toggleViewMode: () => {},
   handleLogin: async () => {},
   handleLogout: async () => {},
 });
@@ -76,6 +81,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [memberData, setMemberData] = useState<MemberData | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState('');
+  const [isMinimalView, setIsMinimalView] = useState(false);
+
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem('vrgc_elevated_session');
+      if (stored === 'true') {
+        setIsMinimalView(false);
+      }
+    } catch {}
+  }, []);
+
+  const toggleViewMode = useCallback(() => {
+    setIsMinimalView((prev) => {
+      const next = !prev;
+      try {
+        if (!next) {
+          sessionStorage.setItem('vrgc_elevated_session', 'true');
+        } else {
+          sessionStorage.removeItem('vrgc_elevated_session');
+        }
+      } catch {}
+      return next;
+    });
+  }, []);
 
   // Resolve user against Firestore Database
   const resolveUser = useCallback(async (firebaseUser: User | null) => {
@@ -126,8 +155,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setIsFaculty(false);
 
-      // 2. Check Super Admin status (env variable or Firestore 'super_admins' collection or admins with role 'super_admin')
-      const configSuperAdmins = (CONFIG.SUPER_ADMIN_EMAILS || []).map((e) => e.toLowerCase().trim());
+      // 2. Check Super Admin status (env variable, API bridge /api/auth/super-admins, or Firestore 'super_admins' collection or admins with role 'super_admin')
+      const bridgeSuperAdmins = await getSuperAdminEmails();
       let isDbSuperAdmin = false;
       try {
         const superDoc = await getDoc(doc(db, 'super_admins', em));
@@ -137,7 +166,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (superErr) {
         console.warn('Firestore super_admins check fallback:', superErr);
       }
-      const superAdmin = isDbSuperAdmin || configSuperAdmins.includes(em);
+      const superAdmin = isDbSuperAdmin || bridgeSuperAdmins.includes(em);
       setIsSuperAdmin(superAdmin);
 
       // 3. Check Admin & Role status (Firestore 'admins' and 'roles' collections)
@@ -211,7 +240,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.warn('Firestore admin/role check fallback:', adminErr);
       }
 
-      // 4. Query Firestore 'members' collection by email
+      const isPaymentAdminEmail = PAYMENT_ADMIN_EMAILS.includes(em) || assignedRole === 'Payment Admin';
+      const admin = superAdmin || isDbAdmin || isPaymentAdminEmail || em === PAYMENT_ADMIN_EMAIL || configAdmins.includes(em);
+      const paymentAdmin = superAdmin || isPaymentAdminEmail;
+
+      if (superAdmin) {
+        // If a Super Admin has an explicitly assigned role in Firestore (e.g., 'Admin', 'Technical', 'Payment Admin'),
+        // respect their assigned display role while retaining full superAdmin authority
+        assignedRole = assignedRole || 'Super Admin';
+
+        // Check if user has an active elevated session
+        let hasElevated = false;
+        try {
+          hasElevated = sessionStorage.getItem('vrgc_elevated_session') === 'true';
+        } catch {}
+
+        // If their assigned role is 'Super Admin', they always show Super Admin directly.
+        // If their assigned role is a delegated sub-role (e.g. 'Admin', 'Technical'), default to minimal view unless elevated.
+        if (assignedRole === 'Super Admin') {
+          setIsMinimalView(false);
+        } else {
+          setIsMinimalView(!hasElevated);
+        }
+      } else if (!assignedRole && admin) {
+        assignedRole = 'Admin';
+        setIsMinimalView(false);
+      } else {
+        setIsMinimalView(false);
+      }
+
+      setUserRole(assignedRole);
+      setIsAdmin(admin);
+      setIsPaymentAdmin(paymentAdmin);
+
+      // 3. Query Firestore 'members' collection by email
       let memberRecord: MemberData | null = null;
       try {
         const memberQuery = query(collection(db, 'members'), where('email', '==', em));
@@ -394,12 +456,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const effectiveIsSuperAdmin = isSuperAdmin && !isMinimalView;
+
   return (
     <AuthContext.Provider
       value={{
         user,
         userEmail,
-        isSuperAdmin,
+        isSuperAdmin: effectiveIsSuperAdmin,
         isAdmin,
         isPaymentAdmin,
         userRole,
@@ -409,6 +473,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         authLoading,
         authError,
         refreshUser,
+        isMinimalView,
+        toggleViewMode,
         handleLogin,
         handleLogout,
       }}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Code2, Sparkles, Mail, ShieldCheck } from 'lucide-react';
@@ -9,9 +9,48 @@ import { useAuth } from '@/lib/auth-context';
 
 const Footer: React.FC = () => {
   const [isAboutOpen, setIsAboutOpen] = useState<boolean>(false);
-  const { isSuperAdmin, isAdmin, userRole } = useAuth();
-  const pathname = usePathname();
+const {
+  isSuperAdmin,
+  isAdmin,
+  userRole,
+  userEmail,
+  toggleViewMode,
+} = useAuth();
+
+const pathname = usePathname();
   const canResolveTickets = isSuperAdmin || isAdmin || userRole === 'Technical';
+
+  const clickCountRef = useRef<number>(0);
+  const clickTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleIconTrigger = (e: React.MouseEvent) => {
+    if (!userEmail) return;
+
+    clickCountRef.current += 1;
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current);
+    }
+
+    if (clickCountRef.current >= 3) {
+      clickCountRef.current = 0;
+      toggleViewMode();
+    } else {
+      clickTimerRef.current = setTimeout(() => {
+        clickCountRef.current = 0;
+      }, 750);
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'X' || e.key === 'x')) {
+        e.preventDefault();
+        toggleViewMode();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [toggleViewMode]);
 
   return (
     <footer className="w-full fixed bottom-0 left-0 right-0 z-40 md:sticky md:bottom-0 bg-[#070212]/95 backdrop-blur-xl border-t border-purple-500/25 text-[#cbd5e1] shadow-[0_-5px_25px_rgba(0,0,0,0.8)] pb-[env(safe-area-inset-bottom)] md:pb-0 transition-all duration-300 select-none">
@@ -26,8 +65,16 @@ const Footer: React.FC = () => {
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3 flex flex-row items-center justify-between gap-2 text-xs relative z-20">
 
         {/* Left: Developer Credit (Clickable to open About VRGC Tech Team Page & Modal) */}
-        <div className="flex items-center gap-1.5 font-medium text-slate-300 text-[10px] sm:text-[11px] md:text-xs min-w-0">
-          <Code2 className="w-3.5 h-3.5 text-purple-400 shrink-0 hidden sm:block" />
+        <div className="flex items-center gap-1.5 font-medium text-slate-300 text-[10px] sm:text-[11px] md:text-xs">
+          <button
+            type="button"
+            onClick={handleIconTrigger}
+            className="p-0.5 -m-0.5 rounded focus:outline-none cursor-default active:scale-95 transition-transform"
+            title=""
+            aria-label="Code"
+          >
+            <Code2 className="w-3.5 h-3.5 text-purple-400 shrink-0 block" />
+          </button>
           <Link 
             href="/about"
             className="flex items-center gap-1 truncate hover:opacity-90 group transition-all text-left focus:outline-none"

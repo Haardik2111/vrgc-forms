@@ -25,13 +25,17 @@
     0 8px 24px rgba(0, 0, 0, 0.35);
   cursor: pointer;
   outline: none;
-  transition: transform 0.15s ease, filter 0.2s ease, opacity 0.2s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  will-change: transform;
+  transition: transform 0.15s ease, opacity 0.2s ease;
   user-select: none;
   -webkit-user-select: none;
 }
 
 .specular-button:active {
-  transform: scale(0.97);
+  transform: scale(0.97) translateZ(0);
 }
 
 .specular-button:focus-visible {

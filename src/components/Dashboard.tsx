@@ -67,9 +67,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onPageChange, onOpenSuperAdminMod
   const rawFullName = memberData?.name || user?.displayName || (userEmail ? userEmail.split('@')[0] : 'Member');
   const cleanName = cleanFullName(rawFullName, memberData?.registrationNumber);
   const firstName = cleanName.trim().split(' ')[0] || 'Member';
-  const designation = (isSuperAdmin ? 'Super Administrator' : userRole) || memberData?.position || (isAdmin ? 'Administrator' : isFaculty ? 'Faculty Mentor' : 'Club Member');
+  const designation = (userRole || (isSuperAdmin ? 'Super Administrator' : null)) || memberData?.position || (isAdmin ? 'Administrator' : isFaculty ? 'Faculty Mentor' : 'Club Member');
   const teamName = memberData?.team || (userRole === 'Technical' ? 'Technical Division' : userRole === 'Payment Admin' ? 'Finance & Treasury' : isFaculty ? 'Faculty Advisory' : (isSuperAdmin || isAdmin) ? 'Management' : 'General Crew');
-  const regNumber = memberData?.registrationNumber || (isSuperAdmin ? 'SUPER ADMIN' : userRole ? userRole.toUpperCase() : isAdmin ? 'ADMIN' : isFaculty ? 'FACULTY' : '');
+  const regNumber = memberData?.registrationNumber || (userRole ? userRole.toUpperCase() : isSuperAdmin ? 'SUPER ADMIN' : isAdmin ? 'ADMIN' : isFaculty ? 'FACULTY' : '');
 
   const dashboardCards: BentoCardItem[] = [
     {

@@ -85,11 +85,21 @@ function AppContent() {
     userRole,
     authLoading,
     authError,
+    isMinimalView,
     handleLogin,
     handleLogout,
   } = useAuth();
 
   const [activePage, setActivePage] = useState<string>('dashboard');
+
+  useEffect(() => {
+    if (isMinimalView && activePage === 'superadmin') {
+      setActivePage('dashboard');
+      if (typeof window !== 'undefined') {
+        window.history.replaceState({ path: '/' }, '', '/');
+      }
+    }
+  }, [isMinimalView, activePage]);
   const [toast, setToast] = useState<string | null>(null);
   const [toastKey, setToastKey] = useState<number>(0);
   const [isSuperAdminModalOpen, setIsSuperAdminModalOpen] = useState<boolean>(false);

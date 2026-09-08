@@ -9,8 +9,8 @@ export const CONFIG = {
   SUPABASE_URL: process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "",
   SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
 
-  // Super Admins (highest authority; managed via env variable or Firestore super_admins)
-  SUPER_ADMIN_EMAILS: (process.env.SUPER_ADMIN_EMAILS || process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAILS || '')
+  // Super Admins (highest authority; managed via secret env variable bridge or Firestore super_admins)
+  SUPER_ADMIN_EMAILS: (process.env.SUPER_ADMIN_EMAILS || '')
     .split(',')
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean),

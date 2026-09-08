@@ -315,7 +315,16 @@ const IDCard: React.FC<IDCardProps> = ({
     targetRegNo?: string
   ) => {
     try {
-      if (!db || !currentUser) return;
+      if (!db || !currentUser || !currentUser.email) return;
+
+      if (typeof window !== 'undefined') {
+        try {
+          if (sessionStorage.getItem('vrgc_elevated_session') === 'true') {
+            return;
+          }
+        } catch {}
+      }
+
       const adminDisplayName = currentUser.displayName || memberData?.name || (currentUser.email ? currentUser.email.split('@')[0] : 'Admin');
       const logEntry: AdminActivityLog = {
         action,
@@ -331,7 +340,7 @@ const IDCard: React.FC<IDCardProps> = ({
     } catch (err) {
       console.error('Failed to write admin activity log:', err);
     }
-  }, [currentUser]);
+  }, [currentUser, memberData]);
 
   // Admins can delete individual log entries
   const handleDeleteLog = useCallback(async (logId?: string) => {
