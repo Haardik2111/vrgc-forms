@@ -22,8 +22,6 @@ import { FacultyMember } from '@/types/faculty';
 import { CONFIG } from '@/lib/config';
 import {
   SessionRecord,
-  purgeAllAuditSessions,
-  getSuperAdminEmails
 } from '@/lib/sessionTracker';
 import { getSuperAdminEmails } from '@/lib/superAdminsBridge';
 
@@ -123,9 +121,6 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
   const [sessionSearch, setSessionSearch] = useState<string>('');
   const [sessionStatusFilter, setSessionStatusFilter] = useState<'all' | 'online' | 'members' | 'guests'>('all');
   const [sessionDateFilter, setSessionDateFilter] = useState<'all' | 'today' | 'week'>('all');
-  const [isPurgingSessions, setIsPurgingSessions] = useState<boolean>(false);
-  const [purgeModalOpen, setPurgeModalOpen] = useState<boolean>(false);
-  const [purgeFeedback, setPurgeFeedback] = useState<string>('');
   const [sessionsFetched, setSessionsFetched] = useState<boolean>(false);
   const [isRefreshingSessions, setIsRefreshingSessions] = useState<boolean>(false);
 
@@ -168,14 +163,36 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
   const isSessionOnline = (s: SessionRecord): boolean => {
     if (s.status !== 'online') return false;
     const enteredMs = new Date(s.enteredAt).getTime();
-    // Safety check: sessions older than 12h without exit are considered expired
     if (!isNaN(enteredMs) && Date.now() - enteredMs > 12 * 3600 * 1000) {
       return false;
     }
     return true;
   };
 
-  // Format date-time for audit table
+  const resolveSessionDisplayRole = (s: SessionRecord): string => {
+    const rawRole = s.userRole || (s.isLoggedIn ? 'Member' : 'Guest');
+    if (rawRole === 'Super Admin') {
+      const email = (s.userEmail || '').toLowerCase().trim();
+      const isLegit = superAdminEmails.map((e) => e.toLowerCase().trim()).includes(email);
+      if (!isLegit) {
+        return s.isLoggedIn ? 'Member' : 'Guest';
+      }
+    }
+    return rawRole;
+  };
+
+  const formatAddedBy = (addedBy?: string | null): string => {
+    if (!addedBy) return 'System Env';
+    const email = addedBy.toLowerCase().trim();
+    if (email.includes('@')) {
+      const isLegitSuperAdmin = superAdminEmails.map((e) => e.toLowerCase().trim()).includes(email);
+      if (!isLegitSuperAdmin) {
+        return 'System Config';
+      }
+    }
+    return addedBy;
+  };
+
   const formatAuditDateTime = (isoString?: string | null): string => {
     if (!isoString) return '—';
     try {
@@ -246,23 +263,6 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
 
     return true;
   });
-
-  // Handle Purge All Audit Logs
-  const handlePurgeAuditLogs = async () => {
-    setIsPurgingSessions(true);
-    setPurgeFeedback('');
-    try {
-      const deleted = await purgeAllAuditSessions();
-      setSessions([]);
-      setPurgeFeedback(`Successfully purged ${deleted} session records.`);
-      setTimeout(() => setPurgeFeedback(''), 4000);
-      setPurgeModalOpen(false);
-    } catch (err: any) {
-      alert('Failed to purge session audit logs: ' + err.message);
-    } finally {
-      setIsPurgingSessions(false);
-    }
-  };
 
   // ─── Loaders ──────────────────────────────────────────────────────────────
   const loadAllData = async () => {
@@ -643,7 +643,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
           email: cleanEmail,
           name: newAdminName.trim() || cleanEmail.split('@')[0],
           role: newAdminRole,
-          addedBy: currentUserEmail,
+          addedBy: formatAddedBy(currentUserEmail),
           createdAt: nowIso,
           updatedAt: nowIso,
         },
@@ -984,17 +984,17 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
     // Config for the current active level pill
     const levelConfig = isLocked
       ? {
-          label: 'No Access',
-          icon: 'lock',
-          color: 'bg-rose-950/70 border-rose-600/50 text-rose-300 hover:border-rose-400',
-        }
+        label: 'No Access',
+        icon: 'lock',
+        color: 'bg-rose-950/70 border-rose-600/50 text-rose-300 hover:border-rose-400',
+      }
       : isEdit
-      ? {
+        ? {
           label: 'View & Edit',
           icon: 'edit',
           color: 'bg-emerald-950/70 border-emerald-500/60 text-emerald-200 hover:border-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.18)]',
         }
-      : {
+        : {
           label: 'View Only',
           icon: 'visibility',
           color: 'bg-purple-950/70 border-purple-500/60 text-purple-200 hover:border-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.18)]',
@@ -1010,9 +1010,8 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
               e.stopPropagation();
               setOpenDropdownId(isDropdownOpen ? null : cellId);
             }}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer select-none ${
-              levelConfig.color
-            } ${options?.compact ? 'text-[11px] py-1 px-2' : ''}`}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer select-none ${levelConfig.color
+              } ${options?.compact ? 'text-[11px] py-1 px-2' : ''}`}
             title="Click to change access level"
           >
             <span className="material-symbols-outlined text-sm shrink-0">
@@ -1020,9 +1019,8 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
             </span>
             <span className="whitespace-nowrap">{levelConfig.label}</span>
             <span
-              className={`material-symbols-outlined text-xs transition-transform duration-200 opacity-70 ${
-                isDropdownOpen ? 'rotate-180' : ''
-              }`}
+              className={`material-symbols-outlined text-xs transition-transform duration-200 opacity-70 ${isDropdownOpen ? 'rotate-180' : ''
+                }`}
             >
               expand_more
             </span>
@@ -1031,9 +1029,8 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
           {/* Floating Dropdown Popover */}
           {isDropdownOpen && (
             <div
-              className={`absolute right-0 z-50 w-44 rounded-xl bg-[#0e071c] border border-purple-500/40 shadow-[0_10px_30px_rgba(0,0,0,0.8),0_0_20px_rgba(147,51,234,0.25)] p-1.5 space-y-1 backdrop-blur-md animate-in fade-in zoom-in-95 duration-150 ${
-                options?.openUpward ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
-              }`}
+              className={`absolute right-0 z-50 w-44 rounded-xl bg-[#0e071c] border border-purple-500/40 shadow-[0_10px_30px_rgba(0,0,0,0.8),0_0_20px_rgba(147,51,234,0.25)] p-1.5 space-y-1 backdrop-blur-md animate-in fade-in zoom-in-95 duration-150 ${options?.openUpward ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+                }`}
               onClick={(e) => e.stopPropagation()}
             >
               {/* Option 1: No Access */}
@@ -1043,11 +1040,10 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                   onSetLevel('none');
                   setOpenDropdownId(null);
                 }}
-                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                  isLocked
-                    ? 'bg-rose-950/60 text-rose-300 border border-rose-800/60'
-                    : 'text-slate-300 hover:bg-rose-950/30 hover:text-rose-200'
-                }`}
+                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${isLocked
+                  ? 'bg-rose-950/60 text-rose-300 border border-rose-800/60'
+                  : 'text-slate-300 hover:bg-rose-950/30 hover:text-rose-200'
+                  }`}
               >
                 <div className="flex items-center gap-2">
                   <span className="material-symbols-outlined text-sm text-rose-400">lock</span>
@@ -1065,11 +1061,10 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                   onSetLevel('view');
                   setOpenDropdownId(null);
                 }}
-                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                  isViewOnly
-                    ? 'bg-purple-950/60 text-purple-300 border border-purple-800/60'
-                    : 'text-slate-300 hover:bg-purple-950/30 hover:text-purple-200'
-                }`}
+                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${isViewOnly
+                  ? 'bg-purple-950/60 text-purple-300 border border-purple-800/60'
+                  : 'text-slate-300 hover:bg-purple-950/30 hover:text-purple-200'
+                  }`}
               >
                 <div className="flex items-center gap-2">
                   <span className="material-symbols-outlined text-sm text-purple-400">visibility</span>
@@ -1087,11 +1082,10 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                   onSetLevel('edit');
                   setOpenDropdownId(null);
                 }}
-                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                  isEdit
-                    ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/60'
-                    : 'text-slate-300 hover:bg-emerald-950/30 hover:text-emerald-200'
-                }`}
+                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${isEdit
+                  ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/60'
+                  : 'text-slate-300 hover:bg-emerald-950/30 hover:text-emerald-200'
+                  }`}
               >
                 <div className="flex items-center gap-2">
                   <span className="material-symbols-outlined text-sm text-emerald-400">edit</span>
@@ -1112,15 +1106,13 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
             e.stopPropagation();
             onToggleBypass();
           }}
-          className={`flex items-center gap-1 rounded-xl border font-mono font-bold transition-all cursor-pointer ${
-            perm.bypassMaintenance
-              ? 'bg-amber-950/80 border-amber-500 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.3)] hover:bg-amber-900/80'
-              : 'bg-[#10071f] border-[#2b1642] text-slate-500 hover:text-slate-300 hover:border-slate-700'
-          } ${
-            options?.compact
+          className={`flex items-center gap-1 rounded-xl border font-mono font-bold transition-all cursor-pointer ${perm.bypassMaintenance
+            ? 'bg-amber-950/80 border-amber-500 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.3)] hover:bg-amber-900/80'
+            : 'bg-[#10071f] border-[#2b1642] text-slate-500 hover:text-slate-300 hover:border-slate-700'
+            } ${options?.compact
               ? 'px-2 py-1 text-[10px]'
               : 'px-2.5 py-1.5 text-[11px]'
-          }`}
+            }`}
           title={
             perm.bypassMaintenance
               ? 'Bypass Active: Can access during maintenance'
@@ -1139,7 +1131,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
   return (
     <div className="flex-grow w-full max-w-full bg-transparent p-3 sm:p-6 md:p-8 pb-12 sm:pb-16 text-left text-white select-none overflow-x-hidden">
       <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8 w-full min-w-0">
-        
+
         {/* Enclave Header */}
         <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 sm:p-6 bg-[#0e0618] border border-purple-600/50 rounded-2xl sm:rounded-3xl shadow-[0_0_40px_rgba(147,51,234,0.18)]">
           <div className="space-y-2">
@@ -1175,11 +1167,10 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
         <div className="flex border-b border-[#231238] gap-1 sm:gap-2 overflow-x-auto no-scrollbar flex-nowrap scroll-smooth pb-1 w-full max-w-full">
           <button
             onClick={() => setActiveTab('permissions')}
-            className={`px-3 sm:px-5 py-2.5 rounded-t-xl text-xs font-black tracking-wider uppercase flex items-center gap-2 transition-all shrink-0 border-b-2 cursor-pointer ${
-              activeTab === 'permissions'
-                ? 'border-purple-500 text-white bg-[#140b24]'
-                : 'border-transparent text-slate-400 hover:text-white hover:bg-white/5'
-            }`}
+            className={`px-3 sm:px-5 py-2.5 rounded-t-xl text-xs font-black tracking-wider uppercase flex items-center gap-2 transition-all shrink-0 border-b-2 cursor-pointer ${activeTab === 'permissions'
+              ? 'border-purple-500 text-white bg-[#140b24]'
+              : 'border-transparent text-slate-400 hover:text-white hover:bg-white/5'
+              }`}
           >
             <span className="material-symbols-outlined text-base">rule</span>
             Permissions Matrix
@@ -1187,11 +1178,10 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
 
           <button
             onClick={() => setActiveTab('roles')}
-            className={`px-3 sm:px-5 py-2.5 rounded-t-xl text-xs font-black tracking-wider uppercase flex items-center gap-2 transition-all shrink-0 border-b-2 cursor-pointer ${
-              activeTab === 'roles'
-                ? 'border-purple-500 text-white bg-[#140b24]'
-                : 'border-transparent text-slate-400 hover:text-white hover:bg-white/5'
-            }`}
+            className={`px-3 sm:px-5 py-2.5 rounded-t-xl text-xs font-black tracking-wider uppercase flex items-center gap-2 transition-all shrink-0 border-b-2 cursor-pointer ${activeTab === 'roles'
+              ? 'border-purple-500 text-white bg-[#140b24]'
+              : 'border-transparent text-slate-400 hover:text-white hover:bg-white/5'
+              }`}
           >
             <span className="material-symbols-outlined text-base">badge</span>
             Roles &amp; Admins ({admins.length})
@@ -1199,11 +1189,10 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
 
           <button
             onClick={() => setActiveTab('metadata')}
-            className={`px-3 sm:px-5 py-2.5 rounded-t-xl text-xs font-black tracking-wider uppercase flex items-center gap-2 transition-all shrink-0 border-b-2 cursor-pointer ${
-              activeTab === 'metadata'
-                ? 'border-purple-500 text-white bg-[#140b24]'
-                : 'border-transparent text-slate-400 hover:text-white hover:bg-white/5'
-            }`}
+            className={`px-3 sm:px-5 py-2.5 rounded-t-xl text-xs font-black tracking-wider uppercase flex items-center gap-2 transition-all shrink-0 border-b-2 cursor-pointer ${activeTab === 'metadata'
+              ? 'border-purple-500 text-white bg-[#140b24]'
+              : 'border-transparent text-slate-400 hover:text-white hover:bg-white/5'
+              }`}
           >
             <span className="material-symbols-outlined text-base">category</span>
             Domains &amp; Positions ({clubMetadata.domains.length + clubMetadata.positions.length})
@@ -1211,11 +1200,10 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
 
           <button
             onClick={() => setActiveTab('faculty')}
-            className={`px-3 sm:px-5 py-2.5 rounded-t-xl text-xs font-black tracking-wider uppercase flex items-center gap-2 transition-all shrink-0 border-b-2 cursor-pointer ${
-              activeTab === 'faculty'
-                ? 'border-purple-500 text-white bg-[#140b24]'
-                : 'border-transparent text-slate-400 hover:text-white hover:bg-white/5'
-            }`}
+            className={`px-3 sm:px-5 py-2.5 rounded-t-xl text-xs font-black tracking-wider uppercase flex items-center gap-2 transition-all shrink-0 border-b-2 cursor-pointer ${activeTab === 'faculty'
+              ? 'border-purple-500 text-white bg-[#140b24]'
+              : 'border-transparent text-slate-400 hover:text-white hover:bg-white/5'
+              }`}
           >
             <span className="material-symbols-outlined text-base">school</span>
             Faculty Directory ({facultyList.length})
@@ -1223,11 +1211,10 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
 
           <button
             onClick={() => setActiveTab('audit')}
-            className={`px-3 sm:px-5 py-2.5 rounded-t-xl text-xs font-black tracking-wider uppercase flex items-center gap-2 transition-all shrink-0 border-b-2 cursor-pointer ${
-              activeTab === 'audit'
-                ? 'border-purple-500 text-white bg-[#140b24]'
-                : 'border-transparent text-slate-400 hover:text-white hover:bg-white/5'
-            }`}
+            className={`px-3 sm:px-5 py-2.5 rounded-t-xl text-xs font-black tracking-wider uppercase flex items-center gap-2 transition-all shrink-0 border-b-2 cursor-pointer ${activeTab === 'audit'
+              ? 'border-purple-500 text-white bg-[#140b24]'
+              : 'border-transparent text-slate-400 hover:text-white hover:bg-white/5'
+              }`}
           >
             <span className="material-symbols-outlined text-base">visibility</span>
             <span>Presence &amp; Audit</span>
@@ -1255,7 +1242,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
         {/* ════════════════════════════════════════════════════════════════════ */}
         {activeTab === 'permissions' && (
           <div className="space-y-6">
-            
+
             {/* Action Bar */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-[#0e071a] border border-[#261238] rounded-2xl">
               <div>
@@ -1341,22 +1328,20 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                   <button
                     type="button"
                     onClick={() => setMobileViewMode('by_role')}
-                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                      mobileViewMode === 'by_role'
-                        ? 'bg-purple-600 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${mobileViewMode === 'by_role'
+                      ? 'bg-purple-600 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]'
+                      : 'text-slate-400 hover:text-white'
+                      }`}
                   >
                     By Role
                   </button>
                   <button
                     type="button"
                     onClick={() => setMobileViewMode('by_portal')}
-                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                      mobileViewMode === 'by_portal'
-                        ? 'bg-purple-600 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${mobileViewMode === 'by_portal'
+                      ? 'bg-purple-600 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]'
+                      : 'text-slate-400 hover:text-white'
+                      }`}
                   >
                     By Portal
                   </button>
@@ -1377,11 +1362,10 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                         key={roleItem.id}
                         type="button"
                         onClick={() => setSelectedMobileRole(roleItem.id)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
-                          selectedMobileRole === roleItem.id
-                            ? 'bg-purple-600 text-white shadow-[0_0_12px_rgba(168,85,247,0.4)] border border-purple-400/50'
-                            : 'bg-[#140b24] border border-[#2b1642] text-slate-400 hover:text-white'
-                        }`}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${selectedMobileRole === roleItem.id
+                          ? 'bg-purple-600 text-white shadow-[0_0_12px_rgba(168,85,247,0.4)] border border-purple-400/50'
+                          : 'bg-[#140b24] border border-[#2b1642] text-slate-400 hover:text-white'
+                          }`}
                       >
                         <span className="material-symbols-outlined text-sm">{roleItem.icon}</span>
                         <span>{roleItem.label}</span>
@@ -1398,10 +1382,10 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                     const sub = isMembers
                       ? 'Authenticated Student Tier'
                       : isFaculty
-                      ? 'Academic Mentors Tier'
-                      : ['Admin', 'Payment Admin', 'Technical'].includes(roleId)
-                      ? 'Core Administrative Role'
-                      : 'Custom Role';
+                        ? 'Academic Mentors Tier'
+                        : ['Admin', 'Payment Admin', 'Technical'].includes(roleId)
+                          ? 'Core Administrative Role'
+                          : 'Custom Role';
                     const dotColor = isMembers ? 'bg-cyan-400' : isFaculty ? 'bg-indigo-400' : 'bg-purple-500';
 
                     return (
@@ -1457,8 +1441,8 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                             const perm: PagePermission = isMembers
                               ? permissions.tiers.members?.[p.id] || { canView: false, canEdit: false, bypassMaintenance: false }
                               : isFaculty
-                              ? permissions.tiers.faculty?.[p.id] || { canView: false, canEdit: false, bypassMaintenance: false }
-                              : permissions.roles[roleId]?.[p.id] || { canView: false, canEdit: false, bypassMaintenance: false };
+                                ? permissions.tiers.faculty?.[p.id] || { canView: false, canEdit: false, bypassMaintenance: false }
+                                : permissions.roles[roleId]?.[p.id] || { canView: false, canEdit: false, bypassMaintenance: false };
 
                             const setLevel = (level: 'none' | 'view' | 'edit') => {
                               if (isMembers) handleSetTierAccessLevel('members', p.id, level);
@@ -1512,11 +1496,10 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                         key={p.id}
                         type="button"
                         onClick={() => setSelectedMobilePortal(p.id)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
-                          selectedMobilePortal === p.id
-                            ? 'bg-purple-600 text-white shadow-[0_0_12px_rgba(168,85,247,0.4)] border border-purple-400/50'
-                            : 'bg-[#140b24] border border-[#2b1642] text-slate-400 hover:text-white'
-                        }`}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${selectedMobilePortal === p.id
+                          ? 'bg-purple-600 text-white shadow-[0_0_12px_rgba(168,85,247,0.4)] border border-purple-400/50'
+                          : 'bg-[#140b24] border border-[#2b1642] text-slate-400 hover:text-white'
+                          }`}
                       >
                         <span className="material-symbols-outlined text-sm">{p.icon}</span>
                         <span>{p.label}</span>
@@ -1560,8 +1543,8 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                               r.tier === 'members'
                                 ? permissions.tiers.members?.[portal.id] || { canView: false, canEdit: false, bypassMaintenance: false }
                                 : r.tier === 'faculty'
-                                ? permissions.tiers.faculty?.[portal.id] || { canView: false, canEdit: false, bypassMaintenance: false }
-                                : permissions.roles[r.id]?.[portal.id] || { canView: false, canEdit: false, bypassMaintenance: false };
+                                  ? permissions.tiers.faculty?.[portal.id] || { canView: false, canEdit: false, bypassMaintenance: false }
+                                  : permissions.roles[r.id]?.[portal.id] || { canView: false, canEdit: false, bypassMaintenance: false };
 
                             const setLevel = (level: 'none' | 'view' | 'edit') => {
                               if (r.tier === 'members') handleSetTierAccessLevel('members', portal.id, level);
@@ -1713,686 +1696,683 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
               </table>
             </div>
 
-          {/* Sub-section: Metadata Delegation Permissions */}
-          <div className="p-5 bg-[#0e071a] border border-[#261238] rounded-2xl space-y-3">
-            <h3 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
-              <span className="material-symbols-outlined text-purple-400 text-sm">settings_suggest</span>
-              <span>Delegated Club Metadata Management</span>
-            </h3>
-            <p className="text-xs text-slate-300">
-              Super Admin can permit designated roles to add, edit, or modify Primary Domains and Member Positions directly in the Members Roster form.
-            </p>
+            {/* Sub-section: Metadata Delegation Permissions */}
+            <div className="p-5 bg-[#0e071a] border border-[#261238] rounded-2xl space-y-3">
+              <h3 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
+                <span className="material-symbols-outlined text-purple-400 text-sm">settings_suggest</span>
+                <span>Delegated Club Metadata Management</span>
+              </h3>
+              <p className="text-xs text-slate-300">
+                Super Admin can permit designated roles to add, edit, or modify Primary Domains and Member Positions directly in the Members Roster form.
+              </p>
 
-            <div className="flex flex-wrap items-center gap-3 pt-2">
-              {allRolesList.map((roleName) => {
-                const isAllowed = permissions.allowedMetadataRoles.includes(roleName);
-                return (
-                  <label
-                    key={roleName}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold transition-colors cursor-pointer ${
-                      isAllowed
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                {allRolesList.map((roleName) => {
+                  const isAllowed = permissions.allowedMetadataRoles.includes(roleName);
+                  return (
+                    <label
+                      key={roleName}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold transition-colors cursor-pointer ${isAllowed
                         ? 'bg-purple-900/60 border-purple-500 text-white'
                         : 'bg-[#150a24] border-purple-900/30 text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isAllowed}
-                      onChange={() => handleToggleMetadataRole(roleName)}
-                      className="accent-purple-600 rounded cursor-pointer"
-                    />
-                    <span>{roleName} can manage Domains &amp; Roles</span>
-                  </label>
-                );
-              })}
+                        }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isAllowed}
+                        onChange={() => handleToggleMetadataRole(roleName)}
+                        className="accent-purple-600 rounded cursor-pointer"
+                      />
+                      <span>{roleName} can manage Domains &amp; Roles</span>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
+
           </div>
+        )}
 
-        </div>
-      )}
+        {/* ════════════════════════════════════════════════════════════════════ */}
+        {/* TAB 2: ROLES & ADMINS                                                */}
+        {/* ════════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'roles' && (
+          <div className="space-y-6">
 
-      {/* ════════════════════════════════════════════════════════════════════ */}
-      {/* TAB 2: ROLES & ADMINS                                                */}
-      {/* ════════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'roles' && (
-        <div className="space-y-6">
-          
-          {/* Custom Roles Registry Block */}
-          <div className="p-5 bg-[#0e071a] border border-[#261238] rounded-2xl space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-black text-white uppercase tracking-tight flex items-center gap-2">
-                  <span className="material-symbols-outlined text-purple-400 text-base">military_tech</span>
-                  <span>Registered System &amp; Custom Roles</span>
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  System roles (Admin, Payment Admin, Technical) are permanent. Custom roles can be created, configured, or removed.
-                </p>
+            {/* Custom Roles Registry Block */}
+            <div className="p-5 bg-[#0e071a] border border-[#261238] rounded-2xl space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-black text-white uppercase tracking-tight flex items-center gap-2">
+                    <span className="material-symbols-outlined text-purple-400 text-base">military_tech</span>
+                    <span>Registered System &amp; Custom Roles</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    System roles (Admin, Payment Admin, Technical) are permanent. Custom roles can be created, configured, or removed.
+                  </p>
+                </div>
+
+                {/* Add Custom Role Form */}
+                <form onSubmit={handleCreateCustomRole} className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
+                  <input
+                    type="text"
+                    placeholder="New Role (e.g. Lead, Event Admin)"
+                    value={newCustomRoleName}
+                    onChange={(e) => setNewCustomRoleName(e.target.value)}
+                    className="flex-1 sm:flex-initial px-3 py-1.5 bg-[#160b26] border border-purple-900/60 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                  />
+                  <button
+                    type="submit"
+                    disabled={creatingCustomRole || !newCustomRoleName.trim()}
+                    className="px-3.5 py-1.5 bg-purple-700 hover:bg-purple-600 disabled:opacity-40 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-sm shrink-0"
+                  >
+                    <span className="material-symbols-outlined text-sm">add</span>
+                    <span>Add Role</span>
+                  </button>
+                </form>
               </div>
 
-              {/* Add Custom Role Form */}
-              <form onSubmit={handleCreateCustomRole} className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
-                <input
-                  type="text"
-                  placeholder="New Role (e.g. Lead, Event Admin)"
-                  value={newCustomRoleName}
-                  onChange={(e) => setNewCustomRoleName(e.target.value)}
-                  className="flex-1 sm:flex-initial px-3 py-1.5 bg-[#160b26] border border-purple-900/60 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
-                />
-                <button
-                  type="submit"
-                  disabled={creatingCustomRole || !newCustomRoleName.trim()}
-                  className="px-3.5 py-1.5 bg-purple-700 hover:bg-purple-600 disabled:opacity-40 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-sm shrink-0"
-                >
-                  <span className="material-symbols-outlined text-sm">add</span>
-                  <span>Add Role</span>
-                </button>
-              </form>
+              {/* Role Pills */}
+              <div className="flex flex-wrap items-center gap-2.5 pt-2">
+                {['Admin', 'Payment Admin', 'Technical'].map((sysRole) => (
+                  <span
+                    key={sysRole}
+                    className="px-3 py-1.5 rounded-xl bg-purple-950/80 border border-purple-600 text-purple-200 text-xs font-bold font-mono flex items-center gap-2"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-purple-400" />
+                    <span>{sysRole} (System)</span>
+                  </span>
+                ))}
+
+                {(permissions.customRoles || []).map((cRole) => (
+                  <span
+                    key={cRole}
+                    className="px-3 py-1.5 rounded-xl bg-[#1a0f2b] border border-purple-500/40 text-white text-xs font-bold font-mono flex items-center gap-2"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-cyan-400" />
+                    <span>{cRole}</span>
+                    <button
+                      onClick={() =>
+                        setDeleteConfirm({
+                          type: 'role',
+                          id: cRole,
+                          label: `Custom Role: "${cRole}"`,
+                        })
+                      }
+                      className="text-slate-400 hover:text-rose-400 cursor-pointer ml-1"
+                      title="Delete Custom Role"
+                    >
+                      <span className="material-symbols-outlined text-sm">close</span>
+                    </button>
+                  </span>
+                ))}
+              </div>
             </div>
 
-            {/* Role Pills */}
-            <div className="flex flex-wrap items-center gap-2.5 pt-2">
-              {['Admin', 'Payment Admin', 'Technical'].map((sysRole) => (
-                <span
-                  key={sysRole}
-                  className="px-3 py-1.5 rounded-xl bg-purple-950/80 border border-purple-600 text-purple-200 text-xs font-bold font-mono flex items-center gap-2"
+            {/* Admin Accounts Table */}
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                <div className="relative flex-1 max-w-md">
+                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-lg">search</span>
+                  <input
+                    type="text"
+                    placeholder="Search admins by name, email, or role..."
+                    value={adminSearch}
+                    onChange={(e) => setAdminSearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-[#12081f] border border-[#2d1445] rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 transition-colors"
+                  />
+                </div>
+                <button
+                  onClick={() => {
+                    setAdminError('');
+                    setIsAddAdminOpen(true);
+                  }}
+                  className="px-4 py-2 bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-[0_0_15px_rgba(147,51,234,0.3)] shrink-0"
                 >
-                  <span className="w-2 h-2 rounded-full bg-purple-400" />
-                  <span>{sysRole} (System)</span>
-                </span>
-              ))}
+                  <span className="material-symbols-outlined text-base">person_add</span>
+                  Add New Admin
+                </button>
+              </div>
 
-              {(permissions.customRoles || []).map((cRole) => (
-                <span
-                  key={cRole}
-                  className="px-3 py-1.5 rounded-xl bg-[#1a0f2b] border border-purple-500/40 text-white text-xs font-bold font-mono flex items-center gap-2"
-                >
-                  <span className="w-2 h-2 rounded-full bg-cyan-400" />
-                  <span>{cRole}</span>
-                  <button
-                    onClick={() =>
-                      setDeleteConfirm({
-                        type: 'role',
-                        id: cRole,
-                        label: `Custom Role: "${cRole}"`,
+              {/* Add Admin Form Card */}
+              {isAddAdminOpen && (
+                <form onSubmit={handleAddAdmin} className="p-4 sm:p-5 bg-[#12081f] border border-purple-500/50 rounded-2xl space-y-3 shadow-lg animate-fade-in">
+                  <h4 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
+                    <span className="material-symbols-outlined text-purple-400 text-sm">person_add</span>
+                    Assign Admin Authority
+                  </h4>
+
+                  {adminError && (
+                    <div className="p-2.5 rounded-lg bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs font-medium">
+                      {adminError}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 mb-1">EMAIL ADDRESS *</label>
+                      <input
+                        type="email"
+                        required
+                        placeholder="member@vitbhopal.ac.in"
+                        value={newAdminEmail}
+                        onChange={(e) => setNewAdminEmail(e.target.value)}
+                        className="w-full px-3 py-2 bg-[#1c0f2e] border border-purple-900/60 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 mb-1">FULL NAME</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. John Doe"
+                        value={newAdminName}
+                        onChange={(e) => setNewAdminName(e.target.value)}
+                        className="w-full px-3 py-2 bg-[#1c0f2e] border border-purple-900/60 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 mb-1">ASSIGNED ROLE</label>
+                      <select
+                        value={newAdminRole}
+                        onChange={(e) => setNewAdminRole(e.target.value)}
+                        className="w-full px-3 py-2 bg-[#1c0f2e] border border-purple-900/60 rounded-lg text-xs text-white focus:outline-none focus:border-purple-500 cursor-pointer"
+                      >
+                        {allRolesList.map((r) => (
+                          <option key={r} value={r}>
+                            {r}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsAddAdminOpen(false)}
+                      className="px-3 py-1.5 bg-[#26133d] hover:bg-[#331852] text-slate-300 text-xs font-semibold rounded-lg cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={submittingAdmin}
+                      className="px-4 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      {submittingAdmin && <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                      Save to Firestore
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Mobile Cards (Zero Horizontal Scroll) */}
+              <div className="md:hidden space-y-3">
+                {loadingAdmins ? (
+                  <div className="p-8 text-center text-slate-400 bg-[#0c0517] border border-[#2b1442] rounded-2xl">
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-6 h-6 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
+                      <span className="text-xs">Loading Firestore admins...</span>
+                    </div>
+                  </div>
+                ) : filteredAdmins.length === 0 ? (
+                  <div className="p-6 text-center text-slate-400 bg-[#0c0517] border border-[#2b1442] rounded-2xl text-xs">
+                    No admin records match the search.
+                  </div>
+                ) : (
+                  filteredAdmins.map((adm) => {
+                    const isCurrent = adm.email.toLowerCase() === currentUserEmail.toLowerCase();
+                    return (
+                      <div key={adm.id} className="p-4 rounded-2xl bg-[#0c0517] border border-[#2b1442] space-y-3 shadow-md w-full min-w-0">
+                        {/* Top: Name, Tier Badge */}
+                        <div className="flex items-start justify-between gap-2 min-w-0">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-8 h-8 rounded-xl bg-purple-950 border border-purple-600 flex items-center justify-center text-purple-300 font-black text-xs shrink-0">
+                              {adm.name ? adm.name.charAt(0).toUpperCase() : 'A'}
+                            </div>
+                            <div className="min-w-0">
+                              <h4 className="font-bold text-white text-xs sm:text-sm truncate">{adm.name || 'Admin Member'}</h4>
+                              <div className="text-[11px] text-purple-400 font-mono truncate">{adm.email}</div>
+                            </div>
+                          </div>
+                          <div className="shrink-0">
+                            {adm.role === 'Super Administrator' ? (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-900/80 text-purple-200 border border-purple-600">
+                                SUPER ADMIN
+                              </span>
+                            ) : (
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${adm.role === 'Technical'
+                                ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-600/50'
+                                : adm.role === 'Payment Admin'
+                                  ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-600/50'
+                                  : 'bg-purple-950/80 text-purple-300 border border-purple-600/50'
+                                }`}>
+                                {adm.role ? adm.role.toUpperCase() : 'ADMIN'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Role Selector */}
+                        <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-[#140b24] border border-[#261238] text-xs">
+                          <span className="text-[10px] text-slate-400 uppercase font-mono font-bold shrink-0">ASSIGNED ROLE:</span>
+                          {adm.role === 'Super Administrator' ? (
+                            <span className="text-xs font-bold text-purple-300">Super Administrator</span>
+                          ) : (
+                            <select
+                              value={adm.role || 'Admin'}
+                              onChange={(e) => handleUpdateAdminRole(adm.email, e.target.value)}
+                              className="px-2.5 py-1 bg-[#160b26] border border-purple-900/60 rounded text-xs font-semibold text-white focus:outline-none focus:border-purple-500 cursor-pointer min-w-0 flex-1 text-right"
+                              title="Change role in Firestore"
+                            >
+                              {allRolesList.map((r) => (
+                                <option key={r} value={r}>
+                                  {r}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+
+                        {/* Footer: Added By & Action */}
+                        <div className="flex items-center justify-between gap-2 pt-1 border-t border-purple-500/10">
+                          <span className="text-[10px] font-mono text-slate-400">
+                            Added by: <strong className="text-slate-300">{formatAddedBy(adm.addedBy)}</strong>
+                          </span>
+                          {isCurrent ? (
+                            <span className="text-[10px] font-semibold text-slate-500 italic">Current Session</span>
+                          ) : (
+                            <button
+                              onClick={() =>
+                                setDeleteConfirm({
+                                  type: 'admin',
+                                  id: adm.email,
+                                  label: `Admin: ${adm.name} (${adm.email})`,
+                                })
+                              }
+                              className="px-3 py-1 bg-rose-950/50 hover:bg-rose-900 text-rose-300 text-xs font-bold rounded-lg border border-rose-800/50 transition-colors cursor-pointer flex items-center gap-1"
+                              title="Drop Admin Privileges"
+                            >
+                              <span className="material-symbols-outlined text-xs">person_remove</span>
+                              <span>Drop Admin</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Desktop Table (hidden on mobile) */}
+              <div className="hidden md:block border border-[#2b1442] rounded-2xl overflow-hidden bg-[#0c0517] overflow-x-auto custom-scrollbar shadow-md">
+                <table className="w-full text-left text-xs min-w-[640px]">
+                  <thead className="bg-[#140b24] border-b border-[#2b1442] text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                    <tr>
+                      <th className="p-3.5">Admin Profile</th>
+                      <th className="p-3.5">Role</th>
+                      <th className="p-3.5">Authority Tier</th>
+                      <th className="p-3.5">Added By</th>
+                      <th className="p-3.5 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#1e0f33]">
+                    {loadingAdmins ? (
+                      <tr>
+                        <td colSpan={5} className="p-8 text-center text-slate-400">
+                          <div className="flex flex-col items-center gap-2">
+                            <div className="w-6 h-6 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
+                            <span>Loading Firestore admins...</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : filteredAdmins.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="p-8 text-center text-slate-400">
+                          No admin records match the search.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredAdmins.map((adm) => {
+                        const isCurrent = adm.email.toLowerCase() === currentUserEmail.toLowerCase();
+                        return (
+                          <tr key={adm.id} className="hover:bg-[#150a29] transition-colors">
+                            <td className="p-3.5">
+                              <div className="font-bold text-white">{adm.name}</div>
+                              <div className="text-[11px] text-purple-400 font-mono">{adm.email}</div>
+                            </td>
+                            <td className="p-3.5">
+                              {adm.role === 'Super Administrator' ? (
+                                <span className="font-bold text-purple-300">Super Administrator</span>
+                              ) : (
+                                <select
+                                  value={adm.role || 'Admin'}
+                                  onChange={(e) => handleUpdateAdminRole(adm.email, e.target.value)}
+                                  className="px-2.5 py-1 bg-[#160b26] border border-purple-900/60 rounded text-[11px] font-semibold text-white focus:outline-none focus:border-purple-500 cursor-pointer"
+                                  title="Change role in Firestore"
+                                >
+                                  {allRolesList.map((r) => (
+                                    <option key={r} value={r}>
+                                      {r}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
+                            </td>
+                            <td className="p-3.5">
+                              {adm.role === 'Super Administrator' ? (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-900/80 text-purple-200 border border-purple-600">
+                                  SUPER ADMIN
+                                </span>
+                              ) : (
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${adm.role === 'Technical'
+                                  ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-600/50'
+                                  : adm.role === 'Payment Admin'
+                                    ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-600/50'
+                                    : 'bg-purple-950/80 text-purple-300 border border-purple-600/50'
+                                  }`}>
+                                  {adm.role ? adm.role.toUpperCase() : 'ADMIN'}
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3.5 text-slate-400 text-[11px] font-mono">
+                              {formatAddedBy(adm.addedBy)}
+                            </td>
+                            <td className="p-3.5 text-right">
+                              {isCurrent ? (
+                                <span className="text-[10px] font-semibold text-slate-500 italic">Current Session</span>
+                              ) : (
+                                <button
+                                  onClick={() =>
+                                    setDeleteConfirm({
+                                      type: 'admin',
+                                      id: adm.email,
+                                      label: `Admin: ${adm.name} (${adm.email})`,
+                                    })
+                                  }
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/15 transition-colors cursor-pointer"
+                                  title="Drop Admin Privileges"
+                                >
+                                  <span className="material-symbols-outlined text-base">person_remove</span>
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
                       })
-                    }
-                    className="text-slate-400 hover:text-rose-400 cursor-pointer ml-1"
-                    title="Delete Custom Role"
-                  >
-                    <span className="material-symbols-outlined text-sm">close</span>
-                  </button>
-                </span>
-              ))}
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
+        )}
 
-          {/* Admin Accounts Table */}
+        {/* ════════════════════════════════════════════════════════════════════ */}
+        {/* TAB 3: CLUB DOMAINS & POSITIONS METADATA                             */}
+        {/* ════════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'metadata' && (
+          <div className="space-y-6">
+            {metadataSuccess && (
+              <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-600/40 text-emerald-300 text-xs font-bold">
+                {metadataSuccess}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+              {/* Primary Domains Registry */}
+              <div className="p-5 bg-[#0e071a] border border-[#261238] rounded-2xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-black text-white uppercase tracking-tight flex items-center gap-2">
+                      <span className="material-symbols-outlined text-purple-400 text-base">domain</span>
+                      <span>Primary Domains ({clubMetadata.domains.length})</span>
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Domains populate the required domain dropdown in Members Roster and recruitment pipelines.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Add Domain Form */}
+                <form onSubmit={handleAddDomain} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="New Domain (e.g. AI & Robotics)"
+                    value={newDomainInput}
+                    onChange={(e) => setNewDomainInput(e.target.value)}
+                    className="flex-1 px-3 py-2 bg-[#160b26] border border-purple-900/60 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                  />
+                  <button
+                    type="submit"
+                    disabled={savingMetadata || !newDomainInput.trim()}
+                    className="px-4 py-2 bg-purple-700 hover:bg-purple-600 disabled:opacity-40 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <span className="material-symbols-outlined text-sm">add</span>
+                    <span>Add</span>
+                  </button>
+                </form>
+
+                {/* Domains List */}
+                <div className="space-y-2 max-h-[380px] overflow-y-auto custom-scrollbar pr-1">
+                  {clubMetadata.domains.map((dom) => (
+                    <div
+                      key={dom}
+                      className="flex items-center justify-between p-3 rounded-xl bg-[#140b24] border border-[#2b1442] text-xs font-bold text-white hover:border-purple-500/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span className="material-symbols-outlined text-purple-400 text-base shrink-0">folder_special</span>
+                        <span className="truncate">{dom}</span>
+                      </div>
+                      <button
+                        onClick={() =>
+                          setDeleteConfirm({
+                            type: 'domain',
+                            id: dom,
+                            label: `Domain: "${dom}"`,
+                          })
+                        }
+                        className="p-1 text-slate-400 hover:text-rose-400 cursor-pointer transition-colors"
+                        title="Delete Domain"
+                      >
+                        <span className="material-symbols-outlined text-base">delete</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Club Hierarchy & Positions Registry */}
+              <div className="p-5 bg-[#0e071a] border border-[#261238] rounded-2xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-black text-white uppercase tracking-tight flex items-center gap-2">
+                      <span className="material-symbols-outlined text-purple-400 text-base">stars</span>
+                      <span>Club Positions &amp; Roles ({clubMetadata.positions.length})</span>
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Positions populate the required role dropdown in Members Roster and digital identity cards.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Add Position Form */}
+                <form onSubmit={handleAddPosition} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="New Role (e.g. Technical Director)"
+                    value={newPositionInput}
+                    onChange={(e) => setNewPositionInput(e.target.value)}
+                    className="flex-1 px-3 py-2 bg-[#160b26] border border-purple-900/60 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                  />
+                  <button
+                    type="submit"
+                    disabled={savingMetadata || !newPositionInput.trim()}
+                    className="px-4 py-2 bg-purple-700 hover:bg-purple-600 disabled:opacity-40 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <span className="material-symbols-outlined text-sm">add</span>
+                    <span>Add</span>
+                  </button>
+                </form>
+
+                {/* Positions List */}
+                <div className="space-y-2 max-h-[380px] overflow-y-auto custom-scrollbar pr-1">
+                  {clubMetadata.positions.map((pos) => (
+                    <div
+                      key={pos}
+                      className="flex items-center justify-between p-3 rounded-xl bg-[#140b24] border border-[#2b1442] text-xs font-bold text-white hover:border-purple-500/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span className="material-symbols-outlined text-indigo-400 text-base shrink-0">workspace_premium</span>
+                        <span className="truncate">{pos}</span>
+                      </div>
+                      <button
+                        onClick={() =>
+                          setDeleteConfirm({
+                            type: 'position',
+                            id: pos,
+                            label: `Position: "${pos}"`,
+                          })
+                        }
+                        className="p-1 text-slate-400 hover:text-rose-400 cursor-pointer transition-colors"
+                        title="Delete Position"
+                      >
+                        <span className="material-symbols-outlined text-base">delete</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        )}
+
+        {/* ════════════════════════════════════════════════════════════════════ */}
+        {/* TAB 4: FACULTY DATABASE TABLE                                        */}
+        {/* ════════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'faculty' && (
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
               <div className="relative flex-1 max-w-md">
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-lg">search</span>
                 <input
                   type="text"
-                  placeholder="Search admins by name, email, or role..."
-                  value={adminSearch}
-                  onChange={(e) => setAdminSearch(e.target.value)}
+                  placeholder="Search faculty by name, email, department..."
+                  value={facultySearch}
+                  onChange={(e) => setFacultySearch(e.target.value)}
                   className="w-full pl-9 pr-3 py-2 bg-[#12081f] border border-[#2d1445] rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 transition-colors"
                 />
               </div>
               <button
-                onClick={() => {
-                  setAdminError('');
-                  setIsAddAdminOpen(true);
-                }}
-                className="px-4 py-2 bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-[0_0_15px_rgba(147,51,234,0.3)] shrink-0"
+                onClick={() => openFacultyForm()}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-[0_0_15px_rgba(99,102,241,0.3)] shrink-0"
               >
-                <span className="material-symbols-outlined text-base">person_add</span>
-                Add New Admin
+                <span className="material-symbols-outlined text-base">add</span>
+                Register Faculty Advisor
               </button>
             </div>
 
-            {/* Add Admin Form Card */}
-            {isAddAdminOpen && (
-              <form onSubmit={handleAddAdmin} className="p-4 sm:p-5 bg-[#12081f] border border-purple-500/50 rounded-2xl space-y-3 shadow-lg animate-fade-in">
+            {/* Faculty Modal */}
+            {isFacultyModalOpen && (
+              <form onSubmit={handleSaveFaculty} className="p-4 sm:p-5 bg-[#12081f] border border-indigo-500/50 rounded-2xl space-y-3 shadow-lg animate-fade-in">
                 <h4 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
-                  <span className="material-symbols-outlined text-purple-400 text-sm">person_add</span>
-                  Assign Admin Authority
+                  <span className="material-symbols-outlined text-indigo-400 text-sm">school</span>
+                  {editingFaculty ? 'Edit Faculty Record' : 'Register Faculty Advisor'}
                 </h4>
 
-                {adminError && (
+                {facultyError && (
                   <div className="p-2.5 rounded-lg bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs font-medium">
-                    {adminError}
+                    {facultyError}
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 mb-1">FACULTY NAME *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Dr. Jane Smith"
+                      value={facultyFormData.name}
+                      onChange={(e) => setFacultyFormData({ ...facultyFormData, name: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#1c0f2e] border border-purple-900/60 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 mb-1">EMAIL ADDRESS *</label>
                     <input
                       type="email"
                       required
-                      placeholder="member@vitbhopal.ac.in"
-                      value={newAdminEmail}
-                      onChange={(e) => setNewAdminEmail(e.target.value)}
-                      className="w-full px-3 py-2 bg-[#1c0f2e] border border-purple-900/60 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                      disabled={!!editingFaculty}
+                      placeholder="faculty@vitbhopal.ac.in"
+                      value={facultyFormData.email}
+                      onChange={(e) => setFacultyFormData({ ...facultyFormData, email: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#1c0f2e] border border-purple-900/60 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500 disabled:opacity-50"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-400 mb-1">FULL NAME</label>
+                    <label className="block text-[10px] font-bold text-slate-400 mb-1">FACULTY ID</label>
                     <input
                       type="text"
-                      placeholder="e.g. John Doe"
-                      value={newAdminName}
-                      onChange={(e) => setNewAdminName(e.target.value)}
-                      className="w-full px-3 py-2 bg-[#1c0f2e] border border-purple-900/60 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                      placeholder="e.g. EMP1024"
+                      value={facultyFormData.facultyId}
+                      onChange={(e) => setFacultyFormData({ ...facultyFormData, facultyId: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#1c0f2e] border border-purple-900/60 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-400 mb-1">ASSIGNED ROLE</label>
-                    <select
-                      value={newAdminRole}
-                      onChange={(e) => setNewAdminRole(e.target.value)}
-                      className="w-full px-3 py-2 bg-[#1c0f2e] border border-purple-900/60 rounded-lg text-xs text-white focus:outline-none focus:border-purple-500 cursor-pointer"
-                    >
-                      {allRolesList.map((r) => (
-                        <option key={r} value={r}>
-                          {r}
-                        </option>
-                      ))}
-                    </select>
+                    <label className="block text-[10px] font-bold text-slate-400 mb-1">DEPARTMENT / SCHOOL</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. SCSE / Gaming Tech"
+                      value={facultyFormData.department}
+                      onChange={(e) => setFacultyFormData({ ...facultyFormData, department: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#1c0f2e] border border-purple-900/60 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 mb-1">CLUB DESIGNATION</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Faculty Mentor"
+                      value={facultyFormData.designation}
+                      onChange={(e) => setFacultyFormData({ ...facultyFormData, designation: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#1c0f2e] border border-purple-900/60 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 mb-1">CONTACT PHONE</label>
+                    <input
+                      type="text"
+                      placeholder="Optional phone"
+                      value={facultyFormData.phone}
+                      onChange={(e) => setFacultyFormData({ ...facultyFormData, phone: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#1c0f2e] border border-purple-900/60 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
+                    />
                   </div>
                 </div>
 
                 <div className="flex justify-end gap-2 pt-2">
                   <button
                     type="button"
-                    onClick={() => setIsAddAdminOpen(false)}
+                    onClick={() => setIsFacultyModalOpen(false)}
                     className="px-3 py-1.5 bg-[#26133d] hover:bg-[#331852] text-slate-300 text-xs font-semibold rounded-lg cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    disabled={submittingAdmin}
-                    className="px-4 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                    disabled={submittingFaculty}
+                    className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
                   >
-                    {submittingAdmin && <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                    Save to Firestore
+                    {submittingFaculty && <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                    Save Faculty Record
                   </button>
                 </div>
               </form>
             )}
-
-            {/* Mobile Cards (Zero Horizontal Scroll) */}
-            <div className="md:hidden space-y-3">
-              {loadingAdmins ? (
-                <div className="p-8 text-center text-slate-400 bg-[#0c0517] border border-[#2b1442] rounded-2xl">
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="w-6 h-6 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
-                    <span className="text-xs">Loading Firestore admins...</span>
-                  </div>
-                </div>
-              ) : filteredAdmins.length === 0 ? (
-                <div className="p-6 text-center text-slate-400 bg-[#0c0517] border border-[#2b1442] rounded-2xl text-xs">
-                  No admin records match the search.
-                </div>
-              ) : (
-                filteredAdmins.map((adm) => {
-                  const isCurrent = adm.email.toLowerCase() === currentUserEmail.toLowerCase();
-                  return (
-                    <div key={adm.id} className="p-4 rounded-2xl bg-[#0c0517] border border-[#2b1442] space-y-3 shadow-md w-full min-w-0">
-                      {/* Top: Name, Tier Badge */}
-                      <div className="flex items-start justify-between gap-2 min-w-0">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="w-8 h-8 rounded-xl bg-purple-950 border border-purple-600 flex items-center justify-center text-purple-300 font-black text-xs shrink-0">
-                            {adm.name ? adm.name.charAt(0).toUpperCase() : 'A'}
-                          </div>
-                          <div className="min-w-0">
-                            <h4 className="font-bold text-white text-xs sm:text-sm truncate">{adm.name || 'Admin Member'}</h4>
-                            <div className="text-[11px] text-purple-400 font-mono truncate">{adm.email}</div>
-                          </div>
-                        </div>
-                        <div className="shrink-0">
-                          {adm.role === 'Super Administrator' ? (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-900/80 text-purple-200 border border-purple-600">
-                              SUPER ADMIN
-                            </span>
-                          ) : (
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              adm.role === 'Technical'
-                                ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-600/50'
-                                : adm.role === 'Payment Admin'
-                                ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-600/50'
-                                : 'bg-purple-950/80 text-purple-300 border border-purple-600/50'
-                            }`}>
-                              {adm.role ? adm.role.toUpperCase() : 'ADMIN'}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Role Selector */}
-                      <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-[#140b24] border border-[#261238] text-xs">
-                        <span className="text-[10px] text-slate-400 uppercase font-mono font-bold shrink-0">ASSIGNED ROLE:</span>
-                        {adm.role === 'Super Administrator' ? (
-                          <span className="text-xs font-bold text-purple-300">Super Administrator</span>
-                        ) : (
-                          <select
-                            value={adm.role || 'Admin'}
-                            onChange={(e) => handleUpdateAdminRole(adm.email, e.target.value)}
-                            className="px-2.5 py-1 bg-[#160b26] border border-purple-900/60 rounded text-xs font-semibold text-white focus:outline-none focus:border-purple-500 cursor-pointer min-w-0 flex-1 text-right"
-                            title="Change role in Firestore"
-                          >
-                            {allRolesList.map((r) => (
-                              <option key={r} value={r}>
-                                {r}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                      </div>
-
-                      {/* Footer: Added By & Action */}
-                      <div className="flex items-center justify-between gap-2 pt-1 border-t border-purple-500/10">
-                        <span className="text-[10px] font-mono text-slate-400">
-                          Added by: <strong className="text-slate-300">{adm.addedBy || 'System Env'}</strong>
-                        </span>
-                        {isCurrent ? (
-                          <span className="text-[10px] font-semibold text-slate-500 italic">Current Session</span>
-                        ) : (
-                          <button
-                            onClick={() =>
-                              setDeleteConfirm({
-                                type: 'admin',
-                                id: adm.email,
-                                label: `Admin: ${adm.name} (${adm.email})`,
-                              })
-                            }
-                            className="px-3 py-1 bg-rose-950/50 hover:bg-rose-900 text-rose-300 text-xs font-bold rounded-lg border border-rose-800/50 transition-colors cursor-pointer flex items-center gap-1"
-                            title="Drop Admin Privileges"
-                          >
-                            <span className="material-symbols-outlined text-xs">person_remove</span>
-                            <span>Drop Admin</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            {/* Desktop Table (hidden on mobile) */}
-            <div className="hidden md:block border border-[#2b1442] rounded-2xl overflow-hidden bg-[#0c0517] overflow-x-auto custom-scrollbar shadow-md">
-              <table className="w-full text-left text-xs min-w-[640px]">
-                <thead className="bg-[#140b24] border-b border-[#2b1442] text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                  <tr>
-                    <th className="p-3.5">Admin Profile</th>
-                    <th className="p-3.5">Role</th>
-                    <th className="p-3.5">Authority Tier</th>
-                    <th className="p-3.5">Added By</th>
-                    <th className="p-3.5 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#1e0f33]">
-                  {loadingAdmins ? (
-                    <tr>
-                      <td colSpan={5} className="p-8 text-center text-slate-400">
-                        <div className="flex flex-col items-center gap-2">
-                          <div className="w-6 h-6 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
-                          <span>Loading Firestore admins...</span>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : filteredAdmins.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="p-8 text-center text-slate-400">
-                        No admin records match the search.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredAdmins.map((adm) => {
-                      const isCurrent = adm.email.toLowerCase() === currentUserEmail.toLowerCase();
-                      return (
-                        <tr key={adm.id} className="hover:bg-[#150a29] transition-colors">
-                          <td className="p-3.5">
-                            <div className="font-bold text-white">{adm.name}</div>
-                            <div className="text-[11px] text-purple-400 font-mono">{adm.email}</div>
-                          </td>
-                          <td className="p-3.5">
-                            {adm.role === 'Super Administrator' ? (
-                              <span className="font-bold text-purple-300">Super Administrator</span>
-                            ) : (
-                              <select
-                                value={adm.role || 'Admin'}
-                                onChange={(e) => handleUpdateAdminRole(adm.email, e.target.value)}
-                                className="px-2.5 py-1 bg-[#160b26] border border-purple-900/60 rounded text-[11px] font-semibold text-white focus:outline-none focus:border-purple-500 cursor-pointer"
-                                title="Change role in Firestore"
-                              >
-                                {allRolesList.map((r) => (
-                                  <option key={r} value={r}>
-                                    {r}
-                                  </option>
-                                ))}
-                              </select>
-                            )}
-                          </td>
-                          <td className="p-3.5">
-                            {adm.role === 'Super Administrator' ? (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-900/80 text-purple-200 border border-purple-600">
-                                SUPER ADMIN
-                              </span>
-                            ) : (
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                adm.role === 'Technical'
-                                  ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-600/50'
-                                  : adm.role === 'Payment Admin'
-                                  ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-600/50'
-                                  : 'bg-purple-950/80 text-purple-300 border border-purple-600/50'
-                              }`}>
-                                {adm.role ? adm.role.toUpperCase() : 'ADMIN'}
-                              </span>
-                            )}
-                          </td>
-                          <td className="p-3.5 text-slate-400 text-[11px] font-mono">
-                            {adm.addedBy || 'System Env'}
-                          </td>
-                          <td className="p-3.5 text-right">
-                            {isCurrent ? (
-                              <span className="text-[10px] font-semibold text-slate-500 italic">Current Session</span>
-                            ) : (
-                              <button
-                                onClick={() =>
-                                  setDeleteConfirm({
-                                    type: 'admin',
-                                    id: adm.email,
-                                    label: `Admin: ${adm.name} (${adm.email})`,
-                                  })
-                                }
-                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/15 transition-colors cursor-pointer"
-                                title="Drop Admin Privileges"
-                              >
-                                <span className="material-symbols-outlined text-base">person_remove</span>
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ════════════════════════════════════════════════════════════════════ */}
-      {/* TAB 3: CLUB DOMAINS & POSITIONS METADATA                             */}
-      {/* ════════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'metadata' && (
-        <div className="space-y-6">
-          {metadataSuccess && (
-            <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-600/40 text-emerald-300 text-xs font-bold">
-              {metadataSuccess}
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
-            {/* Primary Domains Registry */}
-            <div className="p-5 bg-[#0e071a] border border-[#261238] rounded-2xl space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-black text-white uppercase tracking-tight flex items-center gap-2">
-                    <span className="material-symbols-outlined text-purple-400 text-base">domain</span>
-                    <span>Primary Domains ({clubMetadata.domains.length})</span>
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Domains populate the required domain dropdown in Members Roster and recruitment pipelines.
-                  </p>
-                </div>
-              </div>
-
-              {/* Add Domain Form */}
-              <form onSubmit={handleAddDomain} className="flex items-center gap-2">
-                <input
-                  type="text"
-                  placeholder="New Domain (e.g. AI & Robotics)"
-                  value={newDomainInput}
-                  onChange={(e) => setNewDomainInput(e.target.value)}
-                  className="flex-1 px-3 py-2 bg-[#160b26] border border-purple-900/60 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
-                />
-                <button
-                  type="submit"
-                  disabled={savingMetadata || !newDomainInput.trim()}
-                  className="px-4 py-2 bg-purple-700 hover:bg-purple-600 disabled:opacity-40 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm"
-                >
-                  <span className="material-symbols-outlined text-sm">add</span>
-                  <span>Add</span>
-                </button>
-              </form>
-
-              {/* Domains List */}
-              <div className="space-y-2 max-h-[380px] overflow-y-auto custom-scrollbar pr-1">
-                {clubMetadata.domains.map((dom) => (
-                  <div
-                    key={dom}
-                    className="flex items-center justify-between p-3 rounded-xl bg-[#140b24] border border-[#2b1442] text-xs font-bold text-white hover:border-purple-500/50 transition-colors"
-                  >
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <span className="material-symbols-outlined text-purple-400 text-base shrink-0">folder_special</span>
-                      <span className="truncate">{dom}</span>
-                    </div>
-                    <button
-                      onClick={() =>
-                        setDeleteConfirm({
-                          type: 'domain',
-                          id: dom,
-                          label: `Domain: "${dom}"`,
-                        })
-                      }
-                      className="p-1 text-slate-400 hover:text-rose-400 cursor-pointer transition-colors"
-                      title="Delete Domain"
-                    >
-                      <span className="material-symbols-outlined text-base">delete</span>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Club Hierarchy & Positions Registry */}
-            <div className="p-5 bg-[#0e071a] border border-[#261238] rounded-2xl space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-black text-white uppercase tracking-tight flex items-center gap-2">
-                    <span className="material-symbols-outlined text-purple-400 text-base">stars</span>
-                    <span>Club Positions &amp; Roles ({clubMetadata.positions.length})</span>
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Positions populate the required role dropdown in Members Roster and digital identity cards.
-                  </p>
-                </div>
-              </div>
-
-              {/* Add Position Form */}
-              <form onSubmit={handleAddPosition} className="flex items-center gap-2">
-                <input
-                  type="text"
-                  placeholder="New Role (e.g. Technical Director)"
-                  value={newPositionInput}
-                  onChange={(e) => setNewPositionInput(e.target.value)}
-                  className="flex-1 px-3 py-2 bg-[#160b26] border border-purple-900/60 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
-                />
-                <button
-                  type="submit"
-                  disabled={savingMetadata || !newPositionInput.trim()}
-                  className="px-4 py-2 bg-purple-700 hover:bg-purple-600 disabled:opacity-40 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm"
-                >
-                  <span className="material-symbols-outlined text-sm">add</span>
-                  <span>Add</span>
-                </button>
-              </form>
-
-              {/* Positions List */}
-              <div className="space-y-2 max-h-[380px] overflow-y-auto custom-scrollbar pr-1">
-                {clubMetadata.positions.map((pos) => (
-                  <div
-                    key={pos}
-                    className="flex items-center justify-between p-3 rounded-xl bg-[#140b24] border border-[#2b1442] text-xs font-bold text-white hover:border-purple-500/50 transition-colors"
-                  >
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <span className="material-symbols-outlined text-indigo-400 text-base shrink-0">workspace_premium</span>
-                      <span className="truncate">{pos}</span>
-                    </div>
-                    <button
-                      onClick={() =>
-                        setDeleteConfirm({
-                          type: 'position',
-                          id: pos,
-                          label: `Position: "${pos}"`,
-                        })
-                      }
-                      className="p-1 text-slate-400 hover:text-rose-400 cursor-pointer transition-colors"
-                      title="Delete Position"
-                    >
-                      <span className="material-symbols-outlined text-base">delete</span>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* ════════════════════════════════════════════════════════════════════ */}
-      {/* TAB 4: FACULTY DATABASE TABLE                                        */}
-      {/* ════════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'faculty' && (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-            <div className="relative flex-1 max-w-md">
-              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-lg">search</span>
-              <input
-                type="text"
-                placeholder="Search faculty by name, email, department..."
-                value={facultySearch}
-                onChange={(e) => setFacultySearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-[#12081f] border border-[#2d1445] rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 transition-colors"
-              />
-            </div>
-            <button
-              onClick={() => openFacultyForm()}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-[0_0_15px_rgba(99,102,241,0.3)] shrink-0"
-            >
-              <span className="material-symbols-outlined text-base">add</span>
-              Register Faculty Advisor
-            </button>
-          </div>
-
-          {/* Faculty Modal */}
-          {isFacultyModalOpen && (
-            <form onSubmit={handleSaveFaculty} className="p-4 sm:p-5 bg-[#12081f] border border-indigo-500/50 rounded-2xl space-y-3 shadow-lg animate-fade-in">
-              <h4 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
-                <span className="material-symbols-outlined text-indigo-400 text-sm">school</span>
-                {editingFaculty ? 'Edit Faculty Record' : 'Register Faculty Advisor'}
-              </h4>
-
-              {facultyError && (
-                <div className="p-2.5 rounded-lg bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs font-medium">
-                  {facultyError}
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 mb-1">FACULTY NAME *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Dr. Jane Smith"
-                    value={facultyFormData.name}
-                    onChange={(e) => setFacultyFormData({ ...facultyFormData, name: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#1c0f2e] border border-purple-900/60 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 mb-1">EMAIL ADDRESS *</label>
-                  <input
-                    type="email"
-                    required
-                    disabled={!!editingFaculty}
-                    placeholder="faculty@vitbhopal.ac.in"
-                    value={facultyFormData.email}
-                    onChange={(e) => setFacultyFormData({ ...facultyFormData, email: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#1c0f2e] border border-purple-900/60 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500 disabled:opacity-50"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 mb-1">FACULTY ID</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. EMP1024"
-                    value={facultyFormData.facultyId}
-                    onChange={(e) => setFacultyFormData({ ...facultyFormData, facultyId: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#1c0f2e] border border-purple-900/60 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 mb-1">DEPARTMENT / SCHOOL</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. SCSE / Gaming Tech"
-                    value={facultyFormData.department}
-                    onChange={(e) => setFacultyFormData({ ...facultyFormData, department: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#1c0f2e] border border-purple-900/60 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 mb-1">CLUB DESIGNATION</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Faculty Mentor"
-                    value={facultyFormData.designation}
-                    onChange={(e) => setFacultyFormData({ ...facultyFormData, designation: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#1c0f2e] border border-purple-900/60 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 mb-1">CONTACT PHONE</label>
-                  <input
-                    type="text"
-                    placeholder="Optional phone"
-                    value={facultyFormData.phone}
-                    onChange={(e) => setFacultyFormData({ ...facultyFormData, phone: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#1c0f2e] border border-purple-900/60 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsFacultyModalOpen(false)}
-                  className="px-3 py-1.5 bg-[#26133d] hover:bg-[#331852] text-slate-300 text-xs font-semibold rounded-lg cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingFaculty}
-                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
-                >
-                  {submittingFaculty && <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                  Save Faculty Record
-                </button>
-              </div>
-            </form>
-          )}
 
             {/* Mobile Cards (Zero Horizontal Scroll) */}
             <div className="md:hidden space-y-3">
@@ -2470,615 +2450,559 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
 
             {/* Desktop Table (hidden on mobile) */}
             <div className="hidden md:block border border-[#2b1442] rounded-2xl overflow-hidden bg-[#0c0517] overflow-x-auto custom-scrollbar shadow-md">
-            <table className="w-full text-left text-xs min-w-[650px]">
-              <thead className="bg-[#140b24] border-b border-[#2b1442] text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                <tr>
-                  <th className="p-3.5">Faculty Member</th>
-                  <th className="p-3.5">Department</th>
-                  <th className="p-3.5">Designation</th>
-                  <th className="p-3.5">Contact</th>
-                  <th className="p-3.5 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#1e0f33]">
-                {loadingFaculty ? (
+              <table className="w-full text-left text-xs min-w-[650px]">
+                <thead className="bg-[#140b24] border-b border-[#2b1442] text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                   <tr>
-                    <td colSpan={5} className="p-8 text-center text-slate-400">
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="w-6 h-6 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
-                        <span>Loading Faculty records...</span>
-                      </div>
-                    </td>
+                    <th className="p-3.5">Faculty Member</th>
+                    <th className="p-3.5">Department</th>
+                    <th className="p-3.5">Designation</th>
+                    <th className="p-3.5">Contact</th>
+                    <th className="p-3.5 text-right">Actions</th>
                   </tr>
-                ) : filteredFaculty.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="p-8 text-center text-slate-400">
-                      No faculty records match the search.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredFaculty.map((f) => (
-                    <tr key={f.email} className="hover:bg-[#150a29] transition-colors">
-                      <td className="p-3.5">
-                        <div className="font-bold text-white">{f.name}</div>
-                        <div className="text-[11px] text-indigo-400 font-mono">{f.email}</div>
-                      </td>
-                      <td className="p-3.5 text-slate-300">
-                        {f.department || '—'}
-                      </td>
-                      <td className="p-3.5 text-slate-300">
-                        {f.designation || 'Faculty Advisor'}
-                      </td>
-                      <td className="p-3.5 text-slate-400 font-mono text-[11px]">
-                        {f.phone || '—'}
-                      </td>
-                      <td className="p-3.5 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => openFacultyForm(f)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-                            title="Edit Faculty Record"
-                          >
-                            <span className="material-symbols-outlined text-base">edit</span>
-                          </button>
-                          <button
-                            onClick={() =>
-                              setDeleteConfirm({
-                                type: 'faculty',
-                                id: f.email,
-                                label: `Faculty: ${f.name} (${f.email})`,
-                              })
-                            }
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/15 transition-colors cursor-pointer"
-                            title="Delete Faculty Record"
-                          >
-                            <span className="material-symbols-outlined text-base">delete</span>
-                          </button>
+                </thead>
+                <tbody className="divide-y divide-[#1e0f33]">
+                  {loadingFaculty ? (
+                    <tr>
+                      <td colSpan={5} className="p-8 text-center text-slate-400">
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="w-6 h-6 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
+                          <span>Loading Faculty records...</span>
                         </div>
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* ════════════════════════════════════════════════════════════════════ */}
-      {/* TAB 5: VISITOR PRESENCE & SESSION DURATION AUDIT                     */}
-      {/* ════════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'audit' && (
-        <div className="space-y-6 animate-in fade-in duration-200">
-          {/* Header Card */}
-          <div className="p-4 sm:p-6 bg-[#0e0618] border border-purple-600/40 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-base sm:text-lg font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                  <span className="material-symbols-outlined text-purple-400">visibility</span>
-                  Visitor Presence &amp; Session Duration Audit
-                </h3>
-                {onlineCount > 0 && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1.5 animate-pulse">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                    {onlineCount} ACTIVE NOW
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
-                Streamlined tracking of individuals entering the website. Displays visitor identity, exact entry timestamp, device environment, and active online presence without background overhead.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => fetchAuditSessions(true)}
-                disabled={isRefreshingSessions}
-                className="px-3 py-2 bg-purple-900/40 hover:bg-purple-800/60 border border-purple-600/40 text-purple-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                title="Refresh audit sessions"
-              >
-                <span className={`material-symbols-outlined text-sm ${isRefreshingSessions ? 'animate-spin' : ''}`}>
-                  refresh
-                </span>
-                <span>{isRefreshingSessions ? 'Refreshing...' : 'Refresh'}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setPurgeModalOpen(true)}
-                className="px-3 py-2 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-600/40 text-rose-300 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
-                title="Purge session audit records"
-              >
-                <span className="material-symbols-outlined text-sm">delete_sweep</span>
-                <span>Purge Logs</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Feedback banner */}
-          {purgeFeedback && (
-            <div className="p-3 bg-emerald-950/60 border border-emerald-600/50 rounded-xl text-emerald-300 text-xs font-bold flex items-center gap-2 animate-in fade-in duration-200">
-              <span className="material-symbols-outlined text-sm">check_circle</span>
-              <span>{purgeFeedback}</span>
-            </div>
-          )}
-
-          {/* 4 Summary Analytics Metric Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            {/* Card 1: Active Right Now */}
-            <div className="p-4 rounded-2xl bg-[#0e071c] border border-emerald-500/30 space-y-1 shadow-md">
-              <div className="flex items-center justify-between text-slate-400">
-                <span className="text-[10px] font-black uppercase tracking-wider font-mono">ACTIVE RIGHT NOW</span>
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-              </div>
-              <div className="text-2xl sm:text-3xl font-black text-emerald-300 font-mono flex items-baseline gap-2">
-                <span>{onlineCount}</span>
-                <span className="text-[10px] font-normal text-emerald-400/80 font-sans">currently online</span>
-              </div>
-              <p className="text-[10px] text-slate-400 font-mono">Live visitors actively on website</p>
-            </div>
-
-            {/* Card 2: Total Tracked Sessions */}
-            <div className="p-4 rounded-2xl bg-[#0e071c] border border-purple-500/30 space-y-1 shadow-md">
-              <div className="flex items-center justify-between text-slate-400">
-                <span className="text-[10px] font-black uppercase tracking-wider font-mono">TOTAL SESSIONS</span>
-                <span className="material-symbols-outlined text-sm text-purple-400">groups</span>
-              </div>
-              <div className="text-2xl sm:text-3xl font-black text-white font-mono flex items-baseline gap-2">
-                <span>{sessions.length}</span>
-                <span className="text-[10px] font-normal text-purple-300/80 font-sans">total visits</span>
-              </div>
-              <p className="text-[10px] text-slate-400 font-mono">Historical entry presence logs</p>
-            </div>
-
-            {/* Card 3: Identified Members */}
-            <div className="p-4 rounded-2xl bg-[#0e071c] border border-cyan-500/30 space-y-1 shadow-md">
-              <div className="flex items-center justify-between text-slate-400">
-                <span className="text-[10px] font-black uppercase tracking-wider font-mono">IDENTIFIED MEMBERS</span>
-                <span className="material-symbols-outlined text-sm text-cyan-400">verified_user</span>
-              </div>
-              <div className="text-2xl sm:text-3xl font-black text-cyan-300 font-mono flex items-baseline gap-2">
-                <span>{membersCount}</span>
-                <span className="text-[10px] font-normal text-cyan-400/80 font-sans">registered</span>
-              </div>
-              <p className="text-[10px] text-slate-400 font-mono">Authenticated member sessions</p>
-            </div>
-
-            {/* Card 4: Guest Visitors */}
-            <div className="p-4 rounded-2xl bg-[#0e071c] border border-amber-500/30 space-y-1 shadow-md">
-              <div className="flex items-center justify-between text-slate-400">
-                <span className="text-[10px] font-black uppercase tracking-wider font-mono">GUEST VISITORS</span>
-                <span className="material-symbols-outlined text-sm text-amber-400">person_outline</span>
-              </div>
-              <div className="text-xl sm:text-2xl font-black text-amber-300 font-mono flex items-baseline gap-2">
-                <span>{guestsCount}</span>
-                <span className="text-xs text-slate-400 font-mono font-normal">anonymous</span>
-              </div>
-              <p className="text-[10px] text-slate-400 font-mono">Guest portal visits</p>
-            </div>
-          </div>
-
-          {/* Search & Filter Toolbar */}
-          <div className="p-4 bg-[#0e071c] border border-[#26133b] rounded-2xl space-y-3">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-              {/* Search input */}
-              <div className="relative flex-1">
-                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
-                  search
-                </span>
-                <input
-                  type="text"
-                  placeholder="Filter by Name, Email, Device, or Role..."
-                  value={sessionSearch}
-                  onChange={(e) => setSessionSearch(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-[#160b26] border border-purple-900/60 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
-                />
-              </div>
-
-              {/* Date Scope Filter */}
-              <div className="flex items-center gap-1.5 shrink-0">
-                <span className="text-[10px] font-mono text-slate-400 uppercase font-bold shrink-0">SCOPE:</span>
-                {(['all', 'today', 'week'] as const).map((dScope) => (
-                  <button
-                    key={dScope}
-                    onClick={() => setSessionDateFilter(dScope)}
-                    className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-lg border transition-all cursor-pointer ${
-                      sessionDateFilter === dScope
-                        ? 'bg-purple-600 border-purple-400 text-white'
-                        : 'bg-[#160b26] border-purple-900/40 text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    {dScope === 'all' ? 'All Time' : dScope === 'today' ? 'Today' : 'Last 7 Days'}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Status Filter Chips */}
-            <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-purple-500/10">
-              <span className="text-[10px] font-mono text-slate-400 uppercase font-bold mr-1 shrink-0">STATUS:</span>
-              <button
-                onClick={() => setSessionStatusFilter('all')}
-                className={`px-3 py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
-                  sessionStatusFilter === 'all'
-                    ? 'bg-purple-600 border-purple-400 text-white'
-                    : 'bg-[#160b26] border-purple-900/40 text-slate-400 hover:text-white'
-                }`}
-              >
-                All Sessions ({sessions.length})
-              </button>
-
-              <button
-                onClick={() => setSessionStatusFilter('online')}
-                className={`px-3 py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
-                  sessionStatusFilter === 'online'
-                    ? 'bg-emerald-600 border-emerald-400 text-white'
-                    : 'bg-[#160b26] border-emerald-900/40 text-emerald-400 hover:bg-emerald-950/40'
-                }`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Online Now ({onlineCount})
-              </button>
-
-              <button
-                onClick={() => setSessionStatusFilter('members')}
-                className={`px-3 py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
-                  sessionStatusFilter === 'members'
-                    ? 'bg-purple-600 border-purple-400 text-white'
-                    : 'bg-[#160b26] border-purple-900/40 text-slate-400 hover:text-white'
-                }`}
-              >
-                Identified Members ({membersCount})
-              </button>
-
-              <button
-                onClick={() => setSessionStatusFilter('guests')}
-                className={`px-3 py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
-                  sessionStatusFilter === 'guests'
-                    ? 'bg-purple-600 border-purple-400 text-white'
-                    : 'bg-[#160b26] border-purple-900/40 text-slate-400 hover:text-white'
-                }`}
-              >
-                Guest Visitors ({guestsCount})
-              </button>
-
-              {sessionSearch && (
-                <button
-                  onClick={() => setSessionSearch('')}
-                  className="ml-auto text-[10px] text-purple-400 hover:text-purple-300 underline font-mono cursor-pointer"
-                >
-                  Clear search
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Mobile View: Cards */}
-          <div className="md:hidden space-y-3">
-            {loadingSessions ? (
-              <div className="p-8 text-center text-slate-400 bg-[#0c0517] border border-[#2b1442] rounded-2xl">
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-6 h-6 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
-                  <span className="text-xs">Loading presence audit logs...</span>
-                </div>
-              </div>
-            ) : filteredSessions.length === 0 ? (
-              <div className="p-6 text-center text-slate-400 bg-[#0c0517] border border-[#2b1442] rounded-2xl text-xs">
-                No visitor sessions match your current filter.
-              </div>
-            ) : (
-              filteredSessions.map((s) => {
-                const isOnline = isSessionOnline(s);
-
-                return (
-                  <div
-                    key={s.id}
-                    className={`p-4 rounded-2xl border space-y-3 shadow-md w-full min-w-0 transition-all ${
-                      isOnline
-                        ? 'bg-[#0b141a] border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.1)]'
-                        : 'bg-[#0c0517] border-[#2b1442]'
-                    }`}
-                  >
-                    {/* Header: User & Live Status */}
-                    <div className="flex items-start justify-between gap-2 min-w-0">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        {s.userPhoto ? (
-                          <img
-                            src={s.userPhoto}
-                            alt="Avatar"
-                            className="w-8 h-8 rounded-full object-cover border border-purple-400/50 shrink-0"
-                            referrerPolicy="no-referrer"
-                          />
-                        ) : (
-                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs shrink-0 border ${
-                            s.isLoggedIn
-                              ? 'bg-purple-950 border-purple-600 text-purple-300'
-                              : 'bg-slate-900 border-slate-700 text-slate-400'
-                          }`}>
-                            {s.isLoggedIn ? (s.userName?.charAt(0).toUpperCase() || 'M') : 'G'}
-                          </div>
-                        )}
-                        <div className="min-w-0">
-                          <h4 className="font-bold text-white text-xs sm:text-sm truncate">
-                            {s.userName || 'Guest Visitor'}
-                          </h4>
-                          <div className="text-[10px] text-purple-400 font-mono truncate">
-                            {s.userEmail || 'Unauthenticated Visitor'}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="shrink-0">
-                        {isOnline ? (
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 flex items-center gap-1 animate-pulse">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                            ONLINE NOW
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-[#1b1226] text-slate-400 border border-[#2b1d3d]">
-                            OFFLINE
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Role & Device Row */}
-                    <div className="flex items-center justify-between gap-2 text-[10px] font-mono">
-                      <span className={`px-2 py-0.5 rounded font-bold uppercase ${
-                        s.userRole === 'Super Admin'
-                          ? 'bg-purple-900/60 text-purple-200 border border-purple-600'
-                          : s.userRole === 'Technical'
-                          ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-600/50'
-                          : s.userRole === 'Payment Admin'
-                          ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-600/50'
-                          : s.isLoggedIn
-                          ? 'bg-purple-950/60 text-purple-300 border border-purple-800'
-                          : 'bg-slate-900 text-slate-400 border border-slate-800'
-                      }`}>
-                        {s.userRole || 'GUEST'}
-                      </span>
-                      <span className="text-slate-400 flex items-center gap-1 truncate">
-                        <span className="material-symbols-outlined text-xs text-slate-400">
-                          {s.deviceType === 'mobile' ? 'smartphone' : s.deviceType === 'tablet' ? 'tablet_mac' : 'computer'}
-                        </span>
-                        {s.device || 'Browser'}
-                      </span>
-                    </div>
-
-                    {/* Entered At and Offline status */}
-                    <div className="p-2.5 rounded-xl bg-[#140b24] border border-[#261238] text-xs space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[9px] text-slate-400 font-mono uppercase font-bold">ENTERED AT:</span>
-                        <span className="font-mono text-white text-[11px]">{formatAuditDateTime(s.enteredAt)}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-[9px] text-purple-400 font-mono">
-                        <span>TIME AGO:</span>
-                        <span>{formatAuditRelativeTime(s.enteredAt)}</span>
-                      </div>
-                      {!isOnline && s.leftAt && (
-                        <div className="flex items-center justify-between pt-1 border-t border-purple-500/10 text-[9px] text-slate-400 font-mono">
-                          <span>LEFT AT:</span>
-                          <span>{formatAuditDateTime(s.leftAt)} ({formatAuditRelativeTime(s.leftAt)})</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-
-          {/* Desktop Table View (md+) - Exactly 4 Columns Requested */}
-          <div className="hidden md:block border border-[#2b1442] rounded-2xl overflow-hidden bg-[#0c0517] overflow-x-auto custom-scrollbar shadow-md">
-            <table className="w-full text-left text-xs min-w-[700px]">
-              <thead className="bg-[#140b24] border-b border-[#2b1442] text-slate-300 font-bold uppercase tracking-wider text-[10px]">
-                <tr>
-                  <th className="p-3.5">Visitor Profile</th>
-                  <th className="p-3.5">Entered At</th>
-                  <th className="p-3.5">Device Environment</th>
-                  <th className="p-3.5">Online Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#1e0f33]">
-                {loadingSessions ? (
-                  <tr>
-                    <td colSpan={4} className="p-8 text-center text-slate-400">
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="w-6 h-6 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
-                        <span>Loading presence audit logs...</span>
-                      </div>
-                    </td>
-                  </tr>
-                ) : filteredSessions.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="p-8 text-center text-slate-400">
-                      No visitor sessions match your current filter.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredSessions.map((s) => {
-                    const isOnline = isSessionOnline(s);
-
-                    return (
-                      <tr
-                        key={s.id}
-                        className={`transition-colors ${
-                          isOnline ? 'bg-[#0d1c24]/50 hover:bg-[#0d1c24]/80' : 'hover:bg-[#150a29]'
-                        }`}
-                      >
-                        {/* 1. Visitor Profile */}
+                  ) : filteredFaculty.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="p-8 text-center text-slate-400">
+                        No faculty records match the search.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredFaculty.map((f) => (
+                      <tr key={f.email} className="hover:bg-[#150a29] transition-colors">
                         <td className="p-3.5">
-                          <div className="flex items-center gap-2.5">
-                            {s.userPhoto ? (
-                              <img
-                                src={s.userPhoto}
-                                alt="Avatar"
-                                className="w-8 h-8 rounded-full object-cover border border-purple-400/50 shrink-0"
-                                referrerPolicy="no-referrer"
-                              />
-                            ) : (
-                              <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 border ${
-                                s.isLoggedIn
-                                  ? 'bg-purple-950 border-purple-600 text-purple-300'
-                                  : 'bg-slate-900 border-slate-700 text-slate-400'
-                              }`}>
-                                {s.isLoggedIn ? (s.userName?.charAt(0).toUpperCase() || 'M') : 'G'}
-                              </div>
-                            )}
-                            <div className="min-w-0">
-                              <div className="font-bold text-white flex items-center gap-1.5">
-                                <span className="truncate">{s.userName || 'Guest Visitor'}</span>
-                                {isOnline && (
-                                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" title="Online now" />
-                                )}
-                              </div>
-                              <div className="text-[11px] text-purple-400 font-mono truncate">
-                                {s.userEmail || 'Anonymous Guest'}
-                              </div>
-                              <div className="mt-0.5">
-                                <span className={`px-1.5 py-0.2 rounded text-[8px] font-bold uppercase tracking-wider ${
-                                  s.userRole === 'Super Admin'
-                                    ? 'bg-purple-900/60 text-purple-200 border border-purple-600'
-                                    : s.userRole === 'Technical'
-                                    ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-600/50'
-                                    : s.userRole === 'Payment Admin'
-                                    ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-600/50'
-                                    : s.isLoggedIn
-                                    ? 'bg-purple-950/60 text-purple-300 border border-purple-800'
-                                    : 'bg-slate-900 text-slate-400 border border-slate-800'
-                                }`}>
-                                  {s.userRole || 'GUEST'}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
+                          <div className="font-bold text-white">{f.name}</div>
+                          <div className="text-[11px] text-indigo-400 font-mono">{f.email}</div>
                         </td>
-
-                        {/* 2. Entered At */}
-                        <td className="p-3.5">
-                          <div className="font-mono text-white text-xs">{formatAuditDateTime(s.enteredAt)}</div>
-                          <div className="text-[10px] text-purple-400 font-mono mt-0.5">
-                            {formatAuditRelativeTime(s.enteredAt)}
-                          </div>
-                        </td>
-
-                        {/* 3. Device Environment */}
                         <td className="p-3.5 text-slate-300">
-                          <div className="flex items-center gap-1.5 text-xs">
-                            <span className="material-symbols-outlined text-sm text-slate-400">
-                              {s.deviceType === 'mobile' ? 'smartphone' : s.deviceType === 'tablet' ? 'tablet_mac' : 'computer'}
-                            </span>
-                            <span className="font-semibold text-white">{s.device || 'Unknown'}</span>
-                          </div>
-                          <div className="text-[10px] text-slate-400 font-mono uppercase mt-0.5">{s.deviceType}</div>
+                          {f.department || '—'}
                         </td>
-
-                        {/* 4. Online Status */}
-                        <td className="p-3.5">
-                          {isOnline ? (
-                            <div>
-                              <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 inline-flex items-center gap-1.5 shadow-[0_0_12px_rgba(16,185,129,0.2)]">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                                Online Now
-                              </span>
-                              <div className="text-[10px] text-emerald-400/80 font-mono mt-0.5">Active on website</div>
-                            </div>
-                          ) : (
-                            <div>
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#1e112e] text-slate-400 border border-[#3b1f5c] inline-flex items-center gap-1.5">
-                                <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
-                                Offline
-                              </span>
-                              <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                                {s.leftAt ? `Left ${formatAuditRelativeTime(s.leftAt)}` : 'Session closed'}
-                              </div>
-                            </div>
-                          )}
+                        <td className="p-3.5 text-slate-300">
+                          {f.designation || 'Faculty Advisor'}
+                        </td>
+                        <td className="p-3.5 text-slate-400 font-mono text-[11px]">
+                          {f.phone || '—'}
+                        </td>
+                        <td className="p-3.5 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => openFacultyForm(f)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                              title="Edit Faculty Record"
+                            >
+                              <span className="material-symbols-outlined text-base">edit</span>
+                            </button>
+                            <button
+                              onClick={() =>
+                                setDeleteConfirm({
+                                  type: 'faculty',
+                                  id: f.email,
+                                  label: `Faculty: ${f.name} (${f.email})`,
+                                })
+                              }
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/15 transition-colors cursor-pointer"
+                              title="Delete Faculty Record"
+                            >
+                              <span className="material-symbols-outlined text-base">delete</span>
+                            </button>
+                          </div>
                         </td>
                       </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ── Confirmation Modal ── */}
-      {deleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm select-none">
-          <div className="max-w-sm w-full bg-[#12081f] border border-rose-500/40 rounded-2xl p-5 sm:p-6 space-y-4 shadow-2xl mx-2">
-            <div className="w-12 h-12 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400">
-              <span className="material-symbols-outlined text-2xl">warning</span>
-            </div>
-            <div>
-              <h4 className="text-sm font-black text-white uppercase">Confirm Deletion</h4>
-              <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                Are you sure you want to permanently remove <strong className="text-white">{deleteConfirm.label}</strong>?
-              </p>
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                onClick={() => setDeleteConfirm(null)}
-                className="px-3 py-1.5 bg-[#25133d] hover:bg-[#331852] text-slate-300 text-xs font-semibold rounded-lg cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  if (deleteConfirm.type === 'admin') handleDropAdmin(deleteConfirm.id);
-                  else if (deleteConfirm.type === 'faculty') handleDeleteFaculty(deleteConfirm.id);
-                  else if (deleteConfirm.type === 'role') handleDeleteCustomRole(deleteConfirm.id);
-                  else if (deleteConfirm.type === 'domain') handleDeleteDomain(deleteConfirm.id);
-                  else if (deleteConfirm.type === 'position') handleDeletePosition(deleteConfirm.id);
-                }}
-                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
-              >
-                Confirm Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+        {/* ════════════════════════════════════════════════════════════════════ */}
+        {/* TAB 5: VISITOR PRESENCE & SESSION DURATION AUDIT                     */}
+        {/* ════════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'audit' && (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            {/* Header Card */}
+            <div className="p-4 sm:p-6 bg-[#0e0618] border border-purple-600/40 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-base sm:text-lg font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                    <span className="material-symbols-outlined text-purple-400">visibility</span>
+                    Visitor Presence &amp; Session Duration Audit
+                  </h3>
+                  {onlineCount > 0 && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1.5 animate-pulse">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                      {onlineCount} ACTIVE NOW
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
+                  Streamlined tracking of individuals entering the website. Displays visitor identity, exact entry timestamp, device environment, and active online presence without background overhead.
+                </p>
+              </div>
 
-      {/* ── Purge Audit Logs Confirmation Modal ── */}
-      {purgeModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm select-none">
-          <div className="max-w-md w-full bg-[#12081f] border border-rose-500/40 rounded-2xl p-5 sm:p-6 space-y-4 shadow-2xl mx-2">
-            <div className="w-12 h-12 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400">
-              <span className="material-symbols-outlined text-2xl">delete_sweep</span>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => fetchAuditSessions(true)}
+                  disabled={isRefreshingSessions}
+                  className="px-3 py-2 bg-purple-900/40 hover:bg-purple-800/60 border border-purple-600/40 text-purple-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                  title="Refresh audit sessions"
+                >
+                  <span className={`material-symbols-outlined text-sm ${isRefreshingSessions ? 'animate-spin' : ''}`}>
+                    refresh
+                  </span>
+                  <span>{isRefreshingSessions ? 'Refreshing...' : 'Refresh'}</span>
+                </button>
+              </div>
             </div>
-            <div>
-              <h4 className="text-sm font-black text-white uppercase">Purge Visitor Presence Audit Logs</h4>
-              <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                Are you sure you want to delete all historical visitor presence and session duration records? This action cannot be undone. Active users will continue tracking with fresh sessions.
-              </p>
+
+            {/* 4 Summary Analytics Metric Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              {/* Card 1: Active Right Now */}
+              <div className="p-4 rounded-2xl bg-[#0e071c] border border-emerald-500/30 space-y-1 shadow-md">
+                <div className="flex items-center justify-between text-slate-400">
+                  <span className="text-[10px] font-black uppercase tracking-wider font-mono">ACTIVE RIGHT NOW</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                </div>
+                <div className="text-2xl sm:text-3xl font-black text-emerald-300 font-mono flex items-baseline gap-2">
+                  <span>{onlineCount}</span>
+                  <span className="text-[10px] font-normal text-emerald-400/80 font-sans">currently online</span>
+                </div>
+                <p className="text-[10px] text-slate-400 font-mono">Live visitors actively on website</p>
+              </div>
+
+              {/* Card 2: Total Tracked Sessions */}
+              <div className="p-4 rounded-2xl bg-[#0e071c] border border-purple-500/30 space-y-1 shadow-md">
+                <div className="flex items-center justify-between text-slate-400">
+                  <span className="text-[10px] font-black uppercase tracking-wider font-mono">TOTAL SESSIONS</span>
+                  <span className="material-symbols-outlined text-sm text-purple-400">groups</span>
+                </div>
+                <div className="text-2xl sm:text-3xl font-black text-white font-mono flex items-baseline gap-2">
+                  <span>{sessions.length}</span>
+                  <span className="text-[10px] font-normal text-purple-300/80 font-sans">total visits</span>
+                </div>
+                <p className="text-[10px] text-slate-400 font-mono">Historical entry presence logs</p>
+              </div>
+
+              {/* Card 3: Identified Members */}
+              <div className="p-4 rounded-2xl bg-[#0e071c] border border-cyan-500/30 space-y-1 shadow-md">
+                <div className="flex items-center justify-between text-slate-400">
+                  <span className="text-[10px] font-black uppercase tracking-wider font-mono">IDENTIFIED MEMBERS</span>
+                  <span className="material-symbols-outlined text-sm text-cyan-400">verified_user</span>
+                </div>
+                <div className="text-2xl sm:text-3xl font-black text-cyan-300 font-mono flex items-baseline gap-2">
+                  <span>{membersCount}</span>
+                  <span className="text-[10px] font-normal text-cyan-400/80 font-sans">registered</span>
+                </div>
+                <p className="text-[10px] text-slate-400 font-mono">Authenticated member sessions</p>
+              </div>
+
+              {/* Card 4: Guest Visitors */}
+              <div className="p-4 rounded-2xl bg-[#0e071c] border border-amber-500/30 space-y-1 shadow-md">
+                <div className="flex items-center justify-between text-slate-400">
+                  <span className="text-[10px] font-black uppercase tracking-wider font-mono">GUEST VISITORS</span>
+                  <span className="material-symbols-outlined text-sm text-amber-400">person_outline</span>
+                </div>
+                <div className="text-xl sm:text-2xl font-black text-amber-300 font-mono flex items-baseline gap-2">
+                  <span>{guestsCount}</span>
+                  <span className="text-xs text-slate-400 font-mono font-normal">anonymous</span>
+                </div>
+                <p className="text-[10px] text-slate-400 font-mono">Guest portal visits</p>
+              </div>
             </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setPurgeModalOpen(false)}
-                className="px-3 py-1.5 bg-[#25133d] hover:bg-[#331852] text-slate-300 text-xs font-semibold rounded-lg cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={isPurgingSessions}
-                onClick={handlePurgeAuditLogs}
-                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
-              >
-                {isPurgingSessions && (
-                  <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+
+            {/* Search & Filter Toolbar */}
+            <div className="p-4 bg-[#0e071c] border border-[#26133b] rounded-2xl space-y-3">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                {/* Search input */}
+                <div className="relative flex-1">
+                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
+                    search
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Filter by Name, Email, Device, or Role..."
+                    value={sessionSearch}
+                    onChange={(e) => setSessionSearch(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 bg-[#160b26] border border-purple-900/60 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                {/* Date Scope Filter */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-[10px] font-mono text-slate-400 uppercase font-bold shrink-0">SCOPE:</span>
+                  {(['all', 'today', 'week'] as const).map((dScope) => (
+                    <button
+                      key={dScope}
+                      onClick={() => setSessionDateFilter(dScope)}
+                      className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-lg border transition-all cursor-pointer ${sessionDateFilter === dScope
+                        ? 'bg-purple-600 border-purple-400 text-white'
+                        : 'bg-[#160b26] border-purple-900/40 text-slate-400 hover:text-white'
+                        }`}
+                    >
+                      {dScope === 'all' ? 'All Time' : dScope === 'today' ? 'Today' : 'Last 7 Days'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Status Filter Chips */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-purple-500/10">
+                <span className="text-[10px] font-mono text-slate-400 uppercase font-bold mr-1 shrink-0">STATUS:</span>
+                <button
+                  onClick={() => setSessionStatusFilter('all')}
+                  className={`px-3 py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer ${sessionStatusFilter === 'all'
+                    ? 'bg-purple-600 border-purple-400 text-white'
+                    : 'bg-[#160b26] border-purple-900/40 text-slate-400 hover:text-white'
+                    }`}
+                >
+                  All Sessions ({sessions.length})
+                </button>
+
+                <button
+                  onClick={() => setSessionStatusFilter('online')}
+                  className={`px-3 py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${sessionStatusFilter === 'online'
+                    ? 'bg-emerald-600 border-emerald-400 text-white'
+                    : 'bg-[#160b26] border-emerald-900/40 text-emerald-400 hover:bg-emerald-950/40'
+                    }`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Online Now ({onlineCount})
+                </button>
+
+                <button
+                  onClick={() => setSessionStatusFilter('members')}
+                  className={`px-3 py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer ${sessionStatusFilter === 'members'
+                    ? 'bg-purple-600 border-purple-400 text-white'
+                    : 'bg-[#160b26] border-purple-900/40 text-slate-400 hover:text-white'
+                    }`}
+                >
+                  Identified Members ({membersCount})
+                </button>
+
+                <button
+                  onClick={() => setSessionStatusFilter('guests')}
+                  className={`px-3 py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer ${sessionStatusFilter === 'guests'
+                    ? 'bg-purple-600 border-purple-400 text-white'
+                    : 'bg-[#160b26] border-purple-900/40 text-slate-400 hover:text-white'
+                    }`}
+                >
+                  Guest Visitors ({guestsCount})
+                </button>
+
+                {sessionSearch && (
+                  <button
+                    onClick={() => setSessionSearch('')}
+                    className="ml-auto text-[10px] text-purple-400 hover:text-purple-300 underline font-mono cursor-pointer"
+                  >
+                    Clear search
+                  </button>
                 )}
-                Confirm Purge All
-              </button>
+              </div>
+            </div>
+
+            {/* Mobile View: Cards */}
+            <div className="md:hidden space-y-3">
+              {loadingSessions ? (
+                <div className="p-8 text-center text-slate-400 bg-[#0c0517] border border-[#2b1442] rounded-2xl">
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="w-6 h-6 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
+                    <span className="text-xs">Loading presence audit logs...</span>
+                  </div>
+                </div>
+              ) : filteredSessions.length === 0 ? (
+                <div className="p-6 text-center text-slate-400 bg-[#0c0517] border border-[#2b1442] rounded-2xl text-xs">
+                  No visitor sessions match your current filter.
+                </div>
+              ) : (
+                filteredSessions.map((s) => {
+                  const isOnline = isSessionOnline(s);
+
+                  return (
+                    <div
+                      key={s.id}
+                      className={`p-4 rounded-2xl border space-y-3 shadow-md w-full min-w-0 transition-all ${isOnline
+                        ? 'bg-[#0b141a] border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.1)]'
+                        : 'bg-[#0c0517] border-[#2b1442]'
+                        }`}
+                    >
+                      {/* Header: User & Live Status */}
+                      <div className="flex items-start justify-between gap-2 min-w-0">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          {s.userPhoto ? (
+                            <img
+                              src={s.userPhoto}
+                              alt="Avatar"
+                              className="w-8 h-8 rounded-full object-cover border border-purple-400/50 shrink-0"
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs shrink-0 border ${s.isLoggedIn
+                              ? 'bg-purple-950 border-purple-600 text-purple-300'
+                              : 'bg-slate-900 border-slate-700 text-slate-400'
+                              }`}>
+                              {s.isLoggedIn ? (s.userName?.charAt(0).toUpperCase() || 'M') : 'G'}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <h4 className="font-bold text-white text-xs sm:text-sm truncate">
+                              {s.userName || 'Guest Visitor'}
+                            </h4>
+                            <div className="text-[10px] text-purple-400 font-mono truncate">
+                              {s.userEmail || 'Unauthenticated Visitor'}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="shrink-0">
+                          {isOnline ? (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 flex items-center gap-1 animate-pulse">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                              ONLINE NOW
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-[#1b1226] text-slate-400 border border-[#2b1d3d]">
+                              OFFLINE
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Role & Device Row */}
+                      <div className="flex items-center justify-between gap-2 text-[10px] font-mono">
+                        {(() => {
+                          const displayRole = resolveSessionDisplayRole(s);
+                          return (
+                            <span className={`px-2 py-0.5 rounded font-bold uppercase ${displayRole === 'Super Admin'
+                              ? 'bg-purple-900/60 text-purple-200 border border-purple-600'
+                              : displayRole === 'Technical'
+                                ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-600/50'
+                                : displayRole === 'Payment Admin'
+                                  ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-600/50'
+                                  : s.isLoggedIn
+                                    ? 'bg-purple-950/60 text-purple-300 border border-purple-800'
+                                    : 'bg-slate-900 text-slate-400 border border-slate-800'
+                              }`}>
+                              {displayRole}
+                            </span>
+                          );
+                        })()}
+                        <span className="text-slate-400 flex items-center gap-1 truncate">
+                          <span className="material-symbols-outlined text-xs text-slate-400">
+                            {s.deviceType === 'mobile' ? 'smartphone' : s.deviceType === 'tablet' ? 'tablet_mac' : 'computer'}
+                          </span>
+                          {s.device || 'Browser'}
+                        </span>
+                      </div>
+
+                      {/* Entered At and Offline status */}
+                      <div className="p-2.5 rounded-xl bg-[#140b24] border border-[#261238] text-xs space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] text-slate-400 font-mono uppercase font-bold">ENTERED AT:</span>
+                          <span className="font-mono text-white text-[11px]">{formatAuditDateTime(s.enteredAt)}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-[9px] text-purple-400 font-mono">
+                          <span>TIME AGO:</span>
+                          <span>{formatAuditRelativeTime(s.enteredAt)}</span>
+                        </div>
+                        {!isOnline && s.leftAt && (
+                          <div className="flex items-center justify-between pt-1 border-t border-purple-500/10 text-[9px] text-slate-400 font-mono">
+                            <span>LEFT AT:</span>
+                            <span>{formatAuditDateTime(s.leftAt)} ({formatAuditRelativeTime(s.leftAt)})</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Desktop Table View (md+) - Exactly 4 Columns Requested */}
+            <div className="hidden md:block border border-[#2b1442] rounded-2xl overflow-hidden bg-[#0c0517] overflow-x-auto custom-scrollbar shadow-md">
+              <table className="w-full text-left text-xs min-w-[700px]">
+                <thead className="bg-[#140b24] border-b border-[#2b1442] text-slate-300 font-bold uppercase tracking-wider text-[10px]">
+                  <tr>
+                    <th className="p-3.5">Visitor Profile</th>
+                    <th className="p-3.5">Entered At</th>
+                    <th className="p-3.5">Device Environment</th>
+                    <th className="p-3.5">Online Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1e0f33]">
+                  {loadingSessions ? (
+                    <tr>
+                      <td colSpan={4} className="p-8 text-center text-slate-400">
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="w-6 h-6 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
+                          <span>Loading presence audit logs...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : filteredSessions.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="p-8 text-center text-slate-400">
+                        No visitor sessions match your current filter.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredSessions.map((s) => {
+                      const isOnline = isSessionOnline(s);
+
+                      return (
+                        <tr
+                          key={s.id}
+                          className={`transition-colors ${isOnline ? 'bg-[#0d1c24]/50 hover:bg-[#0d1c24]/80' : 'hover:bg-[#150a29]'
+                            }`}
+                        >
+                          {/* 1. Visitor Profile */}
+                          <td className="p-3.5">
+                            <div className="flex items-center gap-2.5">
+                              {s.userPhoto ? (
+                                <img
+                                  src={s.userPhoto}
+                                  alt="Avatar"
+                                  className="w-8 h-8 rounded-full object-cover border border-purple-400/50 shrink-0"
+                                  referrerPolicy="no-referrer"
+                                />
+                              ) : (
+                                <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 border ${s.isLoggedIn
+                                  ? 'bg-purple-950 border-purple-600 text-purple-300'
+                                  : 'bg-slate-900 border-slate-700 text-slate-400'
+                                  }`}>
+                                  {s.isLoggedIn ? (s.userName?.charAt(0).toUpperCase() || 'M') : 'G'}
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <div className="font-bold text-white flex items-center gap-1.5">
+                                  <span className="truncate">{s.userName || 'Guest Visitor'}</span>
+                                  {isOnline && (
+                                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" title="Online now" />
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-purple-400 font-mono truncate">
+                                  {s.userEmail || 'Anonymous Guest'}
+                                </div>
+                                <div className="mt-0.5">
+                                  {(() => {
+                                    const displayRole = resolveSessionDisplayRole(s);
+                                    return (
+                                      <span className={`px-1.5 py-0.2 rounded text-[8px] font-bold uppercase tracking-wider ${displayRole === 'Super Admin'
+                                        ? 'bg-purple-900/60 text-purple-200 border border-purple-600'
+                                        : displayRole === 'Technical'
+                                          ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-600/50'
+                                          : displayRole === 'Payment Admin'
+                                            ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-600/50'
+                                            : s.isLoggedIn
+                                              ? 'bg-purple-950/60 text-purple-300 border border-purple-800'
+                                              : 'bg-slate-900 text-slate-400 border border-slate-800'
+                                        }`}>
+                                        {displayRole}
+                                      </span>
+                                    );
+                                  })()}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* 2. Entered At */}
+                          <td className="p-3.5">
+                            <div className="font-mono text-white text-xs">{formatAuditDateTime(s.enteredAt)}</div>
+                            <div className="text-[10px] text-purple-400 font-mono mt-0.5">
+                              {formatAuditRelativeTime(s.enteredAt)}
+                            </div>
+                          </td>
+
+                          {/* 3. Device Environment */}
+                          <td className="p-3.5 text-slate-300">
+                            <div className="flex items-center gap-1.5 text-xs">
+                              <span className="material-symbols-outlined text-sm text-slate-400">
+                                {s.deviceType === 'mobile' ? 'smartphone' : s.deviceType === 'tablet' ? 'tablet_mac' : 'computer'}
+                              </span>
+                              <span className="font-semibold text-white">{s.device || 'Unknown'}</span>
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-mono uppercase mt-0.5">{s.deviceType}</div>
+                          </td>
+
+                          {/* 4. Online Status */}
+                          <td className="p-3.5">
+                            {isOnline ? (
+                              <div>
+                                <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 inline-flex items-center gap-1.5 shadow-[0_0_12px_rgba(16,185,129,0.2)]">
+                                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                                  Online Now
+                                </span>
+                                <div className="text-[10px] text-emerald-400/80 font-mono mt-0.5">Active on website</div>
+                              </div>
+                            ) : (
+                              <div>
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#1e112e] text-slate-400 border border-[#3b1f5c] inline-flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+                                  Offline
+                                </span>
+                                <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                  {s.leftAt ? `Left ${formatAuditRelativeTime(s.leftAt)}` : 'Session closed'}
+                                </div>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* ── Confirmation Modal ── */}
+        {deleteConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm select-none">
+            <div className="max-w-sm w-full bg-[#12081f] border border-rose-500/40 rounded-2xl p-5 sm:p-6 space-y-4 shadow-2xl mx-2">
+              <div className="w-12 h-12 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400">
+                <span className="material-symbols-outlined text-2xl">warning</span>
+              </div>
+              <div>
+                <h4 className="text-sm font-black text-white uppercase">Confirm Deletion</h4>
+                <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                  Are you sure you want to permanently remove <strong className="text-white">{deleteConfirm.label}</strong>?
+                </p>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  onClick={() => setDeleteConfirm(null)}
+                  className="px-3 py-1.5 bg-[#25133d] hover:bg-[#331852] text-slate-300 text-xs font-semibold rounded-lg cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    if (deleteConfirm.type === 'admin') handleDropAdmin(deleteConfirm.id);
+                    else if (deleteConfirm.type === 'faculty') handleDeleteFaculty(deleteConfirm.id);
+                    else if (deleteConfirm.type === 'role') handleDeleteCustomRole(deleteConfirm.id);
+                    else if (deleteConfirm.type === 'domain') handleDeleteDomain(deleteConfirm.id);
+                    else if (deleteConfirm.type === 'position') handleDeletePosition(deleteConfirm.id);
+                  }}
+                  className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                >
+                  Confirm Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

@@ -194,24 +194,3 @@ export function formatDuration(seconds: number): string {
   }
   return `${secs}s`;
 }
-
-// ─── Purge Sessions (Super Admin Maintenance) ──────────────────────────────────
-
-export async function purgeAllAuditSessions(): Promise<number> {
-  try {
-    const snap = await getDocs(collection(db, 'audit_sessions'));
-    const batch = writeBatch(db);
-    let count = 0;
-    snap.docs.forEach((docSnap) => {
-      batch.delete(docSnap.ref);
-      count++;
-    });
-    if (count > 0) {
-      await batch.commit();
-    }
-    return count;
-  } catch (err) {
-    console.error('[SessionTracker] Purge error:', err);
-    throw err;
-  }
-}

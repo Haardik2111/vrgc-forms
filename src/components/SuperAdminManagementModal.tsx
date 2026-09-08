@@ -21,6 +21,7 @@ import {
 import { FacultyMember } from '@/types/faculty';
 import { CONFIG } from '@/lib/config';
 import { getSuperAdminEmails } from '@/lib/superAdminsBridge';
+import { fetchPermissionsConfig } from '@/lib/permissions';
 export interface AdminRecord {
   id: string;
   email: string;

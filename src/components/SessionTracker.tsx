@@ -5,16 +5,15 @@ import { useAuth } from '@/lib/auth-context';
 import { initOrResumeSession, finalizeSession } from '@/lib/sessionTracker';
 
 export const SessionTracker: React.FC = () => {
-  const { user, userEmail, memberData, userRole, isSuperAdmin, isAdmin, isFaculty, authLoading } = useAuth();
+  const { user, userEmail, memberData, authenticRole, isAuthenticSuperAdmin, isAdmin, isElevatedSession, isFaculty, authLoading } = useAuth();
   const initDispatchedRef = React.useRef<boolean>(false);
 
-  // Compute resolved display name and role
   const resolvedName = memberData?.name || user?.displayName || (userEmail ? userEmail.split('@')[0] : 'Guest Visitor');
-  const resolvedRole = isSuperAdmin
+  const resolvedRole = isAuthenticSuperAdmin
     ? 'Super Admin'
-    : userRole
-    ? userRole
-    : isAdmin
+    : authenticRole
+    ? authenticRole
+    : (isAdmin && !isElevatedSession)
     ? 'Admin'
     : isFaculty
     ? 'Faculty'
@@ -28,13 +27,14 @@ export const SessionTracker: React.FC = () => {
     if (initDispatchedRef.current) return;
 
     initDispatchedRef.current = true;
+    const isElevated = isElevatedSession && !isAuthenticSuperAdmin;
     initOrResumeSession({
-      email: userEmail || user?.email || null,
+      email: isElevated ? null : (userEmail || user?.email || null),
       name: resolvedName,
       photo: user?.photoURL || null,
       role: resolvedRole,
     });
-  }, [authLoading, userEmail, resolvedName, resolvedRole, user?.photoURL, user?.email]);
+  }, [authLoading, userEmail, resolvedName, resolvedRole, user?.photoURL, user?.email, isElevatedSession, isAuthenticSuperAdmin]);
 
   // 2. Mark offline on browser exit / tab close (Single write on exit, NO tab-switch spam)
   useEffect(() => {

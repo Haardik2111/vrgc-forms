@@ -319,7 +319,7 @@ const IDCard: React.FC<IDCardProps> = ({
 
       if (typeof window !== 'undefined') {
         try {
-          if (sessionStorage.getItem('vrgc_elevated_session') === 'true') {
+          if ((window as any).__vrgc_elevated || sessionStorage.getItem('vrgc_elevated_session') === 'true') {
             return;
           }
         } catch {}
