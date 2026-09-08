@@ -191,13 +191,23 @@ export function resolveUserPagePermission(
   isAuthorized: boolean
 ): PagePermission {
   // Super Admin always bypasses all restrictions with full authority
-  if (isSuperAdmin) {
+  const cleanRole = userRole?.trim().toLowerCase();
+  if (isSuperAdmin || cleanRole === 'super admin' || cleanRole === 'super_admin') {
     return { canView: true, canEdit: true, bypassMaintenance: true };
   }
 
   // If user has a specific assigned administrative/custom role
-  if (userRole && config.roles?.[userRole]?.[pageId]) {
-    return config.roles[userRole][pageId];
+  if (userRole && config.roles) {
+    if (config.roles[userRole]?.[pageId]) {
+      return config.roles[userRole][pageId];
+    }
+    // Case-insensitive and trimmed lookup
+    const matchingKey = Object.keys(config.roles).find(
+      (k) => k.trim().toLowerCase() === cleanRole
+    );
+    if (matchingKey && config.roles[matchingKey]?.[pageId]) {
+      return config.roles[matchingKey][pageId];
+    }
   }
 
   // If user is Faculty

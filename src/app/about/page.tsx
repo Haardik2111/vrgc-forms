@@ -163,7 +163,7 @@ export default function AboutPage() {
       <Navbar pageTitle="About VRGC Tech Team" />
 
       {/* Main Container */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-14 space-y-12">
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-20 md:py-14 space-y-12">
 
         {/* Hero Banner Header - Liquid Glass */}
         <div className="relative rounded-3xl p-7 sm:p-11 bg-gradient-to-br from-purple-950/35 via-white/[0.03] to-pink-950/20 backdrop-blur-2xl border border-white/[0.15] shadow-[inset_0_1px_1px_rgba(255,255,255,0.25),0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden group">

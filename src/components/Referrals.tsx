@@ -170,15 +170,26 @@ const Referrals: React.FC<ReferralsProps> = ({
   };
 
   const getDailySubmissionsCount = () => {
-    if (!currentUser) return 0;
-    const myReg = referrerInfo ? referrerInfo['Registration Number'] : extractRegNo(currentUser.email);
-    if (!myReg || myReg === 'UNKNOWN') return 0;
+    const myEmail = (currentUser?.email || '').toLowerCase().trim();
+    if (!myEmail) return 0;
 
     const currentUTCDateStr = new Date().toISOString().split('T')[0];
 
     return referrals.filter(ref => {
-      const reg = getRefVal(ref, 'Referrer Registration Number') || getRefVal(ref, 'referrerRegNo');
-      if (!reg || reg.toString().toUpperCase() !== myReg.toUpperCase()) return false;
+      const email = (
+        getRefVal(ref, 'Referrer Email') ||
+        getRefVal(ref, 'referrerEmail') ||
+        getRefVal(ref, 'referrer_email') ||
+        ref.referrerEmail ||
+        ref['Referrer Email'] ||
+        ref.user_email ||
+        getRefVal(ref, 'user_email') ||
+        ref.userEmail ||
+        getRefVal(ref, 'userEmail') ||
+        ''
+      ).toString().toLowerCase().trim();
+
+      if (email !== myEmail) return false;
 
       const rawTime = getRefVal(ref, 'Timestamp') || getRefVal(ref, 'timestamp');
       if (!rawTime) return false;
@@ -1065,17 +1076,37 @@ const Referrals: React.FC<ReferralsProps> = ({
     const referrerStats: Record<string, any> = {};
 
     referrals.forEach(ref => {
-      const reg = (getRefVal(ref, 'Referrer Registration Number') || getRefVal(ref, 'referrerRegNo') || "UNKNOWN").toString().toUpperCase().trim();
+      let reg = (getRefVal(ref, 'Referrer Registration Number') || getRefVal(ref, 'referrerRegNo') || '').toString().toUpperCase().trim();
       const name = getRefVal(ref, 'Referrer Name') || getRefVal(ref, 'referrerName') || "VRGC Recruiter";
       const rawStatus = (getRefVal(ref, 'Status') || getRefVal(ref, 'status') || "Pending").toString();
       const statusLower = rawStatus.toLowerCase().trim();
-      const email = (getRefVal(ref, 'Referrer Email') || getRefVal(ref, 'referrerEmail') || '').toLowerCase().trim();
+      const email = (
+        getRefVal(ref, 'Referrer Email') ||
+        getRefVal(ref, 'referrerEmail') ||
+        getRefVal(ref, 'referrer_email') ||
+        ref.referrerEmail ||
+        ref['Referrer Email'] ||
+        ref.user_email ||
+        getRefVal(ref, 'user_email') ||
+        ref.userEmail ||
+        getRefVal(ref, 'userEmail') ||
+        ''
+      ).toString().toLowerCase().trim();
+
+      // If registration number is missing or UNKNOWN, extract from vitbhopal email if available
+      if (!reg || reg === 'UNKNOWN') {
+        const extracted = extractRegNo(email);
+        if (extracted !== 'UNKNOWN') {
+          reg = extracted;
+        }
+      }
+
       const emailPrefix = email ? email.split('@')[0] : '';
       const nameLower = name.toLowerCase().trim();
 
       const photoURL = getRefVal(ref, 'Referrer Photo URL') ||
         getRefVal(ref, 'referrerPhotoURL') ||
-        (reg ? userPhotoMap[reg] : null) ||
+        (reg && reg !== 'UNKNOWN' ? userPhotoMap[reg] : null) ||
         (email ? userPhotoMap[email] : null) ||
         (emailPrefix ? userPhotoMap[emailPrefix] : null) ||
         (nameLower ? userPhotoMap[nameLower] : null) ||
@@ -1083,10 +1114,16 @@ const Referrals: React.FC<ReferralsProps> = ({
 
       const xpAwarded = calculateCandidateXP(rawStatus);
 
-      if (!referrerStats[reg]) {
-        referrerStats[reg] = {
+      // Canonical grouping key: Primary is the unique registration number if valid; fallback to email, name, or doc ID
+      const groupKey = (reg && reg !== 'UNKNOWN')
+        ? `reg_${reg}`
+        : (email ? `email_${email}` : (nameLower ? `name_${nameLower}` : `ref_${ref.id || 'unknown'}`));
+
+      if (!referrerStats[groupKey]) {
+        referrerStats[groupKey] = {
           name,
-          registrationNumber: reg,
+          email,
+          registrationNumber: (reg && reg !== 'UNKNOWN') ? reg : (emailPrefix.toUpperCase() || 'UNKNOWN'),
           totalReferrals: 0,
           totalXP: 0,
           admittedCount: 0,
@@ -1095,21 +1132,37 @@ const Referrals: React.FC<ReferralsProps> = ({
           rejectedCount: 0,
           photoURL
         };
-      } else if (!referrerStats[reg].photoURL && photoURL) {
-        referrerStats[reg].photoURL = photoURL;
+      } else {
+        if (!referrerStats[groupKey].photoURL && photoURL) {
+          referrerStats[groupKey].photoURL = photoURL;
+        }
+        if ((!referrerStats[groupKey].registrationNumber || referrerStats[groupKey].registrationNumber === 'UNKNOWN') && reg && reg !== 'UNKNOWN') {
+          referrerStats[groupKey].registrationNumber = reg;
+        }
+        if (!referrerStats[groupKey].email && email) {
+          referrerStats[groupKey].email = email;
+        }
+        // If current name is generic or contains reg no, prefer cleaner human name
+        if (name && name !== 'VRGC Recruiter' && name !== 'VRGC Member') {
+          if (referrerStats[groupKey].name === 'VRGC Recruiter' || referrerStats[groupKey].name === 'VRGC Member') {
+            referrerStats[groupKey].name = name;
+          } else if (reg && reg !== 'UNKNOWN' && referrerStats[groupKey].name.includes(reg) && !name.includes(reg)) {
+            referrerStats[groupKey].name = name;
+          }
+        }
       }
 
-      referrerStats[reg].totalReferrals += 1;
-      referrerStats[reg].totalXP += xpAwarded;
+      referrerStats[groupKey].totalReferrals += 1;
+      referrerStats[groupKey].totalXP += xpAwarded;
 
       if (statusLower === 'admitted' || statusLower.includes('admit')) {
-        referrerStats[reg].admittedCount += 1;
+        referrerStats[groupKey].admittedCount += 1;
       } else if (statusLower.includes('interview')) {
-        referrerStats[reg].interviewCount += 1;
+        referrerStats[groupKey].interviewCount += 1;
       } else if (statusLower === 'rejected' || statusLower.includes('reject')) {
-        referrerStats[reg].rejectedCount += 1;
+        referrerStats[groupKey].rejectedCount += 1;
       } else {
-        referrerStats[reg].pendingCount += 1;
+        referrerStats[groupKey].pendingCount += 1;
       }
     });
 
@@ -1122,8 +1175,13 @@ const Referrals: React.FC<ReferralsProps> = ({
 
     return sorted.map((rank, index) => {
       const rankNumber = index + 1;
+      const uniqueId = (rank.registrationNumber && rank.registrationNumber !== 'UNKNOWN')
+        ? rank.registrationNumber
+        : (rank.email || `${rank.name.replace(/\s+/g, '_')}_${rankNumber}`);
+
       return {
         ...rank,
+        id: uniqueId,
         rankNumber,
         tier: getRecruiterTier(rankNumber)
       };
@@ -1217,53 +1275,47 @@ const Referrals: React.FC<ReferralsProps> = ({
   };
 
   const getMyReferrals = () => {
-    if (!currentUser) return [];
+    const myEmail = (currentUser?.email || '').toLowerCase().trim();
+    if (!myEmail) return [];
 
-    const myEmail = (currentUser.email || '').toLowerCase().trim();
-    const myReg = (referrerInfo ? referrerInfo['Registration Number'] : extractRegNo(currentUser.email)).toUpperCase().trim();
-    const myName = (referrerInfo?.Name || currentUser.displayName || '').toLowerCase().trim();
+    const myRegNo = (userRegNo && userRegNo !== 'UNKNOWN')
+      ? userRegNo.toUpperCase().trim()
+      : extractRegNo(myEmail);
 
+    // Fetch individual referrals done by that member (by email, or by member registration number if email was omitted in older docs)
     return referrals.filter(ref => {
-      // 1. Match by Registration Number
-      const reg = (
-        getRefVal(ref, 'Referrer Registration Number') ||
-        getRefVal(ref, 'referrerRegNo') ||
-        getRefVal(ref, 'referrer_reg_no') ||
-        ref.referrerRegNo ||
-        ref['Referrer Registration Number'] ||
-        ''
-      ).toString().toUpperCase().trim();
-
-      if (myReg && myReg !== 'UNKNOWN' && reg && reg === myReg) {
-        return true;
-      }
-
-      // 2. Match by Email Address
       const email = (
         getRefVal(ref, 'Referrer Email') ||
         getRefVal(ref, 'referrerEmail') ||
-        getRefVal(ref, 'user_email') ||
-        getRefVal(ref, 'email') ||
+        getRefVal(ref, 'referrer_email') ||
         ref.referrerEmail ||
+        ref['Referrer Email'] ||
         ref.user_email ||
+        getRefVal(ref, 'user_email') ||
+        ref.userEmail ||
+        getRefVal(ref, 'userEmail') ||
         ''
       ).toString().toLowerCase().trim();
 
-      if (myEmail && email && email === myEmail) {
-        return true;
+      // 1. Direct email match
+      if (email && email === myEmail) return true;
+
+      // 2. Extracted registration number from email matches member's registration number
+      if (email && myRegNo && myRegNo !== 'UNKNOWN') {
+        const refExtracted = extractRegNo(email);
+        if (refExtracted !== 'UNKNOWN' && refExtracted === myRegNo) return true;
       }
 
-      // 3. Match by Referrer Name
-      if (myName) {
-        const refName = (
-          getRefVal(ref, 'Referrer Name') ||
-          getRefVal(ref, 'referrerName') ||
-          ref.referrerName ||
-          ''
-        ).toString().toLowerCase().trim();
-        if (refName && refName === myName) {
-          return true;
-        }
+      // 3. Registration number from document matches member's registration number
+      const reg = (
+        getRefVal(ref, 'Referrer Registration Number') ||
+        getRefVal(ref, 'referrerRegNo') ||
+        ref.referrerRegNo ||
+        ''
+      ).toString().toUpperCase().trim();
+
+      if (myRegNo && myRegNo !== 'UNKNOWN' && reg && reg === myRegNo) {
+        return true;
       }
 
       return false;
@@ -1540,14 +1592,22 @@ const Referrals: React.FC<ReferralsProps> = ({
   };
 
   const leaderboard = getLeaderboardData();
-  const userRegNo = referrerInfo ? referrerInfo['Registration Number'] : '';
+  const userEmail = (currentUser?.email || '').toLowerCase().trim();
+  const userRegNo = (referrerInfo ? referrerInfo['Registration Number'] : extractRegNo(currentUser?.email)).toUpperCase().trim();
   const userRankIndex = leaderboard.findIndex(
-    r => r.registrationNumber.toUpperCase() === userRegNo.toUpperCase()
+    r => (userEmail && r.email && r.email.toLowerCase() === userEmail) ||
+         (userRegNo && userRegNo !== 'UNKNOWN' && r.registrationNumber.toUpperCase() === userRegNo)
   );
   const userStats = userRankIndex !== -1 ? leaderboard[userRankIndex] : null;
   const userRank = userRankIndex !== -1 ? `#${userRankIndex + 1}` : 'UNRANKED';
   const userTier = userRankIndex !== -1 ? getRecruiterTier(userRankIndex + 1) : getRecruiterTier(999);
-  const userXP = userStats ? userStats.totalXP : 0;
+
+  const myReferralsList = getMyReferrals();
+  const myReferralsXP = myReferralsList.reduce((acc, ref) => {
+    const s = getRefVal(ref, 'Status') || getRefVal(ref, 'status') || 'Pending';
+    return acc + calculateCandidateXP(s);
+  }, 0);
+  const userXP = userStats ? userStats.totalXP : myReferralsXP;
 
   if (authLoading) {
     return (
@@ -2218,13 +2278,16 @@ const Referrals: React.FC<ReferralsProps> = ({
                 {leaderboard.length === 0 ? (
                   <div className="py-12 text-center text-slate-500 text-xs">No referral records on leaderboard yet.</div>
                 ) : (
-                  leaderboard.map((lb) => {
+                  leaderboard.map((lb, index) => {
                     const tier = lb.tier || getRecruiterTier(lb.rankNumber);
-                    const isCurrentUser = userRegNo && lb.registrationNumber.toUpperCase() === userRegNo.toUpperCase();
+                    const isCurrentUser = Boolean(
+                      (userRegNo && userRegNo !== 'UNKNOWN' && lb.registrationNumber.toUpperCase() === userRegNo.toUpperCase()) ||
+                      (userEmail && lb.email && lb.email.toLowerCase() === userEmail)
+                    );
 
                     return (
                       <div
-                        key={lb.registrationNumber}
+                        key={lb.id || (lb.registrationNumber && lb.registrationNumber !== 'UNKNOWN' ? lb.registrationNumber : `lb-${lb.rankNumber || index}`)}
                         className={`p-2.5 sm:p-3.5 rounded-2xl border transition-all duration-200 flex items-center justify-between gap-2 sm:gap-3 ${isCurrentUser
                           ? 'bg-purple-600/20 border-purple-400/80 shadow-[0_0_20px_rgba(168,85,247,0.25)]'
                           : 'bg-black/50 border-purple-500/15 hover:border-purple-500/40 hover:bg-white/5'
@@ -2425,12 +2488,12 @@ const Referrals: React.FC<ReferralsProps> = ({
             </div>
 
             <div className="space-y-3">
-              {getMyReferrals().length === 0 ? (
+              {myReferralsList.length === 0 ? (
                 <div className="py-12 text-center text-slate-500 text-xs">
                   You haven't submitted any candidate referrals yet.
                 </div>
               ) : (
-                getMyReferrals().map((ref, idx) => {
+                myReferralsList.map((ref, idx) => {
                   const status = getRefVal(ref, 'Status') || getRefVal(ref, 'status') || 'Pending';
                   const candidateXP = calculateCandidateXP(status);
                   const cReg = getRefVal(ref, 'Candidate Registration Number') || getRefVal(ref, 'candidateRegNo') || 'UNKNOWN';
@@ -2438,7 +2501,7 @@ const Referrals: React.FC<ReferralsProps> = ({
                   const targetT = getRefVal(ref, 'Target Team') || getRefVal(ref, 'targetTeam') || 'Technical';
 
                   return (
-                    <div key={idx} className="p-3.5 sm:p-4 bg-black/50 border border-white/5 hover:border-purple-500/30 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors">
+                    <div key={ref.id || `${cReg}-${idx}`} className="p-3.5 sm:p-4 bg-black/50 border border-white/5 hover:border-purple-500/30 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors">
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <h4 className="text-white font-bold text-sm">{cName}</h4>

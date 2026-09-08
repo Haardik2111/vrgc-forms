@@ -3,6 +3,7 @@ import { Bebas_Neue, Space_Grotesk, Inter, JetBrains_Mono } from 'next/font/goog
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
 import GlobalBackground from "@/components/GlobalBackground";
+import SessionTracker from "@/components/SessionTracker";
 
 const bebasNeue = Bebas_Neue({
   subsets: ['latin'],
@@ -73,6 +74,7 @@ export default function RootLayout({
         <GlobalBackground />
         <div className="relative z-10 min-h-screen flex flex-col w-full max-w-full overflow-x-clip">
           <AuthProvider>
+            <SessionTracker />
             {children}
           </AuthProvider>
         </div>

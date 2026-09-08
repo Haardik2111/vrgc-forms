@@ -399,6 +399,7 @@ function AppContent() {
         isSuperAdmin={isSuperAdmin}
         isFaculty={isFaculty}
         userRole={userRole}
+        permissionsConfig={permissionsConfig}
         onLogout={handleLogout}
         onLogin={handleLogin}
         onOpenSuperAdminModal={() => setIsSuperAdminModalOpen(true)}
@@ -581,104 +582,12 @@ function AppContent() {
         />
       )}
 
-      {/* Mobile Bottom Nav - Sleek, Compact, Non-Intrusive */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-14 bg-[#090214]/95 backdrop-blur-xl border-t border-[#2b1442] flex items-center justify-around px-1 z-40 select-none shadow-[0_-5px_20px_rgba(0,0,0,0.8)]">
-        {isFaculty ? (
-          <>
-            <button
-              onClick={() => handlePageChange('dashboard')}
-              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
-                activePage === 'dashboard' ? 'text-purple-400 font-bold' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <span className="material-symbols-outlined text-lg">dashboard</span>
-              <span className="font-mono text-[8px] tracking-wider uppercase">HOME</span>
-            </button>
-            <button
-              onClick={() => handlePageChange('members')}
-              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
-                activePage === 'members' ? 'text-purple-400 font-bold' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <span className="material-symbols-outlined text-lg">groups</span>
-              <span className="font-mono text-[8px] tracking-wider uppercase">ROSTER</span>
-            </button>
-            <button
-              onClick={() => handlePageChange('planned_events')}
-              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
-                activePage === 'planned_events' ? 'text-purple-400 font-bold' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <span className="material-symbols-outlined text-lg">event_upcoming</span>
-              <span className="font-mono text-[8px] tracking-wider uppercase">EVENTS</span>
-            </button>
-            <button
-              onClick={() => handlePageChange('payments')}
-              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
-                activePage === 'payments' ? 'text-purple-400 font-bold' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <span className="material-symbols-outlined text-lg">payments</span>
-              <span className="font-mono text-[8px] tracking-wider uppercase">PAYMENTS</span>
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              onClick={() => handlePageChange('dashboard')}
-              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
-                activePage === 'dashboard' ? 'text-purple-400 font-bold' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <span className="material-symbols-outlined text-lg">dashboard</span>
-              <span className="font-mono text-[8px] tracking-wider uppercase">HOME</span>
-            </button>
-            <button
-              onClick={() => handlePageChange('members')}
-              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
-                activePage === 'members' ? 'text-purple-400 font-bold' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <span className="material-symbols-outlined text-lg">groups</span>
-              <span className="font-mono text-[8px] tracking-wider uppercase">ROSTER</span>
-            </button>
-            <button
-              onClick={() => handlePageChange('planned_events')}
-              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
-                activePage === 'planned_events' ? 'text-purple-400 font-bold' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <span className="material-symbols-outlined text-lg">event_upcoming</span>
-              <span className="font-mono text-[8px] tracking-wider uppercase">EVENTS</span>
-            </button>
-            <button
-              onClick={() => handlePageChange('idcard')}
-              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
-                activePage === 'idcard' ? 'text-purple-400 font-bold' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <span className="material-symbols-outlined text-lg">badge</span>
-              <span className="font-mono text-[8px] tracking-wider uppercase">ID CARD</span>
-            </button>
-            <button
-              onClick={() => handlePageChange('payments')}
-              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
-                activePage === 'payments' ? 'text-purple-400 font-bold' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <span className="material-symbols-outlined text-lg">payments</span>
-              <span className="font-mono text-[8px] tracking-wider uppercase">PAY</span>
-            </button>
-          </>
-        )}
-      </nav>
-
       {/* Floating Maintenance Toolset FAB Logo — Solid Dark/Purple */}
       {isPaymentAdmin && (
         <button
           onClick={() => setIsMaintenanceModalOpen(true)}
           title="Configure Maintenance Mode"
-          className="fixed bottom-24 md:bottom-20 right-6 md:right-8 z-40 p-2.5 sm:p-3.5 rounded-full bg-purple-700 hover:bg-purple-600 text-white shadow-[0_0_20px_rgba(147,51,234,0.4)] border border-purple-400 transition-all duration-200 hover:scale-105 active:scale-95 flex items-center justify-center group cursor-pointer"
+          className="fixed bottom-16 md:bottom-16 right-5 md:right-8 z-40 p-2.5 sm:p-3.5 rounded-full bg-purple-700 hover:bg-purple-600 text-white shadow-[0_0_20px_rgba(147,51,234,0.4)] border border-purple-400 transition-all duration-200 hover:scale-105 active:scale-95 flex items-center justify-center group cursor-pointer"
         >
           <span className="material-symbols-outlined text-lg sm:text-xl group-hover:rotate-45 transition-transform duration-300">
             construction
@@ -696,9 +605,8 @@ function AppContent() {
           <span className="text-xs font-bold">{toast}</span>
         </div>
       )}
-      <div className={isStatusScreen ? 'hidden md:block' : 'block'}>
-        <Footer />
-      </div>
+
+      <Footer />
     </div>
       )}
     </>

@@ -9,7 +9,7 @@ import {
   GoogleAuthProvider,
   User,
 } from 'firebase/auth';
-import { collection, query, where, getDocs, getDoc, doc } from 'firebase/firestore';
+import { collection, query, where, getDocs, getDoc, doc, onSnapshot } from 'firebase/firestore';
 import { CONFIG } from '@/lib/config';
 
 import { checkIsFaculty, ensureDefaultTestFaculty } from '@/lib/faculty';
@@ -37,12 +37,13 @@ interface AuthContextType {
   isSuperAdmin: boolean;
   isAdmin: boolean;
   isPaymentAdmin: boolean;
-  userRole: 'Super Admin' | 'Admin' | 'Payment Admin' | 'Technical' | null;
+  userRole: string | null;
   isFaculty: boolean;
   isAuthorized: boolean;
   memberData: MemberData | null;
   authLoading: boolean;
   authError: string;
+  refreshUser: () => Promise<void>;
   isMinimalView: boolean;
   toggleViewMode: () => void;
   handleLogin: () => Promise<void>;
@@ -61,6 +62,7 @@ const AuthContext = createContext<AuthContextType>({
   memberData: null,
   authLoading: true,
   authError: '',
+  refreshUser: async () => {},
   isMinimalView: false,
   toggleViewMode: () => {},
   handleLogin: async () => {},
@@ -73,7 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isPaymentAdmin, setIsPaymentAdmin] = useState(false);
-  const [userRole, setUserRole] = useState<'Super Admin' | 'Admin' | 'Payment Admin' | 'Technical' | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [isFaculty, setIsFaculty] = useState(false);
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [memberData, setMemberData] = useState<MemberData | null>(null);
@@ -121,7 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const em = firebaseUser.email.toLowerCase();
+    const em = firebaseUser.email.toLowerCase().trim();
     setUser(firebaseUser);
     setUserEmail(em);
 
@@ -168,12 +170,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsSuperAdmin(superAdmin);
 
       // 3. Check Admin & Role status (Firestore 'admins' and 'roles' collections)
-      const configAdmins = CONFIG.ADMIN_EMAILS.map((e) => e.toLowerCase());
+      const configAdmins = CONFIG.ADMIN_EMAILS.map((e) => e.toLowerCase().trim());
       let isDbAdmin = false;
-      let assignedRole: 'Super Admin' | 'Admin' | 'Payment Admin' | 'Technical' | null = null;
+      let assignedRole: string | null = null;
 
       try {
-        // Direct doc check in admins collection
+        // Direct doc check in admins collection (doc ID = email)
         const adminDoc = await getDoc(doc(db, 'admins', em));
         if (adminDoc.exists()) {
           isDbAdmin = true;
@@ -181,26 +183,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (adminDocData?.role === 'super_admin' || adminDocData?.isSuperAdmin) {
             setIsSuperAdmin(true);
             assignedRole = 'Super Admin';
-          } else if (adminDocData?.role === 'Payment Admin') {
-            assignedRole = 'Payment Admin';
-          } else if (adminDocData?.role === 'Technical') {
-            assignedRole = 'Technical';
+          } else if (adminDocData?.role) {
+            assignedRole = adminDocData.role;
           } else {
             assignedRole = 'Admin';
           }
+        } else {
+          // Check query in case document was created with an auto-id or different casing
+          const adminQuery = query(collection(db, 'admins'), where('email', '==', em));
+          const adminSnap = await getDocs(adminQuery);
+          if (!adminSnap.empty) {
+            isDbAdmin = true;
+            const adminDocData = adminSnap.docs[0].data();
+            if (adminDocData?.role === 'super_admin' || adminDocData?.isSuperAdmin) {
+              setIsSuperAdmin(true);
+              assignedRole = 'Super Admin';
+            } else if (adminDocData?.role) {
+              assignedRole = adminDocData.role;
+            } else {
+              assignedRole = 'Admin';
+            }
+          }
         }
 
-        // Direct doc check in roles table
+        // Direct doc check in roles table (doc ID = email)
         const roleDoc = await getDoc(doc(db, 'roles', em));
         if (roleDoc.exists()) {
           const roleData = roleDoc.data();
           isDbAdmin = true;
-          if (roleData?.role === 'Payment Admin') {
-            assignedRole = 'Payment Admin';
-          } else if (roleData?.role === 'Technical') {
-            assignedRole = 'Technical';
-          } else if (roleData?.role === 'Admin') {
-            assignedRole = 'Admin';
+          if (roleData?.role) {
+            if (roleData.role === 'super_admin' || roleData.role === 'Super Admin') {
+              setIsSuperAdmin(true);
+              assignedRole = 'Super Admin';
+            } else if (!assignedRole || assignedRole === 'Admin') {
+              assignedRole = roleData.role;
+            }
+          }
+        } else {
+          // Check query in roles in case doc ID is different
+          const roleQuery = query(collection(db, 'roles'), where('email', '==', em));
+          const roleSnap = await getDocs(roleQuery);
+          if (!roleSnap.empty) {
+            isDbAdmin = true;
+            const roleData = roleSnap.docs[0].data();
+            if (roleData?.role) {
+              if (roleData.role === 'super_admin' || roleData.role === 'Super Admin') {
+                setIsSuperAdmin(true);
+                assignedRole = 'Super Admin';
+              } else if (!assignedRole || assignedRole === 'Admin') {
+                assignedRole = roleData.role;
+              }
+            }
           }
         }
       } catch (adminErr) {
@@ -249,14 +282,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const userEntries = memberSnap.docs.map((d) => d.data() as MemberData);
           const teams = [...new Set(userEntries.map((m) => m.team).filter(Boolean))].join(', ');
           const positions = [...new Set(userEntries.map((m) => m.position).filter(Boolean))].join(', ');
+          const first = userEntries[0];
           memberRecord = {
-            name: userEntries[0].name || firebaseUser.displayName || 'Member',
-            registrationNumber: userEntries[0].registrationNumber || '',
-            phone: userEntries[0].phone || '',
+            name: first.name || firebaseUser.displayName || 'Member',
+            registrationNumber: first.registrationNumber || '',
+            phone: first.phone || '',
             email: em,
-            team: teams || 'Member',
-            position: positions || 'Member',
+            team: teams || first.team || 'General Crew',
+            position: positions || first.position || 'Member',
           };
+          // If role was explicitly assigned on member doc
+          if (!assignedRole && (first as any).role) {
+            assignedRole = (first as any).role;
+          }
         }
       } catch (memberErr) {
         console.warn('Firestore member check warning:', memberErr);
@@ -274,8 +312,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               phone: d.phone || '',
               email: em,
               team: d.team || 'General',
-              position: d.position || d.role || (admin ? 'Lead' : 'Member'),
+              position: d.position || d.role || (assignedRole || 'Member'),
             };
+            if (!assignedRole && d.role) {
+              assignedRole = d.role;
+            }
           } else {
             const idQuery = query(collection(db, 'id_cards'), where('email', '==', em));
             const idSnap = await getDocs(idQuery);
@@ -287,8 +328,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 phone: d.phone || '',
                 email: em,
                 team: d.team || 'General',
-                position: d.position || d.role || (admin ? 'Lead' : 'Member'),
+                position: d.position || d.role || (assignedRole || 'Member'),
               };
+              if (!assignedRole && d.role) {
+                assignedRole = d.role;
+              }
             }
           }
         } catch (idErr) {
@@ -296,18 +340,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
+      const isPaymentAdminEmail = PAYMENT_ADMIN_EMAILS.includes(em) || assignedRole === 'Payment Admin';
+      const admin = superAdmin || isDbAdmin || isPaymentAdminEmail || em === PAYMENT_ADMIN_EMAIL || configAdmins.includes(em) || !!assignedRole;
+      const paymentAdmin = superAdmin || isPaymentAdminEmail;
+
+      if (superAdmin) {
+        assignedRole = 'Super Admin';
+      } else if (!assignedRole && admin) {
+        assignedRole = 'Admin';
+      }
+
+      setUserRole(assignedRole);
+      setIsAdmin(admin);
+      setIsPaymentAdmin(paymentAdmin);
+
       if (memberRecord) {
-        setMemberData(memberRecord);
+        setMemberData({
+          ...memberRecord,
+          position: assignedRole || memberRecord.position || (superAdmin ? 'Super Administrator' : admin ? 'Administrator' : 'Club Member'),
+        });
         setIsAuthorized(true);
         setAuthError('');
       } else if (admin) {
         setMemberData({
-          name: firebaseUser.displayName || (superAdmin ? 'Super Administrator' : 'Administrator'),
-          registrationNumber: superAdmin ? 'SUPER-ADMIN' : 'ADMIN',
+          name: firebaseUser.displayName || (superAdmin ? 'Super Administrator' : (assignedRole || 'Administrator')),
+          registrationNumber: superAdmin ? 'SUPER-ADMIN' : (assignedRole ? assignedRole.toUpperCase() : 'ADMIN'),
           phone: '',
           email: em,
-          team: 'Management',
-          position: superAdmin ? 'Super Administrator' : 'Lead',
+          team: assignedRole ? `${assignedRole} Division` : 'Management',
+          position: superAdmin ? 'Super Administrator' : (assignedRole || 'Lead'),
         });
         setIsAuthorized(true);
         setAuthError('');
@@ -326,12 +387,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    let unsubs: (() => void)[] = [];
+
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      // Clean up previous real-time role listeners
+      unsubs.forEach((u) => u());
+      unsubs = [];
+
       setAuthLoading(true);
       resolveUser(firebaseUser);
+
+      // Set up real-time live listeners on admins and roles so Super Admin updates take effect live!
+      if (firebaseUser && firebaseUser.email) {
+        const em = firebaseUser.email.toLowerCase().trim();
+        try {
+          const unsubAdmin = onSnapshot(doc(db, 'admins', em), () => {
+            resolveUser(firebaseUser);
+          });
+          unsubs.push(unsubAdmin);
+        } catch (adminListenErr) {
+          console.warn('Real-time admin listener fallback:', adminListenErr);
+        }
+
+        try {
+          const unsubRole = onSnapshot(doc(db, 'roles', em), () => {
+            resolveUser(firebaseUser);
+          });
+          unsubs.push(unsubRole);
+        } catch (roleListenErr) {
+          console.warn('Real-time role listener fallback:', roleListenErr);
+        }
+      }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      unsubs.forEach((u) => u());
+    };
+  }, [resolveUser]);
+
+  const refreshUser = useCallback(async () => {
+    await resolveUser(auth.currentUser);
   }, [resolveUser]);
 
   const handleLogin = useCallback(async () => {
@@ -376,6 +472,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         memberData,
         authLoading,
         authError,
+        refreshUser,
         isMinimalView,
         toggleViewMode,
         handleLogin,
