@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   PermissionsConfig,
   ClubMetadata,
@@ -16,10 +16,14 @@ import {
   createDefaultPagePermissionsMap,
 } from '@/lib/permissions';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, doc, setDoc, deleteDoc, query, where } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, deleteDoc, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
 import { fetchAllFaculty, deleteFacultyMember, createFacultyMember, updateFacultyMember } from '@/lib/faculty';
 import { FacultyMember } from '@/types/faculty';
 import { CONFIG } from '@/lib/config';
+import {
+  SessionRecord,
+  purgeAllAuditSessions,
+} from '@/lib/sessionTracker';
 
 interface SuperAdminControlCenterProps {
   onRedirect: () => void;
@@ -40,7 +44,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
   onRedirect,
   currentUserEmail,
 }) => {
-  const [activeTab, setActiveTab] = useState<'permissions' | 'roles' | 'metadata' | 'faculty'>('permissions');
+  const [activeTab, setActiveTab] = useState<'permissions' | 'roles' | 'metadata' | 'faculty' | 'audit'>('permissions');
   const [selectedMobileRole, setSelectedMobileRole] = useState<string>('Members');
   const [mobileViewMode, setMobileViewMode] = useState<'by_role' | 'by_portal'>('by_role');
   const [selectedMobilePortal, setSelectedMobilePortal] = useState<PageId>('members');
@@ -109,6 +113,153 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
     id: string;
     label: string;
   } | null>(null);
+
+  // ─── 5. Visitor Presence & Sessions Audit State ──────────────────────────
+  const [sessions, setSessions] = useState<SessionRecord[]>([]);
+  const [loadingSessions, setLoadingSessions] = useState<boolean>(true);
+  const [sessionSearch, setSessionSearch] = useState<string>('');
+  const [sessionStatusFilter, setSessionStatusFilter] = useState<'all' | 'online' | 'members' | 'guests'>('all');
+  const [sessionDateFilter, setSessionDateFilter] = useState<'all' | 'today' | 'week'>('all');
+  const [isPurgingSessions, setIsPurgingSessions] = useState<boolean>(false);
+  const [purgeModalOpen, setPurgeModalOpen] = useState<boolean>(false);
+  const [purgeFeedback, setPurgeFeedback] = useState<string>('');
+  const [sessionsFetched, setSessionsFetched] = useState<boolean>(false);
+  const [isRefreshingSessions, setIsRefreshingSessions] = useState<boolean>(false);
+
+  // Fetch audit sessions on demand (Minimum Firebase Reads — Spark Free Tier Friendly)
+  const fetchAuditSessions = useCallback(async (forceRefresh = false) => {
+    if (sessionsFetched && !forceRefresh) return;
+    setIsRefreshingSessions(true);
+    if (!sessionsFetched) setLoadingSessions(true);
+
+    try {
+      // Limit to 50 most recent sessions to save 75% read quotas
+      const q = query(
+        collection(db, 'audit_sessions'),
+        orderBy('enteredAt', 'desc'),
+        limit(50)
+      );
+      const snap = await getDocs(q);
+      const list: SessionRecord[] = [];
+      snap.forEach((d) => {
+        list.push({ id: d.id, ...(d.data() as Omit<SessionRecord, 'id'>) });
+      });
+      setSessions(list);
+      setSessionsFetched(true);
+    } catch (err) {
+      console.warn('[AuditSessions] Fetch error:', err);
+    } finally {
+      setLoadingSessions(false);
+      setIsRefreshingSessions(false);
+    }
+  }, [sessionsFetched]);
+
+  // Only load audit sessions when Super Admin actually opens the Presence & Audit tab
+  useEffect(() => {
+    if (activeTab === 'audit') {
+      fetchAuditSessions();
+    }
+  }, [activeTab, fetchAuditSessions]);
+
+  // Helper to determine if a session is currently active/online
+  const isSessionOnline = (s: SessionRecord): boolean => {
+    if (s.status !== 'online') return false;
+    const enteredMs = new Date(s.enteredAt).getTime();
+    // Safety check: sessions older than 12h without exit are considered expired
+    if (!isNaN(enteredMs) && Date.now() - enteredMs > 12 * 3600 * 1000) {
+      return false;
+    }
+    return true;
+  };
+
+  // Format date-time for audit table
+  const formatAuditDateTime = (isoString?: string | null): string => {
+    if (!isoString) return '—';
+    try {
+      const d = new Date(isoString);
+      if (isNaN(d.getTime())) return String(isoString);
+      return d.toLocaleString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+      });
+    } catch {
+      return String(isoString);
+    }
+  };
+
+  // Format relative elapsed time
+  const formatAuditRelativeTime = (isoString?: string | null): string => {
+    if (!isoString) return '';
+    try {
+      const ms = new Date(isoString).getTime();
+      const diff = Math.max(0, Math.round((Date.now() - ms) / 1000));
+      if (diff < 60) return 'just now';
+      if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+      if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+      return `${Math.floor(diff / 86400)}d ago`;
+    } catch {
+      return '';
+    }
+  };
+
+  // Calculated presence stats
+  const onlineCount = sessions.filter(isSessionOnline).length;
+  const membersCount = sessions.filter((s) => s.isLoggedIn).length;
+  const guestsCount = sessions.filter((s) => !s.isLoggedIn).length;
+
+  // Filtered session records
+  const filteredSessions = sessions.filter((s) => {
+    // Status filter
+    if (sessionStatusFilter === 'online' && !isSessionOnline(s)) return false;
+    if (sessionStatusFilter === 'members' && !s.isLoggedIn) return false;
+    if (sessionStatusFilter === 'guests' && s.isLoggedIn) return false;
+
+    // Date filter
+    if (sessionDateFilter !== 'all') {
+      const sessionTime = new Date(s.enteredAt).getTime();
+      if (sessionDateFilter === 'today') {
+        const isToday = new Date(s.enteredAt).toDateString() === new Date().toDateString();
+        if (!isToday) return false;
+      } else if (sessionDateFilter === 'week') {
+        if (Date.now() - sessionTime > 7 * 86400000) return false;
+      }
+    }
+
+    // Search filter
+    if (sessionSearch.trim()) {
+      const q = sessionSearch.toLowerCase().trim();
+      const matchesName = (s.userName || '').toLowerCase().includes(q);
+      const matchesEmail = (s.userEmail || '').toLowerCase().includes(q);
+      const matchesRole = (s.userRole || '').toLowerCase().includes(q);
+      const matchesDevice = (s.device || '').toLowerCase().includes(q);
+      const matchesPath = (s.currentPath || '').toLowerCase().includes(q);
+      return matchesName || matchesEmail || matchesRole || matchesDevice || matchesPath;
+    }
+
+    return true;
+  });
+
+  // Handle Purge All Audit Logs
+  const handlePurgeAuditLogs = async () => {
+    setIsPurgingSessions(true);
+    setPurgeFeedback('');
+    try {
+      const deleted = await purgeAllAuditSessions();
+      setSessions([]);
+      setPurgeFeedback(`Successfully purged ${deleted} session records.`);
+      setTimeout(() => setPurgeFeedback(''), 4000);
+      setPurgeModalOpen(false);
+    } catch (err: any) {
+      alert('Failed to purge session audit logs: ' + err.message);
+    } finally {
+      setIsPurgingSessions(false);
+    }
+  };
 
   // ─── Loaders ──────────────────────────────────────────────────────────────
   const loadAllData = async () => {
@@ -500,6 +651,17 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
         { merge: true }
       );
 
+      // Sync to members collection if member record exists
+      try {
+        const memQuery = query(collection(db, 'members'), where('email', '==', cleanEmail));
+        const memSnap = await getDocs(memQuery);
+        for (const memDoc of memSnap.docs) {
+          await setDoc(doc(db, 'members', memDoc.id), { role: newAdminRole, position: newAdminRole }, { merge: true });
+        }
+      } catch (memErr) {
+        console.warn('Sync to member doc warning:', memErr);
+      }
+
       setNewAdminEmail('');
       setNewAdminName('');
       setNewAdminRole('Admin');
@@ -527,6 +689,17 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
       await setDoc(doc(db, 'admins', cleanEmail), { id: cleanEmail, email: cleanEmail, role: newRole, updatedAt: nowIso }, { merge: true });
       await setDoc(doc(db, 'roles', cleanEmail), { id: cleanEmail, email: cleanEmail, role: newRole, assignedBy: currentUserEmail, updatedAt: nowIso }, { merge: true });
 
+      // Sync role change to members collection
+      try {
+        const memQuery = query(collection(db, 'members'), where('email', '==', cleanEmail));
+        const memSnap = await getDocs(memQuery);
+        for (const memDoc of memSnap.docs) {
+          await setDoc(doc(db, 'members', memDoc.id), { role: newRole, position: newRole }, { merge: true });
+        }
+      } catch (memErr) {
+        console.warn('Sync to member doc warning:', memErr);
+      }
+
       // Clean up any other duplicate documents in admins collection with matching email but different doc ID
       try {
         const q = query(collection(db, 'admins'), where('email', '==', cleanEmail));
@@ -551,6 +724,22 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
       const cleanEmail = adminEmail.toLowerCase().trim();
       await deleteDoc(doc(db, 'admins', cleanEmail));
       await deleteDoc(doc(db, 'roles', cleanEmail));
+
+      // Reset role in members collection
+      try {
+        const memQuery = query(collection(db, 'members'), where('email', '==', cleanEmail));
+        const memSnap = await getDocs(memQuery);
+        for (const memDoc of memSnap.docs) {
+          const memData = memDoc.data();
+          const updatedData: any = { role: null };
+          if (memData.position === 'Admin' || memData.position === 'Technical' || memData.position === 'Payment Admin') {
+            updatedData.position = 'Member';
+          }
+          await setDoc(doc(db, 'members', memDoc.id), updatedData, { merge: true });
+        }
+      } catch (memErr) {
+        console.warn('Clear member role warning:', memErr);
+      }
 
       // Also delete any other documents matching email
       try {
@@ -1018,6 +1207,34 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
           >
             <span className="material-symbols-outlined text-base">school</span>
             Faculty Directory ({facultyList.length})
+          </button>
+
+          <button
+            onClick={() => setActiveTab('audit')}
+            className={`px-3 sm:px-5 py-2.5 rounded-t-xl text-xs font-black tracking-wider uppercase flex items-center gap-2 transition-all shrink-0 border-b-2 cursor-pointer ${
+              activeTab === 'audit'
+                ? 'border-purple-500 text-white bg-[#140b24]'
+                : 'border-transparent text-slate-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <span className="material-symbols-outlined text-base">visibility</span>
+            <span>Presence &amp; Audit</span>
+            {sessionsFetched ? (
+              onlineCount > 0 ? (
+                <span className="px-1.5 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  {onlineCount} Online
+                </span>
+              ) : (
+                <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-purple-900/60 text-purple-300 border border-purple-700/50">
+                  {sessions.length}
+                </span>
+              )
+            ) : (
+              <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-purple-900/40 text-purple-300/70 border border-purple-700/30">
+                Audit
+              </span>
+            )}
           </button>
         </div>
 
@@ -2316,6 +2533,467 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
         </div>
       )}
 
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* TAB 5: VISITOR PRESENCE & SESSION DURATION AUDIT                     */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'audit' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Header Card */}
+          <div className="p-4 sm:p-6 bg-[#0e0618] border border-purple-600/40 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-base sm:text-lg font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <span className="material-symbols-outlined text-purple-400">visibility</span>
+                  Visitor Presence &amp; Session Duration Audit
+                </h3>
+                {onlineCount > 0 && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1.5 animate-pulse">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    {onlineCount} ACTIVE NOW
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
+                Streamlined tracking of individuals entering the website. Displays visitor identity, exact entry timestamp, device environment, and active online presence without background overhead.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => fetchAuditSessions(true)}
+                disabled={isRefreshingSessions}
+                className="px-3 py-2 bg-purple-900/40 hover:bg-purple-800/60 border border-purple-600/40 text-purple-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                title="Refresh audit sessions"
+              >
+                <span className={`material-symbols-outlined text-sm ${isRefreshingSessions ? 'animate-spin' : ''}`}>
+                  refresh
+                </span>
+                <span>{isRefreshingSessions ? 'Refreshing...' : 'Refresh'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPurgeModalOpen(true)}
+                className="px-3 py-2 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-600/40 text-rose-300 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Purge session audit records"
+              >
+                <span className="material-symbols-outlined text-sm">delete_sweep</span>
+                <span>Purge Logs</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Feedback banner */}
+          {purgeFeedback && (
+            <div className="p-3 bg-emerald-950/60 border border-emerald-600/50 rounded-xl text-emerald-300 text-xs font-bold flex items-center gap-2 animate-in fade-in duration-200">
+              <span className="material-symbols-outlined text-sm">check_circle</span>
+              <span>{purgeFeedback}</span>
+            </div>
+          )}
+
+          {/* 4 Summary Analytics Metric Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            {/* Card 1: Active Right Now */}
+            <div className="p-4 rounded-2xl bg-[#0e071c] border border-emerald-500/30 space-y-1 shadow-md">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[10px] font-black uppercase tracking-wider font-mono">ACTIVE RIGHT NOW</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              </div>
+              <div className="text-2xl sm:text-3xl font-black text-emerald-300 font-mono flex items-baseline gap-2">
+                <span>{onlineCount}</span>
+                <span className="text-[10px] font-normal text-emerald-400/80 font-sans">currently online</span>
+              </div>
+              <p className="text-[10px] text-slate-400 font-mono">Live visitors actively on website</p>
+            </div>
+
+            {/* Card 2: Total Tracked Sessions */}
+            <div className="p-4 rounded-2xl bg-[#0e071c] border border-purple-500/30 space-y-1 shadow-md">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[10px] font-black uppercase tracking-wider font-mono">TOTAL SESSIONS</span>
+                <span className="material-symbols-outlined text-sm text-purple-400">groups</span>
+              </div>
+              <div className="text-2xl sm:text-3xl font-black text-white font-mono flex items-baseline gap-2">
+                <span>{sessions.length}</span>
+                <span className="text-[10px] font-normal text-purple-300/80 font-sans">total visits</span>
+              </div>
+              <p className="text-[10px] text-slate-400 font-mono">Historical entry presence logs</p>
+            </div>
+
+            {/* Card 3: Identified Members */}
+            <div className="p-4 rounded-2xl bg-[#0e071c] border border-cyan-500/30 space-y-1 shadow-md">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[10px] font-black uppercase tracking-wider font-mono">IDENTIFIED MEMBERS</span>
+                <span className="material-symbols-outlined text-sm text-cyan-400">verified_user</span>
+              </div>
+              <div className="text-2xl sm:text-3xl font-black text-cyan-300 font-mono flex items-baseline gap-2">
+                <span>{membersCount}</span>
+                <span className="text-[10px] font-normal text-cyan-400/80 font-sans">registered</span>
+              </div>
+              <p className="text-[10px] text-slate-400 font-mono">Authenticated member sessions</p>
+            </div>
+
+            {/* Card 4: Guest Visitors */}
+            <div className="p-4 rounded-2xl bg-[#0e071c] border border-amber-500/30 space-y-1 shadow-md">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[10px] font-black uppercase tracking-wider font-mono">GUEST VISITORS</span>
+                <span className="material-symbols-outlined text-sm text-amber-400">person_outline</span>
+              </div>
+              <div className="text-xl sm:text-2xl font-black text-amber-300 font-mono flex items-baseline gap-2">
+                <span>{guestsCount}</span>
+                <span className="text-xs text-slate-400 font-mono font-normal">anonymous</span>
+              </div>
+              <p className="text-[10px] text-slate-400 font-mono">Guest portal visits</p>
+            </div>
+          </div>
+
+          {/* Search & Filter Toolbar */}
+          <div className="p-4 bg-[#0e071c] border border-[#26133b] rounded-2xl space-y-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              {/* Search input */}
+              <div className="relative flex-1">
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
+                  search
+                </span>
+                <input
+                  type="text"
+                  placeholder="Filter by Name, Email, Device, or Role..."
+                  value={sessionSearch}
+                  onChange={(e) => setSessionSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-[#160b26] border border-purple-900/60 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                />
+              </div>
+
+              {/* Date Scope Filter */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-[10px] font-mono text-slate-400 uppercase font-bold shrink-0">SCOPE:</span>
+                {(['all', 'today', 'week'] as const).map((dScope) => (
+                  <button
+                    key={dScope}
+                    onClick={() => setSessionDateFilter(dScope)}
+                    className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-lg border transition-all cursor-pointer ${
+                      sessionDateFilter === dScope
+                        ? 'bg-purple-600 border-purple-400 text-white'
+                        : 'bg-[#160b26] border-purple-900/40 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {dScope === 'all' ? 'All Time' : dScope === 'today' ? 'Today' : 'Last 7 Days'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Status Filter Chips */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-purple-500/10">
+              <span className="text-[10px] font-mono text-slate-400 uppercase font-bold mr-1 shrink-0">STATUS:</span>
+              <button
+                onClick={() => setSessionStatusFilter('all')}
+                className={`px-3 py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                  sessionStatusFilter === 'all'
+                    ? 'bg-purple-600 border-purple-400 text-white'
+                    : 'bg-[#160b26] border-purple-900/40 text-slate-400 hover:text-white'
+                }`}
+              >
+                All Sessions ({sessions.length})
+              </button>
+
+              <button
+                onClick={() => setSessionStatusFilter('online')}
+                className={`px-3 py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
+                  sessionStatusFilter === 'online'
+                    ? 'bg-emerald-600 border-emerald-400 text-white'
+                    : 'bg-[#160b26] border-emerald-900/40 text-emerald-400 hover:bg-emerald-950/40'
+                }`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Online Now ({onlineCount})
+              </button>
+
+              <button
+                onClick={() => setSessionStatusFilter('members')}
+                className={`px-3 py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                  sessionStatusFilter === 'members'
+                    ? 'bg-purple-600 border-purple-400 text-white'
+                    : 'bg-[#160b26] border-purple-900/40 text-slate-400 hover:text-white'
+                }`}
+              >
+                Identified Members ({membersCount})
+              </button>
+
+              <button
+                onClick={() => setSessionStatusFilter('guests')}
+                className={`px-3 py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                  sessionStatusFilter === 'guests'
+                    ? 'bg-purple-600 border-purple-400 text-white'
+                    : 'bg-[#160b26] border-purple-900/40 text-slate-400 hover:text-white'
+                }`}
+              >
+                Guest Visitors ({guestsCount})
+              </button>
+
+              {sessionSearch && (
+                <button
+                  onClick={() => setSessionSearch('')}
+                  className="ml-auto text-[10px] text-purple-400 hover:text-purple-300 underline font-mono cursor-pointer"
+                >
+                  Clear search
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Mobile View: Cards */}
+          <div className="md:hidden space-y-3">
+            {loadingSessions ? (
+              <div className="p-8 text-center text-slate-400 bg-[#0c0517] border border-[#2b1442] rounded-2xl">
+                <div className="flex flex-col items-center gap-2">
+                  <div className="w-6 h-6 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
+                  <span className="text-xs">Loading presence audit logs...</span>
+                </div>
+              </div>
+            ) : filteredSessions.length === 0 ? (
+              <div className="p-6 text-center text-slate-400 bg-[#0c0517] border border-[#2b1442] rounded-2xl text-xs">
+                No visitor sessions match your current filter.
+              </div>
+            ) : (
+              filteredSessions.map((s) => {
+                const isOnline = isSessionOnline(s);
+
+                return (
+                  <div
+                    key={s.id}
+                    className={`p-4 rounded-2xl border space-y-3 shadow-md w-full min-w-0 transition-all ${
+                      isOnline
+                        ? 'bg-[#0b141a] border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.1)]'
+                        : 'bg-[#0c0517] border-[#2b1442]'
+                    }`}
+                  >
+                    {/* Header: User & Live Status */}
+                    <div className="flex items-start justify-between gap-2 min-w-0">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        {s.userPhoto ? (
+                          <img
+                            src={s.userPhoto}
+                            alt="Avatar"
+                            className="w-8 h-8 rounded-full object-cover border border-purple-400/50 shrink-0"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs shrink-0 border ${
+                            s.isLoggedIn
+                              ? 'bg-purple-950 border-purple-600 text-purple-300'
+                              : 'bg-slate-900 border-slate-700 text-slate-400'
+                          }`}>
+                            {s.isLoggedIn ? (s.userName?.charAt(0).toUpperCase() || 'M') : 'G'}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <h4 className="font-bold text-white text-xs sm:text-sm truncate">
+                            {s.userName || 'Guest Visitor'}
+                          </h4>
+                          <div className="text-[10px] text-purple-400 font-mono truncate">
+                            {s.userEmail || 'Unauthenticated Visitor'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0">
+                        {isOnline ? (
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 flex items-center gap-1 animate-pulse">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            ONLINE NOW
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-[#1b1226] text-slate-400 border border-[#2b1d3d]">
+                            OFFLINE
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Role & Device Row */}
+                    <div className="flex items-center justify-between gap-2 text-[10px] font-mono">
+                      <span className={`px-2 py-0.5 rounded font-bold uppercase ${
+                        s.userRole === 'Super Admin'
+                          ? 'bg-purple-900/60 text-purple-200 border border-purple-600'
+                          : s.userRole === 'Technical'
+                          ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-600/50'
+                          : s.userRole === 'Payment Admin'
+                          ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-600/50'
+                          : s.isLoggedIn
+                          ? 'bg-purple-950/60 text-purple-300 border border-purple-800'
+                          : 'bg-slate-900 text-slate-400 border border-slate-800'
+                      }`}>
+                        {s.userRole || 'GUEST'}
+                      </span>
+                      <span className="text-slate-400 flex items-center gap-1 truncate">
+                        <span className="material-symbols-outlined text-xs text-slate-400">
+                          {s.deviceType === 'mobile' ? 'smartphone' : s.deviceType === 'tablet' ? 'tablet_mac' : 'computer'}
+                        </span>
+                        {s.device || 'Browser'}
+                      </span>
+                    </div>
+
+                    {/* Entered At and Offline status */}
+                    <div className="p-2.5 rounded-xl bg-[#140b24] border border-[#261238] text-xs space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9px] text-slate-400 font-mono uppercase font-bold">ENTERED AT:</span>
+                        <span className="font-mono text-white text-[11px]">{formatAuditDateTime(s.enteredAt)}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[9px] text-purple-400 font-mono">
+                        <span>TIME AGO:</span>
+                        <span>{formatAuditRelativeTime(s.enteredAt)}</span>
+                      </div>
+                      {!isOnline && s.leftAt && (
+                        <div className="flex items-center justify-between pt-1 border-t border-purple-500/10 text-[9px] text-slate-400 font-mono">
+                          <span>LEFT AT:</span>
+                          <span>{formatAuditDateTime(s.leftAt)} ({formatAuditRelativeTime(s.leftAt)})</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Desktop Table View (md+) - Exactly 4 Columns Requested */}
+          <div className="hidden md:block border border-[#2b1442] rounded-2xl overflow-hidden bg-[#0c0517] overflow-x-auto custom-scrollbar shadow-md">
+            <table className="w-full text-left text-xs min-w-[700px]">
+              <thead className="bg-[#140b24] border-b border-[#2b1442] text-slate-300 font-bold uppercase tracking-wider text-[10px]">
+                <tr>
+                  <th className="p-3.5">Visitor Profile</th>
+                  <th className="p-3.5">Entered At</th>
+                  <th className="p-3.5">Device Environment</th>
+                  <th className="p-3.5">Online Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#1e0f33]">
+                {loadingSessions ? (
+                  <tr>
+                    <td colSpan={4} className="p-8 text-center text-slate-400">
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="w-6 h-6 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
+                        <span>Loading presence audit logs...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : filteredSessions.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="p-8 text-center text-slate-400">
+                      No visitor sessions match your current filter.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredSessions.map((s) => {
+                    const isOnline = isSessionOnline(s);
+
+                    return (
+                      <tr
+                        key={s.id}
+                        className={`transition-colors ${
+                          isOnline ? 'bg-[#0d1c24]/50 hover:bg-[#0d1c24]/80' : 'hover:bg-[#150a29]'
+                        }`}
+                      >
+                        {/* 1. Visitor Profile */}
+                        <td className="p-3.5">
+                          <div className="flex items-center gap-2.5">
+                            {s.userPhoto ? (
+                              <img
+                                src={s.userPhoto}
+                                alt="Avatar"
+                                className="w-8 h-8 rounded-full object-cover border border-purple-400/50 shrink-0"
+                                referrerPolicy="no-referrer"
+                              />
+                            ) : (
+                              <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 border ${
+                                s.isLoggedIn
+                                  ? 'bg-purple-950 border-purple-600 text-purple-300'
+                                  : 'bg-slate-900 border-slate-700 text-slate-400'
+                              }`}>
+                                {s.isLoggedIn ? (s.userName?.charAt(0).toUpperCase() || 'M') : 'G'}
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <div className="font-bold text-white flex items-center gap-1.5">
+                                <span className="truncate">{s.userName || 'Guest Visitor'}</span>
+                                {isOnline && (
+                                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" title="Online now" />
+                                )}
+                              </div>
+                              <div className="text-[11px] text-purple-400 font-mono truncate">
+                                {s.userEmail || 'Anonymous Guest'}
+                              </div>
+                              <div className="mt-0.5">
+                                <span className={`px-1.5 py-0.2 rounded text-[8px] font-bold uppercase tracking-wider ${
+                                  s.userRole === 'Super Admin'
+                                    ? 'bg-purple-900/60 text-purple-200 border border-purple-600'
+                                    : s.userRole === 'Technical'
+                                    ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-600/50'
+                                    : s.userRole === 'Payment Admin'
+                                    ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-600/50'
+                                    : s.isLoggedIn
+                                    ? 'bg-purple-950/60 text-purple-300 border border-purple-800'
+                                    : 'bg-slate-900 text-slate-400 border border-slate-800'
+                                }`}>
+                                  {s.userRole || 'GUEST'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* 2. Entered At */}
+                        <td className="p-3.5">
+                          <div className="font-mono text-white text-xs">{formatAuditDateTime(s.enteredAt)}</div>
+                          <div className="text-[10px] text-purple-400 font-mono mt-0.5">
+                            {formatAuditRelativeTime(s.enteredAt)}
+                          </div>
+                        </td>
+
+                        {/* 3. Device Environment */}
+                        <td className="p-3.5 text-slate-300">
+                          <div className="flex items-center gap-1.5 text-xs">
+                            <span className="material-symbols-outlined text-sm text-slate-400">
+                              {s.deviceType === 'mobile' ? 'smartphone' : s.deviceType === 'tablet' ? 'tablet_mac' : 'computer'}
+                            </span>
+                            <span className="font-semibold text-white">{s.device || 'Unknown'}</span>
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono uppercase mt-0.5">{s.deviceType}</div>
+                        </td>
+
+                        {/* 4. Online Status */}
+                        <td className="p-3.5">
+                          {isOnline ? (
+                            <div>
+                              <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 inline-flex items-center gap-1.5 shadow-[0_0_12px_rgba(16,185,129,0.2)]">
+                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                                Online Now
+                              </span>
+                              <div className="text-[10px] text-emerald-400/80 font-mono mt-0.5">Active on website</div>
+                            </div>
+                          ) : (
+                            <div>
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#1e112e] text-slate-400 border border-[#3b1f5c] inline-flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+                                Offline
+                              </span>
+                              <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                {s.leftAt ? `Left ${formatAuditRelativeTime(s.leftAt)}` : 'Session closed'}
+                              </div>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* ── Confirmation Modal ── */}
       {deleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm select-none">
@@ -2347,6 +3025,43 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                 className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
               >
                 Confirm Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Purge Audit Logs Confirmation Modal ── */}
+      {purgeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm select-none">
+          <div className="max-w-md w-full bg-[#12081f] border border-rose-500/40 rounded-2xl p-5 sm:p-6 space-y-4 shadow-2xl mx-2">
+            <div className="w-12 h-12 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400">
+              <span className="material-symbols-outlined text-2xl">delete_sweep</span>
+            </div>
+            <div>
+              <h4 className="text-sm font-black text-white uppercase">Purge Visitor Presence Audit Logs</h4>
+              <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                Are you sure you want to delete all historical visitor presence and session duration records? This action cannot be undone. Active users will continue tracking with fresh sessions.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setPurgeModalOpen(false)}
+                className="px-3 py-1.5 bg-[#25133d] hover:bg-[#331852] text-slate-300 text-xs font-semibold rounded-lg cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isPurgingSessions}
+                onClick={handlePurgeAuditLogs}
+                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {isPurgingSessions && (
+                  <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                )}
+                Confirm Purge All
               </button>
             </div>
           </div>

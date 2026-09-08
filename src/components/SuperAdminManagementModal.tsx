@@ -20,6 +20,7 @@ import {
 } from '@/lib/faculty';
 import { FacultyMember } from '@/types/faculty';
 import { CONFIG } from '@/lib/config';
+import { fetchPermissionsConfig } from '@/lib/permissions';
 
 export interface AdminRecord {
   id: string;
@@ -51,12 +52,13 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
 
   // Admins state
   const [admins, setAdmins] = useState<AdminRecord[]>([]);
+  const [customRoles, setCustomRoles] = useState<string[]>([]);
   const [loadingAdmins, setLoadingAdmins] = useState<boolean>(false);
   const [adminSearch, setAdminSearch] = useState<string>('');
   const [isAddAdminOpen, setIsAddAdminOpen] = useState<boolean>(false);
   const [newAdminEmail, setNewAdminEmail] = useState<string>('');
   const [newAdminName, setNewAdminName] = useState<string>('');
-  const [newAdminRole, setNewAdminRole] = useState<'Admin' | 'Payment Admin' | 'Technical'>('Admin');
+  const [newAdminRole, setNewAdminRole] = useState<string>('Admin');
   const [submittingAdmin, setSubmittingAdmin] = useState<boolean>(false);
   const [adminError, setAdminError] = useState<string>('');
 
@@ -84,10 +86,17 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
     label: string;
   } | null>(null);
 
-  // Load admins from Firestore
+  // Load admins and custom roles from Firestore
   const loadAdmins = async () => {
     setLoadingAdmins(true);
     try {
+      try {
+        const pConfig = await fetchPermissionsConfig();
+        setCustomRoles(pConfig.customRoles || []);
+      } catch (pErr) {
+        console.warn('Failed to load custom roles:', pErr);
+      }
+
       const snap = await getDocs(collection(db, 'admins'));
       const adminMap = new Map<string, AdminRecord>();
       const duplicateDocIdsToDelete: string[] = [];
@@ -239,6 +248,17 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
         { merge: true }
       );
 
+      // 3. Sync to members collection if member record exists
+      try {
+        const memQuery = query(collection(db, 'members'), where('email', '==', cleanEmail));
+        const memSnap = await getDocs(memQuery);
+        for (const memDoc of memSnap.docs) {
+          await setDoc(doc(db, 'members', memDoc.id), { role: newAdminRole, position: newAdminRole }, { merge: true });
+        }
+      } catch (memErr) {
+        console.warn('Sync to member doc warning:', memErr);
+      }
+
       setNewAdminEmail('');
       setNewAdminName('');
       setNewAdminRole('Admin');
@@ -253,7 +273,7 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
   };
 
   // Handle Quick Change Admin Role
-  const handleUpdateAdminRole = async (adminEmail: string, newRole: 'Admin' | 'Payment Admin' | 'Technical') => {
+  const handleUpdateAdminRole = async (adminEmail: string, newRole: string) => {
     try {
       const cleanEmail = adminEmail.toLowerCase().trim();
       const nowIso = new Date().toISOString();
@@ -265,6 +285,17 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
 
       await setDoc(doc(db, 'admins', cleanEmail), { id: cleanEmail, email: cleanEmail, role: newRole, updatedAt: nowIso }, { merge: true });
       await setDoc(doc(db, 'roles', cleanEmail), { id: cleanEmail, email: cleanEmail, role: newRole, assignedBy: currentUserEmail, updatedAt: nowIso }, { merge: true });
+
+      // Sync role change to members collection
+      try {
+        const memQuery = query(collection(db, 'members'), where('email', '==', cleanEmail));
+        const memSnap = await getDocs(memQuery);
+        for (const memDoc of memSnap.docs) {
+          await setDoc(doc(db, 'members', memDoc.id), { role: newRole, position: newRole }, { merge: true });
+        }
+      } catch (memErr) {
+        console.warn('Sync to member doc warning:', memErr);
+      }
 
       try {
         const q = query(collection(db, 'admins'), where('email', '==', cleanEmail));
@@ -290,6 +321,22 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
       const cleanEmail = adminId.toLowerCase().trim();
       await deleteDoc(doc(db, 'admins', cleanEmail));
       await deleteDoc(doc(db, 'roles', cleanEmail));
+
+      // Reset role in members collection
+      try {
+        const memQuery = query(collection(db, 'members'), where('email', '==', cleanEmail));
+        const memSnap = await getDocs(memQuery);
+        for (const memDoc of memSnap.docs) {
+          const memData = memDoc.data();
+          const updatedData: any = { role: null };
+          if (memData.position === 'Admin' || memData.position === 'Technical' || memData.position === 'Payment Admin') {
+            updatedData.position = 'Member';
+          }
+          await setDoc(doc(db, 'members', memDoc.id), updatedData, { merge: true });
+        }
+      } catch (memErr) {
+        console.warn('Clear member role warning:', memErr);
+      }
 
       try {
         const q = query(collection(db, 'admins'), where('email', '==', cleanEmail));
@@ -546,12 +593,14 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
                       <label className="block text-[10px] font-bold text-slate-400 mb-1">DESIGNATION / ROLE</label>
                       <select
                         value={newAdminRole}
-                        onChange={(e) => setNewAdminRole(e.target.value as any)}
+                        onChange={(e) => setNewAdminRole(e.target.value)}
                         className="w-full px-3 py-2 bg-[#1c1c1c] border border-[#333333] rounded-lg text-xs text-white focus:outline-none focus:border-purple-500"
                       >
-                        <option value="Admin">Admin</option>
-                        <option value="Payment Admin">Payment Admin</option>
-                        <option value="Technical">Technical</option>
+                        {['Admin', 'Payment Admin', 'Technical', ...(customRoles || [])].map((r) => (
+                          <option key={r} value={r}>
+                            {r}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>
@@ -624,14 +673,16 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
                             <span className="font-bold text-purple-300 text-xs">Super Admin</span>
                           ) : (
                             <select
-                              value={adm.role === 'Payment Admin' || adm.role === 'Technical' ? adm.role : 'Admin'}
-                              onChange={(e) => handleUpdateAdminRole(adm.email, e.target.value as any)}
+                              value={adm.role || 'Admin'}
+                              onChange={(e) => handleUpdateAdminRole(adm.email, e.target.value)}
                               className="px-2 py-1 bg-[#1a1a1a] border border-[#333333] rounded text-xs font-semibold text-white focus:outline-none focus:border-purple-500 cursor-pointer min-w-0 flex-1 text-right"
                               title="Change role in Firebase"
                             >
-                              <option value="Admin">Admin</option>
-                              <option value="Payment Admin">Payment Admin</option>
-                              <option value="Technical">Technical</option>
+                              {['Admin', 'Payment Admin', 'Technical', ...(customRoles || [])].map((r) => (
+                                <option key={r} value={r}>
+                                  {r}
+                                </option>
+                              ))}
                             </select>
                           )}
                         </div>
@@ -705,14 +756,16 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
                                 <span className="font-bold text-purple-300">Super Admin</span>
                               ) : (
                                 <select
-                                  value={adm.role === 'Payment Admin' || adm.role === 'Technical' ? adm.role : 'Admin'}
-                                  onChange={(e) => handleUpdateAdminRole(adm.email, e.target.value as any)}
+                                  value={adm.role || 'Admin'}
+                                  onChange={(e) => handleUpdateAdminRole(adm.email, e.target.value)}
                                   className="px-2 py-1 bg-[#1a1a1a] border border-[#333333] rounded text-[11px] font-semibold text-white focus:outline-none focus:border-purple-500 cursor-pointer"
                                   title="Change role in Firebase"
                                 >
-                                  <option value="Admin">Admin</option>
-                                  <option value="Payment Admin">Payment Admin</option>
-                                  <option value="Technical">Technical</option>
+                                  {['Admin', 'Payment Admin', 'Technical', ...(customRoles || [])].map((r) => (
+                                    <option key={r} value={r}>
+                                      {r}
+                                    </option>
+                                  ))}
                                 </select>
                               )}
                             </td>

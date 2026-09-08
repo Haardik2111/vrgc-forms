@@ -1,0 +1,61 @@
+"use client";
+
+import React, { useEffect } from 'react';
+import { useAuth } from '@/lib/auth-context';
+import { initOrResumeSession, finalizeSession } from '@/lib/sessionTracker';
+
+export const SessionTracker: React.FC = () => {
+  const { user, userEmail, memberData, userRole, isSuperAdmin, isAdmin, isFaculty, authLoading } = useAuth();
+  const initDispatchedRef = React.useRef<boolean>(false);
+
+  // Compute resolved display name and role
+  const resolvedName = memberData?.name || user?.displayName || (userEmail ? userEmail.split('@')[0] : 'Guest Visitor');
+  const resolvedRole = isSuperAdmin
+    ? 'Super Admin'
+    : userRole
+    ? userRole
+    : isAdmin
+    ? 'Admin'
+    : isFaculty
+    ? 'Faculty'
+    : userEmail
+    ? 'Member'
+    : 'Guest';
+
+  // 1. Initialize session ONLY ONCE after auth state has settled (Single write to Firestore)
+  useEffect(() => {
+    if (authLoading) return;
+    if (initDispatchedRef.current) return;
+
+    initDispatchedRef.current = true;
+    initOrResumeSession({
+      email: userEmail || user?.email || null,
+      name: resolvedName,
+      photo: user?.photoURL || null,
+      role: resolvedRole,
+    });
+  }, [authLoading, userEmail, resolvedName, resolvedRole, user?.photoURL, user?.email]);
+
+  // 2. Mark offline on browser exit / tab close (Single write on exit, NO tab-switch spam)
+  useEffect(() => {
+    let finalized = false;
+
+    const handleExit = () => {
+      if (finalized) return;
+      finalized = true;
+      finalizeSession();
+    };
+
+    window.addEventListener('beforeunload', handleExit);
+    window.addEventListener('pagehide', handleExit);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleExit);
+      window.removeEventListener('pagehide', handleExit);
+    };
+  }, []);
+
+  return null;
+};
+
+export default SessionTracker;

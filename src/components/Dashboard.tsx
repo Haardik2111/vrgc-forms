@@ -219,6 +219,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onPageChange, onOpenSuperAdminMod
                   <span className="material-symbols-outlined text-[11px] sm:text-[12px]">terminal</span>
                   TECHNICAL
                 </span>
+              ) : userRole ? (
+                <span className="px-2 sm:px-2.5 py-0.5 rounded-md text-[8.5px] sm:text-[10px] font-black tracking-widest uppercase bg-[#1f162b] text-purple-300 border border-purple-700/60 flex items-center gap-1 shrink-0 whitespace-nowrap">
+                  <span className="material-symbols-outlined text-[11px] sm:text-[12px]">
+                    {userRole === 'Admin' ? 'shield' : 'military_tech'}
+                  </span>
+                  {userRole.toUpperCase()}
+                </span>
               ) : isAdmin ? (
                 <span className="px-2 sm:px-2.5 py-0.5 rounded-md text-[8.5px] sm:text-[10px] font-black tracking-widest uppercase bg-[#1f162b] text-purple-300 border border-purple-700/60 flex items-center gap-1 shrink-0 whitespace-nowrap">
                   <span className="material-symbols-outlined text-[11px] sm:text-[12px]">shield</span>

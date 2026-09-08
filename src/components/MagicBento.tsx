@@ -592,7 +592,7 @@ const MagicBento: React.FC<MagicBentoProps> = ({
         ) : (
           cardsToRender?.map((card, index) => {
             const cardGlow = card.glowColor || glowColor;
-            const baseClassName = `magic-bento-card ${
+            const baseClassName = `magic-bento-card group ${
               textAutoHide ? 'magic-bento-card--text-autohide' : ''
             } ${enableBorderGlow ? 'magic-bento-card--border-glow' : ''}`;
 
@@ -608,33 +608,51 @@ const MagicBento: React.FC<MagicBentoProps> = ({
 
             const cardContent = (
               <>
-                <div className="magic-bento-card__header">
-                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center border shadow-inner ${card.iconBg || 'bg-purple-950/80 border-purple-800 text-purple-300'}`}>
-                    <span className="material-symbols-outlined text-2xl">{card.icon}</span>
+                {/* Mobile Compact View (< md): Only Logo, Title, and Redirect Arrow */}
+                <div className="flex md:hidden items-center justify-between gap-3 w-full">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center border shrink-0 shadow-inner ${card.iconBg || 'bg-purple-950/80 border-purple-800 text-purple-300'}`}>
+                      <span className="material-symbols-outlined text-xl">{card.icon}</span>
+                    </div>
+                    <h2 className="text-sm font-extrabold text-white tracking-wide truncate group-hover:text-purple-300 transition-colors">
+                      {card.title}
+                    </h2>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    {card.featuredPill && (
-                      <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-600/40">
-                        {card.featuredPill}
-                      </span>
-                    )}
-                    <div className={`magic-bento-card__label ${card.tagColor || 'bg-purple-950/90 text-purple-300 border border-purple-800'}`}>
-                      {card.label}
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white shrink-0 transition-all shadow-sm group-hover:scale-105 group-hover:translate-x-0.5 ${card.btnBg || 'bg-purple-700 hover:bg-purple-600'}`}>
+                    <span className="material-symbols-outlined text-base">arrow_forward</span>
+                  </div>
+                </div>
+
+                {/* Desktop Full Bento Card View (>= md): Keep Exact Current Desktop Design */}
+                <div className="hidden md:flex flex-col justify-between h-full w-full">
+                  <div className="magic-bento-card__header">
+                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center border shadow-inner ${card.iconBg || 'bg-purple-950/80 border-purple-800 text-purple-300'}`}>
+                      <span className="material-symbols-outlined text-2xl">{card.icon}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {card.featuredPill && (
+                        <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-600/40">
+                          {card.featuredPill}
+                        </span>
+                      )}
+                      <div className={`magic-bento-card__label ${card.tagColor || 'bg-purple-950/90 text-purple-300 border border-purple-800'}`}>
+                        {card.label}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="magic-bento-card__content">
-                  <h2 className="magic-bento-card__title">{card.title}</h2>
-                  <p className="magic-bento-card__description">{card.description}</p>
-                </div>
+                  <div className="magic-bento-card__content">
+                    <h2 className="magic-bento-card__title">{card.title}</h2>
+                    <p className="magic-bento-card__description">{card.description}</p>
+                  </div>
 
-                <div className="magic-bento-card__footer">
-                  <span className={`text-[10px] sm:text-[11px] font-extrabold tracking-widest uppercase ${card.iconColor || 'text-purple-300'}`}>
-                    {card.actionText}
-                  </span>
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-white transition-all shadow-sm ${card.btnBg || 'bg-purple-700 hover:bg-purple-600'}`}>
-                    <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                  <div className="magic-bento-card__footer">
+                    <span className={`text-[10px] sm:text-[11px] font-extrabold tracking-widest uppercase ${card.iconColor || 'text-purple-300'}`}>
+                      {card.actionText}
+                    </span>
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-white transition-all shadow-sm ${card.btnBg || 'bg-purple-700 hover:bg-purple-600'}`}>
+                      <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                    </div>
                   </div>
                 </div>
               </>

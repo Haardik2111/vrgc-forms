@@ -362,7 +362,7 @@ function ContactPageContent() {
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 space-y-10">
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-20 sm:py-10 space-y-10">
         
         {/* Header & Mode Selector Tabs */}
         <section className="text-center space-y-4 max-w-3xl mx-auto">

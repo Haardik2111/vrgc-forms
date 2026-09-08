@@ -6,6 +6,7 @@ import { User } from 'firebase/auth';
 import SpecularButton from './SpecularButton';
 import StaggeredMenu, { StaggeredMenuItem } from './StaggeredMenu';
 import { cleanFullName } from '../lib/userUtils';
+import { PermissionsConfig, resolveUserPagePermission, PageId } from '@/lib/permissions';
 
 interface NavbarProps {
   pageTitle?: string;
@@ -17,6 +18,7 @@ interface NavbarProps {
   isSuperAdmin?: boolean;
   isFaculty?: boolean;
   userRole?: string | null;
+  permissionsConfig?: PermissionsConfig;
   onLogout?: () => Promise<void> | void;
   onLogin?: () => Promise<void> | void;
   onOpenSuperAdminModal?: () => void;
@@ -34,6 +36,7 @@ const Navbar: React.FC<NavbarProps> = ({
   isSuperAdmin,
   isFaculty,
   userRole,
+  permissionsConfig,
   onLogout,
   onLogin,
   onOpenSuperAdminModal,
@@ -58,7 +61,7 @@ const Navbar: React.FC<NavbarProps> = ({
     }
   };
 
-  const mobileMenuItems: StaggeredMenuItem[] = [
+  const baseMobileMenuItems: StaggeredMenuItem[] = [
     {
       id: 'dashboard',
       label: 'Dashboard',
@@ -95,7 +98,39 @@ const Navbar: React.FC<NavbarProps> = ({
       icon: 'share',
       onClick: () => handleMobileNavClick('referrals'),
     },
+    {
+      id: 'contact',
+      label: 'Contact Us & Support',
+      icon: 'contact_support',
+      onClick: () => {
+        window.location.href = '/contact';
+      },
+    },
+    {
+      id: 'about',
+      label: 'About Tech Team',
+      icon: 'code',
+      onClick: () => {
+        window.location.href = '/about';
+      },
+    },
   ];
+
+  const mobileMenuItems: StaggeredMenuItem[] = baseMobileMenuItems.filter((item) => {
+    if (item.id === 'dashboard' || item.id === 'contact' || item.id === 'about') return true;
+    if (isSuperAdmin) return true;
+    if (!permissionsConfig) return true;
+
+    const perm = resolveUserPagePermission(
+      item.id as PageId,
+      permissionsConfig,
+      userRole,
+      isSuperAdmin,
+      isFaculty,
+      !!userEmail
+    );
+    return perm.canView;
+  });
 
   if (isSuperAdmin) {
     mobileMenuItems.push({
@@ -208,8 +243,8 @@ const Navbar: React.FC<NavbarProps> = ({
             </button>
           )}
 
-          {/* Admin Role Badge */}
-          {!isSuperAdmin && isAdmin && (
+          {/* Admin / Custom Role Badge */}
+          {!isSuperAdmin && (isAdmin || userRole) && (
             <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 sm:px-2.5 sm:py-1 rounded-md text-[8px] sm:text-[9px] font-bold border shrink-0 ${
               userRole === 'Technical'
                 ? 'bg-cyan-950/80 text-cyan-300 border-cyan-600/50'
@@ -218,10 +253,26 @@ const Navbar: React.FC<NavbarProps> = ({
                 : 'bg-purple-950/80 text-purple-300 border-purple-600/50'
             }`}>
               <span className="material-symbols-outlined text-[10px] sm:text-[11px]">
-                {userRole === 'Technical' ? 'terminal' : userRole === 'Payment Admin' ? 'account_balance_wallet' : 'shield'}
+                {userRole === 'Technical'
+                  ? 'terminal'
+                  : userRole === 'Payment Admin'
+                  ? 'account_balance_wallet'
+                  : userRole && userRole !== 'Admin'
+                  ? 'military_tech'
+                  : 'shield'}
               </span>
               <span className="hidden sm:inline">{userRole ? userRole.toUpperCase() : 'ADMIN'}</span>
-              <span className="sm:hidden">{userRole === 'Payment Admin' ? 'PAY' : userRole === 'Technical' ? 'TECH' : 'ADMIN'}</span>
+              <span className="sm:hidden">
+                {userRole === 'Payment Admin'
+                  ? 'PAY'
+                  : userRole === 'Technical'
+                  ? 'TECH'
+                  : userRole && userRole.length > 7
+                  ? userRole.slice(0, 6).toUpperCase()
+                  : userRole
+                  ? userRole.toUpperCase()
+                  : 'ADMIN'}
+              </span>
             </span>
           )}
 
@@ -250,14 +301,6 @@ const Navbar: React.FC<NavbarProps> = ({
             </div>
           )}
 
-          {/* Active Status Heartbeat Pill */}
-          <div className="bg-[#12081c]/80 rounded-full px-1.5 sm:px-2.5 py-0.5 sm:py-1 border border-[#a855f7]/30 items-center gap-1 sm:gap-1.5 flex shadow-[0_0_10px_rgba(147,51,234,0.1)] shrink-0">
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-400"></span>
-            </span>
-            <span className="font-mono text-[7px] sm:text-[8.5px] text-white font-black tracking-widest uppercase">ACTIVE</span>
-          </div>
 
           {/* Sign In Button (when logged out) */}
           {onLogin && !userEmail && (
