@@ -79,7 +79,7 @@ export default function RootLayout({
         className="bg-[#03010A] text-[#e2e8f0] antialiased min-h-screen selection:bg-purple-500 selection:text-white relative overflow-x-clip max-w-full w-full"
       >
         <GlobalBackground />
-        <div className="relative z-10 min-h-screen flex flex-col w-full max-w-full overflow-x-clip">
+        <div className="relative z-10 min-h-screen flex flex-col w-full max-w-full overflow-x-clip" suppressHydrationWarning>
           <AuthProvider>
             <SessionTracker />
             {children}

@@ -2,9 +2,11 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
+import { getClientAuthToken } from '@/lib/auth-client';
 import readXlsxFile from 'read-excel-file/browser';
 import {
   ClubMetadata,
@@ -30,6 +32,7 @@ export interface RosterMember {
   isCoordinator?: boolean;
   isCoPresident?: boolean;
   isLead?: boolean;
+  isBlocked?: boolean;
 }
 
 export interface LeadershipPerson {
@@ -58,6 +61,19 @@ export interface ClashingMemberRecord {
   existing: RosterMember;
   decision: 'update' | 'keep' | 'manual';
   manualEdits?: ParsedMemberRow;
+}
+
+export interface PreviewMemberRecord {
+  id: string;
+  name: string;
+  registrationNumber: string;
+  email: string;
+  phone: string;
+  team: string;
+  position: string;
+  isExisting: boolean;
+  existingMember?: RosterMember;
+  selected: boolean;
 }
 
 /**
@@ -118,7 +134,10 @@ export function extractMemberTeams(rawTeamString: string): string[] {
 
 function sheetRowsToObjects(rows: any[][]): Record<string, any>[] {
   if (!rows || rows.length < 2) return [];
-  const headers = (rows[0] || []).map((cell) => (cell != null ? String(cell).trim() : ''));
+  const headers = (rows[0] || []).map((cell) => {
+    if (cell == null) return '';
+    return String(cell).replace(/^\uFEFF/, '').replace(/["']/g, '').trim();
+  });
   const objects: Record<string, any>[] = [];
 
   for (let r = 1; r < rows.length; r++) {
@@ -140,13 +159,28 @@ function sheetRowsToObjects(rows: any[][]): Record<string, any>[] {
 }
 
 function parseCSV(text: string): Record<string, any>[] {
+  if (!text) return [];
+  let cleanText = text;
+  if (cleanText.charCodeAt(0) === 0xFEFF) {
+    cleanText = cleanText.slice(1);
+  }
+
+  // Detect delimiter from first non-empty line
+  const firstLine = cleanText.split(/\r\n|\n|\r/)[0] || '';
+  const commaCount = (firstLine.match(/,/g) || []).length;
+  const semiCount = (firstLine.match(/;/g) || []).length;
+  const tabCount = (firstLine.match(/\t/g) || []).length;
+  let delimiter = ',';
+  if (semiCount > commaCount && semiCount > tabCount) delimiter = ';';
+  else if (tabCount > commaCount && tabCount > semiCount) delimiter = '\t';
+
   const lines: string[][] = [];
   let currentRow: string[] = [''];
   let inQuotes = false;
 
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    const nextChar = text[i + 1];
+  for (let i = 0; i < cleanText.length; i++) {
+    const char = cleanText[i];
+    const nextChar = cleanText[i + 1];
 
     if (char === '"') {
       if (inQuotes && nextChar === '"') {
@@ -155,14 +189,14 @@ function parseCSV(text: string): Record<string, any>[] {
       } else {
         inQuotes = !inQuotes;
       }
-    } else if (char === ',' && !inQuotes) {
+    } else if (char === delimiter && !inQuotes) {
       currentRow.push('');
     } else if ((char === '\r' || char === '\n') && !inQuotes) {
       if (char === '\r' && nextChar === '\n') {
         i++;
       }
-      if (currentRow.length > 1 || currentRow[0] !== '') {
-        lines.push(currentRow);
+      if (currentRow.length > 1 || (currentRow.length === 1 && currentRow[0].trim() !== '')) {
+        lines.push(currentRow.map((cell) => cell.trim().replace(/^["']|["']$/g, '')));
       }
       currentRow = [''];
     } else {
@@ -170,8 +204,8 @@ function parseCSV(text: string): Record<string, any>[] {
     }
   }
 
-  if (currentRow.length > 1 || currentRow[0] !== '') {
-    lines.push(currentRow);
+  if (currentRow.length > 1 || (currentRow.length === 1 && currentRow[0].trim() !== '')) {
+    lines.push(currentRow.map((cell) => cell.trim().replace(/^["']|["']$/g, '')));
   }
 
   return sheetRowsToObjects(lines);
@@ -183,8 +217,8 @@ interface MembersRosterProps {
 }
 
 const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: propIsAdmin }) => {
-  const { isSuperAdmin, userRole } = useAuth();
-  const canManage = isSuperAdmin || (propIsAdmin ?? false);
+  const { isSuperAdmin, isAdmin, userRole } = useAuth();
+  const canManage = isSuperAdmin || (propIsAdmin ?? false) || (isAdmin ?? false);
 
   const [members, setMembers] = useState<RosterMember[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -196,18 +230,24 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
   // Club metadata (domains & positions)
   const [clubMetadata, setClubMetadata] = useState<ClubMetadata>(DEFAULT_CLUB_METADATA);
   const [canManageMetadata, setCanManageMetadata] = useState<boolean>(false);
+  const [canBlockAccess, setCanBlockAccess] = useState<boolean>(false);
   const [quickAddModalType, setQuickAddModalType] = useState<'domain' | 'position' | null>(null);
   const [quickAddInput, setQuickAddInput] = useState<string>('');
   const [savingQuickAdd, setSavingQuickAdd] = useState<boolean>(false);
 
-  // File import state
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Unified File Import & Preview state
   const [importingFile, setImportingFile] = useState<boolean>(false);
   const [importModalOpen, setImportModalOpen] = useState<boolean>(false);
-  const [newEntriesToImport, setNewEntriesToImport] = useState<ParsedMemberRow[]>([]);
-  const [clashingEntries, setClashingEntries] = useState<ClashingMemberRecord[]>([]);
+  const [importStep, setImportStep] = useState<'upload' | 'preview'>('upload');
+  const [uploadedFileName, setUploadedFileName] = useState<string>('');
+  const [uploadedFileSize, setUploadedFileSize] = useState<string>('');
+  const [previewMembers, setPreviewMembers] = useState<PreviewMemberRecord[]>([]);
+  const [previewFilter, setPreviewFilter] = useState<'all' | 'new' | 'existing'>('all');
+  const [previewSearch, setPreviewSearch] = useState<string>('');
+  const [conflictMode, setConflictMode] = useState<'update' | 'skip'>('update');
   const [savingImport, setSavingImport] = useState<boolean>(false);
   const [importError, setImportError] = useState<string>('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Manual Add / Edit Member state
   const [memberModalOpen, setMemberModalOpen] = useState<boolean>(false);
@@ -256,6 +296,13 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
             const assignedTeams = extractMemberTeams(rawTeam);
             const memberPhoto = data.photoUrl || data.photoURL || data.avatarUrl || data.photo || data.image || data.avatar || '';
 
+            const isStubRecord = (!data.name || data.name === 'Member') && (!reg || reg.includes('@') || reg === (email || '').toUpperCase());
+            if (isStubRecord) {
+              // Automatically prune empty stub records
+              deleteDoc(docSnap.ref).catch(() => {});
+              return;
+            }
+
             membersMap.set(mapKey, {
               id: docSnap.id,
               name: data.name || data.Name || data.fullName || 'Member',
@@ -269,6 +316,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
               isCoPresident: isCoPres,
               isCoordinator: isCoord,
               isLead: isLd,
+              isBlocked: data.isBlocked === true,
             });
           }
         });
@@ -282,7 +330,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
         idCardsSnap.forEach((docSnap) => {
           const data = docSnap.data();
           const email = (data.email || data.Email || '').toLowerCase().trim();
-          const reg = (data.regNo || data.registrationNumber || docSnap.id || '').toUpperCase().trim();
+          const reg = (data.regNo || data.registrationNumber || (!docSnap.id.includes('@') ? docSnap.id : '') || '').toUpperCase().trim();
           const idPhoto = data.photoUrl || data.photoURL || data.avatarUrl || data.photo || data.image || data.avatar || '';
 
           // Match member by email or registration number
@@ -299,8 +347,18 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
             if (!existing.phone && data.phone) {
               existing.phone = data.phone;
             }
+            if (data.isBlocked === true) {
+              existing.isBlocked = true;
+            }
           } else {
-            // Add member from id_cards if not found in members collection
+            // Only add member from id_cards if it has an authentic member profile
+            const hasAuthenticProfile = (data.name && data.name.trim() !== '' && data.name !== 'Member') &&
+              (reg && !reg.includes('@')) && (data.isGenerated === true || data.team || data.domain || data.position);
+
+            if (!hasAuthenticProfile) {
+              return;
+            }
+
             const pos = (data.position || data.role || 'Member').trim();
             const rawTeam = (data.team || data.domain || 'General').trim();
             const posLower = pos.toLowerCase();
@@ -325,6 +383,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
               isCoPresident: isCoPres,
               isCoordinator: isCoord,
               isLead: isLd,
+              isBlocked: data.isBlocked === true,
             });
           }
         });
@@ -358,6 +417,9 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
         const perms = await fetchPermissionsConfig();
         const allowed = isSuperAdmin || (userRole ? perms.allowedMetadataRoles.includes(userRole) : false);
         setCanManageMetadata(allowed);
+        
+        const allowedBlock = isSuperAdmin || (userRole ? (perms.allowedBlockAccessRoles || []).includes(userRole) : false);
+        setCanBlockAccess(allowedBlock);
       } catch (err) {
         console.error('Failed to load club metadata / permissions:', err);
       }
@@ -517,167 +579,261 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
   }, [clubMetadata.positions, memberFormData.position]);
 
   // ─── CSV / XLSX Import Logic ────────────────────────────────────────────────
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleDownloadTemplate = () => {
+    const csvContent =
+      'Name,Registration Number,Email,Phone,Domain,Position\r\n' +
+      'John Doe,24BCG10001,john.24bcg10001@vitbhopal.ac.in,9876543210,Technical Team,Core Member\r\n' +
+      'Jane Smith,24BCG10002,jane.24bcg10002@vitbhopal.ac.in,9876543211,Design Team,Lead\r\n';
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'vrgc_members_template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
+  function extractMemberFromRow(row: Record<string, any>): ParsedMemberRow | null {
+    const getVal = (possibleKeys: string[], partialKeys?: string[]) => {
+      // 1. Exact match on normalized header
+      for (const k of possibleKeys) {
+        for (const rowKey of Object.keys(row)) {
+          const cleanKey = rowKey.replace(/^\uFEFF/, '').replace(/["']/g, '').trim().toLowerCase();
+          if (cleanKey === k.toLowerCase()) {
+            const val = String(row[rowKey] ?? '').trim();
+            return val.replace(/^["']|["']$/g, '');
+          }
+        }
+      }
+      // 2. Substring matching
+      if (partialKeys) {
+        for (const pk of partialKeys) {
+          for (const rowKey of Object.keys(row)) {
+            const cleanKey = rowKey.replace(/^\uFEFF/, '').replace(/["']/g, '').trim().toLowerCase();
+            if (cleanKey.includes(pk.toLowerCase())) {
+              const val = String(row[rowKey] ?? '').trim();
+              if (val) return val.replace(/^["']|["']$/g, '');
+            }
+          }
+        }
+      }
+      return '';
+    };
+
+    const name =
+      getVal(
+        ['name', 'full name', 'student name', 'member name', 'first name', 'student_name', 'name of student', 'candidate name'],
+        ['student name', 'member name', 'candidate name']
+      ) || getVal(['name']);
+
+    const registrationNumber = getVal(
+      ['registration number', 'reg no', 'regno', 'reg. no.', 'registration_number', 'reg_no', 'roll no', 'roll number', 'registration no', 'urn', 'reg', 'id', 'registration_no'],
+      ['reg no', 'regno', 'registration', 'roll no']
+    ).toUpperCase();
+
+    const email = getVal(
+      ['email', 'email address', 'vit email', 'email id', 'email_id', 'mail', 'vit email id', 'college email', 'official email', 'e-mail', 'mail id', 'vit mail'],
+      ['email', 'mail']
+    ).toLowerCase();
+
+    const phone = getVal(
+      ['phone', 'phone number', 'mobile', 'contact', 'mobile number', 'whatsapp', 'whatsapp number', 'phone_number', 'contact number', 'mobile_no', 'phone no', 'phone no.'],
+      ['phone', 'mobile', 'contact', 'whatsapp']
+    );
+
+    const team =
+      getVal(['domain', 'team', 'department', 'subdivision', 'assigned team', 'assigned domain', 'club domain', 'teams', 'domains', 'dept', 'track'], ['domain', 'team', 'department', 'subdivision']) ||
+      'General';
+
+    const position =
+      getVal(['position', 'role', 'designation', 'post', 'status', 'positions', 'designations', 'title'], ['position', 'role', 'designation', 'post']) ||
+      'Member';
+
+    if (!email && !registrationNumber && !name) {
+      return null;
+    }
+
+    return {
+      name: name || 'Member',
+      registrationNumber,
+      email: email || (registrationNumber ? `${registrationNumber.toLowerCase()}@vitbhopal.ac.in` : ''),
+      phone,
+      team,
+      position,
+    };
+  }
+
+  const processUploadedFile = async (file: File) => {
     setImportError('');
     setImportingFile(true);
+    setUploadedFileName(file.name);
+    setUploadedFileSize(
+      file.size > 1024 * 1024
+        ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
+        : `${Math.round(file.size / 1024)} KB`
+    );
 
     try {
       let rawRows: Record<string, any>[] = [];
       const fileName = file.name.toLowerCase();
 
-      if (fileName.endsWith('.csv') || file.type === 'text/csv') {
+      if (
+        fileName.endsWith('.csv') ||
+        fileName.endsWith('.tsv') ||
+        fileName.endsWith('.txt') ||
+        file.type === 'text/csv' ||
+        file.type === 'text/tab-separated-values' ||
+        file.type === 'text/plain'
+      ) {
         const text = await file.text();
         rawRows = parseCSV(text);
       } else {
-        const result = (await readXlsxFile(file)) as any;
-        const rows: any[][] = Array.isArray(result) && result.length > 0 && result[0] && Array.isArray(result[0].data)
-          ? result[0].data
-          : (result as any[][]);
-        rawRows = sheetRowsToObjects(rows);
+        try {
+          const result = (await readXlsxFile(file)) as any;
+          const rows: any[][] =
+            Array.isArray(result) && result.length > 0 && result[0] && Array.isArray(result[0].data)
+              ? result[0].data
+              : (result as any[][]);
+          rawRows = sheetRowsToObjects(rows);
+        } catch {
+          // If readXlsxFile failed, try text fallback in case it was a renamed CSV
+          const text = await file.text();
+          rawRows = parseCSV(text);
+        }
       }
 
       if (rawRows.length === 0) {
-        throw new Error('No data found in uploaded file.');
+        throw new Error(
+          'No readable rows found in the uploaded file. Please make sure the spreadsheet has a header row and at least one member.'
+        );
       }
 
-      const parsedRows: ParsedMemberRow[] = [];
-
+      const parsedMembers: ParsedMemberRow[] = [];
       rawRows.forEach((row) => {
-        // Flexible key lookup
-        const getVal = (possibleKeys: string[]) => {
-          for (const k of possibleKeys) {
-            for (const rowKey of Object.keys(row)) {
-              if (rowKey.trim().toLowerCase() === k.toLowerCase()) {
-                return String(row[rowKey]).trim();
-              }
-            }
-          }
-          return '';
-        };
-
-        const name = getVal(['name', 'full name', 'student name', 'member name']);
-        const registrationNumber = getVal(['registration number', 'reg no', 'regno', 'reg. no.', 'registration_number']).toUpperCase();
-        const email = getVal(['email', 'email address', 'mail', 'email id']).toLowerCase();
-        const phone = getVal(['phone', 'phone number', 'mobile', 'contact', 'mobile number']);
-        const team = getVal(['team', 'domain', 'subdivision', 'department']) || 'General';
-        const position = getVal(['position', 'role', 'designation']) || 'Member';
-
-        if (email || registrationNumber || name) {
-          parsedRows.push({
-            name: name || 'Member',
-            registrationNumber,
-            email,
-            phone,
-            team,
-            position,
-          });
+        const extracted = extractMemberFromRow(row);
+        if (extracted) {
+          parsedMembers.push(extracted);
         }
       });
 
-      // Clash Detection
-      const newItems: ParsedMemberRow[] = [];
-      const clashes: ClashingMemberRecord[] = [];
+      if (parsedMembers.length === 0) {
+        throw new Error(
+          'Could not identify member columns. Please ensure columns include: Name, Registration Number, Email, Domain, Position.'
+        );
+      }
 
-      parsedRows.forEach((incoming, idx) => {
+      // Build Preview Member records by comparing with current database members
+      const previewList: PreviewMemberRecord[] = parsedMembers.map((incoming, idx) => {
         const existing = members.find(
           (m) =>
-            (incoming.email && m.email.toLowerCase() === incoming.email) ||
-            (incoming.registrationNumber && m.registrationNumber && m.registrationNumber.toUpperCase() === incoming.registrationNumber)
+            (incoming.email && m.email.toLowerCase() === incoming.email.toLowerCase()) ||
+            (incoming.registrationNumber &&
+              m.registrationNumber &&
+              m.registrationNumber.toUpperCase() === incoming.registrationNumber.toUpperCase())
         );
 
-        if (existing) {
-          // Check if values actually clash
-          const nameClash = incoming.name && existing.name.toLowerCase() !== incoming.name.toLowerCase();
-          const teamClash = incoming.team && existing.team.toLowerCase() !== incoming.team.toLowerCase();
-          const posClash = incoming.position && existing.position.toLowerCase() !== incoming.position.toLowerCase();
-          const regClash = incoming.registrationNumber && existing.registrationNumber !== incoming.registrationNumber;
-
-          if (nameClash || teamClash || posClash || regClash) {
-            clashes.push({
-              id: `clash-${idx}`,
-              incoming,
-              existing,
-              decision: 'update',
-            });
-          } else {
-            // Identical or no major clash
-            newItems.push(incoming);
-          }
-        } else {
-          newItems.push(incoming);
-        }
+        return {
+          id: `preview-${idx}-${incoming.registrationNumber || incoming.email || idx}`,
+          name: incoming.name,
+          registrationNumber: incoming.registrationNumber,
+          email: incoming.email,
+          phone: incoming.phone,
+          team: incoming.team,
+          position: incoming.position,
+          isExisting: Boolean(existing),
+          existingMember: existing,
+          selected: true, // Default to checked
+        };
       });
 
-      setNewEntriesToImport(newItems);
-      setClashingEntries(clashes);
+      setPreviewMembers(previewList);
+      setImportStep('preview');
       setImportModalOpen(true);
     } catch (err: any) {
       console.error('Error parsing file:', err);
       setImportError(err?.message || 'Failed to parse file. Please upload a valid CSV or Excel file.');
-      alert(err?.message || 'Failed to parse spreadsheet file.');
+      setImportStep('upload');
+      setImportModalOpen(true);
     } finally {
       setImportingFile(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
     }
   };
 
-  // Confirm Import & Save to Firestore
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await processUploadedFile(file);
+    if (e.target) {
+      e.target.value = '';
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      await processUploadedFile(file);
+    }
+  };
+
+  // Confirm Import & Save to Database
   const handleConfirmImport = async () => {
     setSavingImport(true);
     setImportError('');
     try {
-      // 1. Process new items using Registration Number as document key
-      for (const item of newEntriesToImport) {
-        const cleanReg = (item.registrationNumber || '').trim().toUpperCase();
-        const docId = cleanReg || (item.email || '').toLowerCase().trim() || `${Date.now()}-${Math.random()}`;
-        await setDoc(
-          doc(db, 'members', docId),
-          {
-            name: item.name,
-            registrationNumber: item.registrationNumber,
-            email: item.email,
-            phone: item.phone,
-            team: item.team,
-            position: item.position,
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
+      const selectedRecords = previewMembers.filter((m) => m.selected);
+      if (selectedRecords.length === 0) {
+        throw new Error('Please select at least one member to import.');
       }
 
-      // 2. Process clashes based on decision
-      for (const clash of clashingEntries) {
-        if (clash.decision === 'keep') continue;
+      // Filter based on conflictMode if user chose 'skip' existing
+      const toImport = selectedRecords.filter((m) => {
+        if (m.isExisting && conflictMode === 'skip') {
+          return false;
+        }
+        return true;
+      });
 
-        const targetData = clash.decision === 'manual' && clash.manualEdits ? clash.manualEdits : clash.incoming;
-        const cleanReg = (targetData.registrationNumber || clash.existing.registrationNumber || '').trim().toUpperCase();
-        const docId = clash.existing.id || cleanReg || (targetData.email || clash.existing.email || '').toLowerCase().trim();
-
-        await setDoc(
-          doc(db, 'members', docId),
-          {
-            name: targetData.name || clash.existing.name,
-            registrationNumber: targetData.registrationNumber || clash.existing.registrationNumber,
-            email: targetData.email || clash.existing.email,
-            phone: targetData.phone || clash.existing.phone || '',
-            team: targetData.team || clash.existing.team,
-            position: targetData.position || clash.existing.position,
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
+      if (toImport.length === 0) {
+        throw new Error('No members to import based on your selected options.');
       }
 
-      setImportModalOpen(false);
+      const payload = toImport.map((m) => ({
+        name: m.name,
+        registrationNumber: m.registrationNumber,
+        email: m.email,
+        phone: m.phone,
+        team: m.team,
+        position: m.position,
+      }));
+
+      // Call fast backend API
+      const token = await getClientAuthToken();
+      const res = await fetch('/api/members/import', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ members: payload }),
+      });
+
+      const resData = await res.json();
+      if (!res.ok || !resData.success) {
+        throw new Error(resData?.error || 'Failed to import members via server API');
+      }
+
       await loadAllMembers();
+      setImportModalOpen(false);
+      setImportStep('upload');
+      setPreviewMembers([]);
+      alert(`🎉 Successfully imported ${resData.count || toImport.length} members into the database!`);
     } catch (err: any) {
       console.error('Error saving imported members:', err);
-      setImportError(err?.message || 'Failed to save members to Firestore.');
+      setImportError(err?.message || 'Failed to save members to database.');
     } finally {
       setSavingImport(false);
     }
@@ -951,19 +1107,91 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
     }
   };
 
+  const handleToggleBlockMember = async (member: RosterMember) => {
+    try {
+      const newStatus = !member.isBlocked;
+      const cleanEmail = (member.email || '').toLowerCase().trim();
+      const cleanReg = (member.registrationNumber || '').toUpperCase().trim();
+      const targetDocId = (member.id || cleanReg || cleanEmail).replace(/\//g, '_');
+
+      // Optimistically update local UI state
+      setMembers((prev) =>
+        prev.map((m) => {
+          const matchId = targetDocId && m.id === targetDocId;
+          const matchEmail = cleanEmail && m.email.toLowerCase() === cleanEmail;
+          const matchReg = cleanReg && m.registrationNumber.toUpperCase() === cleanReg;
+          return matchId || matchEmail || matchReg ? { ...m, isBlocked: newStatus } : m;
+        })
+      );
+
+      // 1. Direct Firestore update for active sync (only update existing docs)
+      try {
+        if (cleanEmail) {
+          const emailSnap = await getDocs(query(collection(db, 'members'), where('email', '==', cleanEmail)));
+          emailSnap.forEach((d) => {
+            setDoc(d.ref, { isBlocked: newStatus, updatedAt: new Date().toISOString() }, { merge: true }).catch(console.warn);
+          });
+          
+          if (newStatus) {
+            await setDoc(doc(db, 'blocked_users', cleanEmail), {
+              email: cleanEmail,
+              registrationNumber: cleanReg || '',
+              isBlocked: true,
+              updatedAt: new Date().toISOString(),
+            }, { merge: true }).catch(console.warn);
+          } else {
+            await deleteDoc(doc(db, 'blocked_users', cleanEmail)).catch(() => {});
+          }
+        }
+      } catch (fsErr) {
+        console.warn('Direct Firestore block update notice:', fsErr);
+      }
+
+      // 2. Call Backend API to update Firestore & Firebase Auth credentials
+      try {
+        const token = await getClientAuthToken();
+        const res = await fetch('/api/members/block', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            email: cleanEmail,
+            registrationNumber: cleanReg,
+            isBlocked: newStatus,
+          }),
+        });
+
+        const resData = await res.json();
+        if (!res.ok || !resData.success) {
+          console.warn('Backend block endpoint response:', resData);
+        }
+      } catch (apiErr) {
+        console.warn('Backend block API fetch notice:', apiErr);
+      }
+    } catch (e: any) {
+      console.error('Failed to update member access:', e);
+      alert('Failed to update member access: ' + (e?.message || e));
+      await loadAllMembers();
+    }
+  };
+
+  useEffect(() => {
+    if (importModalOpen || memberModalOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [importModalOpen, memberModalOpen]);
+
   return (
     <div className="flex-grow w-full max-w-full overflow-x-clip bg-transparent p-3 sm:p-6 md:p-8 pb-12 sm:pb-16 text-left text-white select-none">
       <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8">
         
-        {/* Hidden File Input for CSV/Excel */}
-        <input
-          type="file"
-          ref={fileInputRef}
-          accept=".csv, .xlsx, .xls"
-          onChange={handleFileUpload}
-          className="hidden"
-        />
-
         {/* Page Header */}
         <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 border-b border-[#262626]">
           <div>
@@ -995,7 +1223,11 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
                   lineColor="#c084fc"
                   baseColor="#581c87"
                   intensity={1.2}
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => {
+                    setImportError('');
+                    setImportStep('upload');
+                    setImportModalOpen(true);
+                  }}
                   disabled={importingFile}
                   className="font-bold text-white shadow-[0_0_15px_rgba(147,51,234,0.3)]"
                 >
@@ -1299,23 +1531,47 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
                       {m.team}
                     </span>
 
-                    {/* Admin Actions (Edit & Delete) */}
-                    {canManage ? (
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => openMemberModal(m)}
-                          className="px-2 py-1 bg-[#222222] hover:bg-purple-700 text-white rounded text-[10px] font-bold transition-colors cursor-pointer"
-                          title="Edit Member Details"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => setDeleteConfirmMember(m)}
-                          className="px-2 py-1 bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800/40 rounded text-[10px] font-bold transition-colors cursor-pointer"
-                          title="Delete Member"
-                        >
-                          Delete
-                        </button>
+                    {/* Admin Actions (Edit, Delete, Block) */}
+                    {(canManage || canBlockAccess) ? (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {canBlockAccess && !m.position?.toLowerCase().includes('super') && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleBlockMember(m);
+                            }}
+                            className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer flex items-center gap-1 ${
+                              m.isBlocked 
+                                ? 'bg-amber-950/70 hover:bg-amber-900 text-amber-300 border-amber-600/50' 
+                                : 'bg-red-950/70 hover:bg-red-900 text-red-300 border-red-600/50'
+                            }`}
+                            title={m.isBlocked ? "Unblock Access to VRGC Forms" : "Block Access to VRGC Forms"}
+                          >
+                            <span className="material-symbols-outlined text-[12px]">{m.isBlocked ? 'lock_open' : 'block'}</span>
+                            <span>{m.isBlocked ? "Unblock" : "Block"}</span>
+                          </button>
+                        )}
+                        {canManage && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => openMemberModal(m)}
+                              className="px-2 py-1 bg-[#222222] hover:bg-purple-700 text-white rounded text-[10px] font-bold transition-colors cursor-pointer"
+                              title="Edit Member Details"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeleteConfirmMember(m)}
+                              className="px-2 py-1 bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800/40 rounded text-[10px] font-bold transition-colors cursor-pointer"
+                              title="Delete Member"
+                            >
+                              Delete
+                            </button>
+                          </>
+                        )}
                       </div>
                     ) : (
                       <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
@@ -1341,7 +1597,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
                     <th className="py-3.5 px-4">Role / Position</th>
                     <th className="py-3.5 px-4">Official Email</th>
                     <th className="py-3.5 px-4">Contact</th>
-                    {canManage && <th className="py-3.5 px-4 text-right">Actions</th>}
+                    {(canManage || canBlockAccess) && <th className="py-3.5 px-4 text-right">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#222222]">
@@ -1374,20 +1630,44 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
                       </td>
                       <td className="py-3 px-4 font-mono text-slate-400">{m.email}</td>
                       <td className="py-3 px-4 font-mono text-slate-400">{m.phone || '—'}</td>
-                      {canManage && (
-                        <td className="py-3 px-4 text-right space-x-2">
-                          <button
-                            onClick={() => openMemberModal(m)}
-                            className="px-2.5 py-1 bg-[#222222] hover:bg-purple-700 text-white rounded text-[11px] font-bold transition-colors cursor-pointer"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => setDeleteConfirmMember(m)}
-                            className="px-2.5 py-1 bg-rose-950/50 hover:bg-rose-900 text-rose-300 rounded text-[11px] font-bold border border-rose-800/40 transition-colors cursor-pointer"
-                          >
-                            Delete
-                          </button>
+                      {(canManage || canBlockAccess) && (
+                        <td className="py-3 px-4 text-right flex justify-end items-center space-x-2">
+                          {canBlockAccess && !m.position?.toLowerCase().includes('super') && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleBlockMember(m);
+                              }}
+                              className={`px-2.5 py-1 rounded text-[11px] font-bold border transition-colors cursor-pointer flex items-center gap-1 ${
+                                m.isBlocked
+                                  ? 'bg-amber-950/70 hover:bg-amber-900 text-amber-300 border-amber-600/50'
+                                  : 'bg-red-950/70 hover:bg-red-900 text-red-300 border-red-600/50'
+                              }`}
+                            >
+                              <span className="material-symbols-outlined text-[12px]">{m.isBlocked ? 'lock_open' : 'block'}</span>
+                              <span>{m.isBlocked ? 'Unblock' : 'Block'}</span>
+                            </button>
+                          )}
+                          {canManage && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => openMemberModal(m)}
+                                className="px-2.5 py-1 bg-[#222222] hover:bg-purple-700 text-white rounded text-[11px] font-bold transition-colors cursor-pointer"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeleteConfirmMember(m)}
+                                className="p-1 text-slate-400 hover:text-rose-400 cursor-pointer transition-colors"
+                                title="Delete Member"
+                              >
+                                <span className="material-symbols-outlined text-base">delete</span>
+                              </button>
+                            </>
+                          )}
                         </td>
                       )}
                     </tr>
@@ -1464,22 +1744,45 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Active Member
                     </span>
 
-                    {canManage && (
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => openMemberModal(m)}
-                          className="px-2.5 py-1 bg-[#222222] hover:bg-purple-700 text-white rounded text-[10.5px] font-bold transition-colors cursor-pointer flex items-center gap-1"
-                        >
-                          <span className="material-symbols-outlined text-[12px]">edit</span>
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => setDeleteConfirmMember(m)}
-                          className="px-2.5 py-1 bg-rose-950/50 hover:bg-rose-900 text-rose-300 rounded text-[10.5px] font-bold border border-rose-800/40 transition-colors cursor-pointer flex items-center gap-1"
-                        >
-                          <span className="material-symbols-outlined text-[12px]">delete</span>
-                          Delete
-                        </button>
+                    {(canManage || canBlockAccess) && (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {canBlockAccess && !m.position?.toLowerCase().includes('super') && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleBlockMember(m);
+                            }}
+                            className={`px-2.5 py-1 rounded text-[10.5px] font-bold border transition-colors cursor-pointer flex items-center gap-1 ${
+                              m.isBlocked
+                                ? 'bg-amber-950/70 hover:bg-amber-900 text-amber-300 border-amber-600/50'
+                                : 'bg-red-950/70 hover:bg-red-900 text-red-300 border-red-600/50'
+                            }`}
+                          >
+                            <span className="material-symbols-outlined text-[12px]">{m.isBlocked ? 'lock_open' : 'block'}</span>
+                            <span>{m.isBlocked ? 'Unblock' : 'Block'}</span>
+                          </button>
+                        )}
+                        {canManage && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => openMemberModal(m)}
+                              className="px-2.5 py-1 bg-[#222222] hover:bg-purple-700 text-white rounded text-[10.5px] font-bold transition-colors cursor-pointer flex items-center gap-1"
+                            >
+                              <span className="material-symbols-outlined text-[12px]">edit</span>
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeleteConfirmMember(m)}
+                              className="px-2.5 py-1 bg-rose-950/50 hover:bg-rose-900 text-rose-300 rounded text-[10.5px] font-bold border border-rose-800/40 transition-colors cursor-pointer flex items-center gap-1"
+                            >
+                              <span className="material-symbols-outlined text-[12px]">delete</span>
+                              Delete
+                            </button>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1513,351 +1816,466 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
         )}
       </div>
 
-      {/* ─── MODAL 1: CSV/XLSX Import & Clash Resolution ──────────────────────── */}
-      {importModalOpen && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-6 bg-black/90 backdrop-blur-md">
-          <div className="w-full max-w-4xl max-h-[88vh] flex flex-col bg-[#121212] border border-purple-600 rounded-2xl shadow-[0_0_50px_rgba(147,51,234,0.3)] overflow-hidden text-left mx-1 sm:mx-0">
-            {/* Modal Header */}
-            <div className="p-5 bg-[#181818] border-b border-[#262626] flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-2.5">
-                <span className="material-symbols-outlined text-purple-400 text-2xl">table_chart</span>
-                <div>
-                  <h3 className="text-base font-black text-white">Spreadsheet Import Preview &amp; Clash Resolution</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Total Parsed: <span className="text-white font-bold">{newEntriesToImport.length + clashingEntries.length}</span> | 
-                    Ready to Add: <span className="text-emerald-400 font-bold">{newEntriesToImport.length}</span> | 
-                    Clashes Detected: <span className="text-amber-400 font-bold">{clashingEntries.length}</span>
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setImportModalOpen(false)}
-                className="text-slate-400 hover:text-white cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-xl">close</span>
-              </button>
-            </div>
+      {/* ─── UNIFIED MODAL: Spreadsheet Import & Member Preview ────────────────── */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv, .xlsx, .xls, .tsv, .txt"
+        disabled={importingFile}
+        onChange={handleFileUpload}
+        style={{ position: 'absolute', width: '1px', height: '1px', padding: 0, margin: '-1px', overflow: 'hidden', clip: 'rect(0, 0, 0, 0)', whiteSpace: 'nowrap', borderWidth: 0 }}
+      />
 
-            {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-[#0e0e0e]">
-              {importError && (
-                <div className="p-3 bg-rose-950/60 border border-rose-600 rounded-xl text-rose-300 text-xs font-medium">
-                  {importError}
-                </div>
-              )}
-
-              {/* Clashing Entries Section */}
-              {clashingEntries.length > 0 && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-black text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                      <span className="material-symbols-outlined text-base">warning</span>
-                      Clashing Member Data ({clashingEntries.length})
-                    </h4>
-
-                    {/* Bulk Action Buttons */}
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setClashingEntries((prev) =>
-                            prev.map((c) => ({ ...c, decision: 'update' }))
-                          )
-                        }
-                        className="px-2.5 py-1 rounded bg-purple-900/60 hover:bg-purple-800 text-purple-200 text-[10px] font-bold border border-purple-600 cursor-pointer"
-                      >
-                        Update All Clashes
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setClashingEntries((prev) =>
-                            prev.map((c) => ({ ...c, decision: 'keep' }))
-                          )
-                        }
-                        className="px-2.5 py-1 rounded bg-[#222222] hover:bg-[#333333] text-slate-300 text-[10px] font-bold border border-[#444444] cursor-pointer"
-                      >
-                        Skip All Clashes
-                      </button>
-                    </div>
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {importModalOpen && (
+            <motion.div
+              key="import-modal"
+              initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[120] flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/90 backdrop-blur-md"
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 30, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.96 }}
+              transition={{ type: 'spring', bounce: 0, duration: 0.35 }}
+              className="w-full max-w-5xl max-h-[92vh] flex flex-col bg-[#121212] border border-purple-600 rounded-2xl shadow-[0_0_50px_rgba(147,51,234,0.35)] overflow-hidden text-left"
+            >
+              {/* Modal Header */}
+              <div className="p-4 sm:p-5 bg-[#181818] border-b border-[#262626] flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-purple-900/40 border border-purple-500/40 flex items-center justify-center text-purple-300">
+                    <span className="material-symbols-outlined text-2xl">
+                      {importStep === 'preview' ? 'table_view' : 'upload_file'}
+                    </span>
                   </div>
+                  <div>
+                    <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+                      <span>{importStep === 'preview' ? 'Spreadsheet Import Preview' : 'Import Members from Spreadsheet'}</span>
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {importStep === 'preview'
+                        ? `${uploadedFileName} (${uploadedFileSize}) • ${previewMembers.length} member records parsed`
+                        : 'Upload a CSV, Excel (.xlsx, .xls), or TSV file to preview before importing.'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setImportModalOpen(false);
+                    setImportStep('upload');
+                    setPreviewMembers([]);
+                  }}
+                  className="text-slate-400 hover:text-white transition-colors cursor-pointer p-1 rounded-lg hover:bg-[#252525]"
+                >
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
 
-                  <p className="text-xs text-slate-400">
-                    The following members already exist in the database with differing values. Choose whether to update them with the imported values or keep the current database values.
-                  </p>
+              {/* Modal Body */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#0e0e0e] space-y-5">
+                {importError && (
+                  <div className="p-3.5 bg-rose-950/70 border border-rose-600/70 rounded-xl text-rose-200 text-xs font-medium flex items-center gap-2">
+                    <span className="material-symbols-outlined text-rose-400 text-base">error</span>
+                    <span>{importError}</span>
+                  </div>
+                )}
 
-                  <div className="space-y-3">
-                    {clashingEntries.map((clash, idx) => (
-                      <div
-                        key={clash.id}
-                        className="p-4 bg-[#141414] border border-[#2a2a2a] rounded-xl space-y-3"
-                      >
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                          <span className="font-bold text-sm text-white flex items-center gap-2">
-                            <span>#{idx + 1}</span>
-                            <span>{clash.incoming.name || clash.existing.name}</span>
-                            <span className="font-mono text-xs text-purple-300">
-                              ({clash.incoming.email || clash.existing.email})
-                            </span>
-                          </span>
+                {/* ─── STEP 1: FILE UPLOAD ────────────────────────────────────────── */}
+                {importStep === 'upload' && (
+                  <div className="space-y-5">
+                    {/* Drag and Drop Zone */}
+                    <div
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onDrop={handleDrop}
+                      onClick={() => {
+                        fileInputRef.current?.click();
+                      }}
+                      className="border-2 border-dashed border-purple-600/60 hover:border-purple-400 bg-purple-950/20 hover:bg-purple-950/40 rounded-2xl p-8 sm:p-10 flex flex-col items-center justify-center gap-3 cursor-pointer transition-all text-center group"
+                    >
+                      <div className="w-16 h-16 rounded-2xl bg-purple-900/50 border border-purple-500/50 flex items-center justify-center text-purple-300 group-hover:scale-110 transition-transform shadow-xl shadow-purple-950/60">
+                        <span className="material-symbols-outlined text-3xl">
+                          {importingFile ? 'hourglass_top' : 'cloud_upload'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-base font-bold text-white block">
+                          {importingFile ? 'Analyzing spreadsheet...' : 'Click to browse or drag & drop file here'}
+                        </span>
+                        <span className="text-xs text-slate-400 mt-1 block">
+                          Supports .CSV, .XLSX, .XLS, .TSV
+                        </span>
+                      </div>
 
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setClashingEntries((prev) =>
-                                  prev.map((c) =>
-                                    c.id === clash.id ? { ...c, decision: 'update' } : c
-                                  )
-                                );
-                              }}
-                              className={`px-3 py-1 rounded text-xs font-bold transition-colors cursor-pointer ${
-                                clash.decision === 'update'
-                                  ? 'bg-purple-600 text-white'
-                                  : 'bg-[#222222] text-slate-400 hover:text-white'
-                              }`}
-                            >
-                              Update with File
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setClashingEntries((prev) =>
-                                  prev.map((c) =>
-                                    c.id === clash.id ? { ...c, decision: 'keep' } : c
-                                  )
-                                );
-                              }}
-                              className={`px-3 py-1 rounded text-xs font-bold transition-colors cursor-pointer ${
-                                clash.decision === 'keep'
-                                  ? 'bg-amber-600 text-white'
-                                  : 'bg-[#222222] text-slate-400 hover:text-white'
-                              }`}
-                            >
-                              Keep Existing (Skip)
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setClashEditTarget(clash)}
-                              className={`px-3 py-1 rounded text-xs font-bold transition-colors cursor-pointer ${
-                                clash.decision === 'manual'
-                                  ? 'bg-emerald-600 text-white'
-                                  : 'bg-[#222222] text-slate-400 hover:text-white'
-                              }`}
-                            >
-                              Edit Manually
-                            </button>
-                          </div>
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className="px-2 py-0.5 rounded bg-purple-900/40 border border-purple-700/40 text-[11px] font-mono text-purple-300">.CSV</span>
+                        <span className="px-2 py-0.5 rounded bg-purple-900/40 border border-purple-700/40 text-[11px] font-mono text-purple-300">.XLSX</span>
+                        <span className="px-2 py-0.5 rounded bg-purple-900/40 border border-purple-700/40 text-[11px] font-mono text-purple-300">.XLS</span>
+                      </div>
+                    </div>
+
+                    {/* Column Requirements and Sample Template */}
+                    <div className="bg-[#181818] p-4 sm:p-5 rounded-xl border border-[#262626] space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <h4 className="text-xs font-black text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-base">checklist</span>
+                          Expected Columns in Spreadsheet
+                        </h4>
+                        <button
+                          type="button"
+                          onClick={handleDownloadTemplate}
+                          className="self-start sm:self-auto px-3.5 py-1.5 bg-purple-900/40 hover:bg-purple-800/60 text-purple-300 hover:text-white rounded-lg font-bold text-xs border border-purple-700/50 flex items-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">download</span>
+                          Download Sample Template (.csv)
+                        </button>
+                      </div>
+
+                      <p className="text-xs text-slate-400 leading-relaxed">
+                        Column header names are flexibly matched (case-insensitive). You can export directly from Google Forms or Excel:
+                      </p>
+
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 text-xs font-mono">
+                        <div className="bg-[#222222] p-2 rounded-lg border border-[#333333] flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-purple-400"></span>
+                          <span className="text-purple-200">Name</span>
                         </div>
-
-                        {/* Comparison Grid */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                          {/* Current Values */}
-                          <div className="p-3 bg-[#1a1a1a] border border-[#2e2e2e] rounded-lg space-y-1">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">
-                              Current in Database
-                            </span>
-                            <div><strong className="text-slate-400">Name:</strong> {clash.existing.name}</div>
-                            <div><strong className="text-slate-400">Reg No:</strong> {clash.existing.registrationNumber || '—'}</div>
-                            <div><strong className="text-slate-400">Team:</strong> {clash.existing.team}</div>
-                            <div><strong className="text-slate-400">Role:</strong> {clash.existing.position}</div>
-                            <div><strong className="text-slate-400">Phone:</strong> {clash.existing.phone || '—'}</div>
-                          </div>
-
-                          {/* Incoming Values */}
-                          <div className="p-3 bg-[#1e132e] border border-purple-600/50 rounded-lg space-y-1">
-                            <span className="text-[10px] font-bold text-purple-300 uppercase block mb-1">
-                              Incoming from File {clash.decision === 'manual' && '(Manually Adjusted)'}
-                            </span>
-                            <div><strong className="text-purple-300">Name:</strong> {clash.decision === 'manual' && clash.manualEdits ? clash.manualEdits.name : clash.incoming.name}</div>
-                            <div><strong className="text-purple-300">Reg No:</strong> {clash.decision === 'manual' && clash.manualEdits ? clash.manualEdits.registrationNumber : clash.incoming.registrationNumber || '—'}</div>
-                            <div><strong className="text-purple-300">Team:</strong> {clash.decision === 'manual' && clash.manualEdits ? clash.manualEdits.team : clash.incoming.team}</div>
-                            <div><strong className="text-purple-300">Role:</strong> {clash.decision === 'manual' && clash.manualEdits ? clash.manualEdits.position : clash.incoming.position}</div>
-                            <div><strong className="text-purple-300">Phone:</strong> {clash.decision === 'manual' && clash.manualEdits ? clash.manualEdits.phone : clash.incoming.phone || '—'}</div>
-                          </div>
+                        <div className="bg-[#222222] p-2 rounded-lg border border-[#333333] flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-purple-400"></span>
+                          <span className="text-purple-200">Reg. Number</span>
+                        </div>
+                        <div className="bg-[#222222] p-2 rounded-lg border border-[#333333] flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-purple-400"></span>
+                          <span className="text-purple-200">Email</span>
+                        </div>
+                        <div className="bg-[#222222] p-2 rounded-lg border border-[#333333] flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-slate-500"></span>
+                          <span className="text-slate-400">Phone (Optional)</span>
+                        </div>
+                        <div className="bg-[#222222] p-2 rounded-lg border border-[#333333] flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-purple-400"></span>
+                          <span className="text-purple-200">Domain / Team</span>
+                        </div>
+                        <div className="bg-[#222222] p-2 rounded-lg border border-[#333333] flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-purple-400"></span>
+                          <span className="text-purple-200">Position / Role</span>
                         </div>
                       </div>
-                    ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* Ready to Add New Members Section */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-black text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-base">check_circle</span>
-                  New Members Ready to Add ({newEntriesToImport.length})
-                </h4>
+                {/* ─── STEP 2: MEMBER PREVIEW TABLE ────────────────────────────────── */}
+                {importStep === 'preview' && (
+                  <div className="space-y-4">
+                    {/* Summary Statistics Badges */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                      <div className="bg-[#181818] p-3 rounded-xl border border-[#2a2a2a] text-center">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Total Parsed</span>
+                        <span className="text-lg font-black text-white">{previewMembers.length}</span>
+                      </div>
+                      <div className="bg-[#181818] p-3 rounded-xl border border-emerald-900/50 text-center">
+                        <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider block">New to Add</span>
+                        <span className="text-lg font-black text-emerald-400">
+                          {previewMembers.filter((m) => !m.isExisting).length}
+                        </span>
+                      </div>
+                      <div className="bg-[#181818] p-3 rounded-xl border border-amber-900/50 text-center">
+                        <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider block">Existing in DB</span>
+                        <span className="text-lg font-black text-amber-400">
+                          {previewMembers.filter((m) => m.isExisting).length}
+                        </span>
+                      </div>
+                      <div className="bg-[#181818] p-3 rounded-xl border border-purple-900/50 text-center">
+                        <span className="text-[10px] text-purple-300 font-bold uppercase tracking-wider block">Selected</span>
+                        <span className="text-lg font-black text-purple-300">
+                          {previewMembers.filter((m) => m.selected).length}
+                        </span>
+                      </div>
+                    </div>
 
-                {newEntriesToImport.length === 0 ? (
-                  <p className="text-xs text-slate-500">No completely new member records.</p>
-                ) : (
-                  <div className="border border-[#262626] rounded-xl overflow-hidden bg-[#141414] max-h-60 overflow-y-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-[#1c1c1c] text-slate-400 font-bold text-[10px] uppercase">
-                        <tr>
-                          <th className="p-2.5">Name</th>
-                          <th className="p-2.5">Reg No.</th>
-                          <th className="p-2.5">Email</th>
-                          <th className="p-2.5">Team</th>
-                          <th className="p-2.5">Role</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[#222222]">
-                        {newEntriesToImport.slice(0, 50).map((row, i) => (
-                          <tr key={i} className="hover:bg-[#1a1a1a]">
-                            <td className="p-2.5 font-bold text-white">{row.name}</td>
-                            <td className="p-2.5 font-mono text-purple-300">{row.registrationNumber || '—'}</td>
-                            <td className="p-2.5 font-mono text-slate-400">{row.email}</td>
-                            <td className="p-2.5">{row.team}</td>
-                            <td className="p-2.5">{row.position}</td>
+                    {/* Filter and Conflict Controls */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#141414] p-3 rounded-xl border border-[#262626]">
+                      {/* Search Bar */}
+                      <div className="relative flex-1 max-w-sm">
+                        <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 text-sm">
+                          search
+                        </span>
+                        <input
+                          type="text"
+                          placeholder="Search preview by name, reg, email..."
+                          value={previewSearch}
+                          onChange={(e) => setPreviewSearch(e.target.value)}
+                          className="w-full pl-8 pr-3 py-1.5 bg-[#1e1e1e] border border-[#333333] rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                        />
+                      </div>
+
+                      {/* Filter Tabs */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewFilter('all')}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                            previewFilter === 'all'
+                              ? 'bg-purple-600 text-white'
+                              : 'bg-[#222222] text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          All ({previewMembers.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPreviewFilter('new')}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                            previewFilter === 'new'
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-[#222222] text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          New ({previewMembers.filter((m) => !m.isExisting).length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPreviewFilter('existing')}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                            previewFilter === 'existing'
+                              ? 'bg-amber-600 text-white'
+                              : 'bg-[#222222] text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          Updates ({previewMembers.filter((m) => m.isExisting).length})
+                        </button>
+                      </div>
+
+                      {/* Conflict Action Choice */}
+                      {previewMembers.some((m) => m.isExisting) && (
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="text-slate-400 text-[11px] font-bold">Duplicates:</span>
+                          <select
+                            value={conflictMode}
+                            onChange={(e) => setConflictMode(e.target.value as 'update' | 'skip')}
+                            className="bg-[#222222] border border-[#333333] rounded-lg px-2.5 py-1 text-xs text-purple-300 font-bold focus:outline-none"
+                          >
+                            <option value="update">Update Existing</option>
+                            <option value="skip">Skip Existing</option>
+                          </select>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Master Select All Toggle */}
+                    <div className="flex items-center justify-between text-xs text-slate-400 px-1">
+                      <label className="flex items-center gap-2 cursor-pointer select-none font-bold">
+                        <input
+                          type="checkbox"
+                          checked={
+                            previewMembers.length > 0 &&
+                            previewMembers.every((m) => m.selected)
+                          }
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setPreviewMembers((prev) =>
+                              prev.map((m) => ({ ...m, selected: checked }))
+                            );
+                          }}
+                          className="w-4 h-4 rounded accent-purple-600 cursor-pointer"
+                        />
+                        <span>Select All for Import</span>
+                      </label>
+
+                      <span className="text-[11px] text-slate-500 font-mono">
+                        Showing{' '}
+                        {
+                          previewMembers.filter((m) => {
+                            if (previewFilter === 'new' && m.isExisting) return false;
+                            if (previewFilter === 'existing' && !m.isExisting) return false;
+                            if (previewSearch) {
+                              const q = previewSearch.toLowerCase();
+                              return (
+                                m.name.toLowerCase().includes(q) ||
+                                m.registrationNumber.toLowerCase().includes(q) ||
+                                m.email.toLowerCase().includes(q) ||
+                                m.team.toLowerCase().includes(q) ||
+                                m.position.toLowerCase().includes(q)
+                              );
+                            }
+                            return true;
+                          }).length
+                        }{' '}
+                        members
+                      </span>
+                    </div>
+
+                    {/* Members Preview Table */}
+                    <div className="border border-[#262626] rounded-xl overflow-hidden bg-[#141414] max-h-[50vh] overflow-y-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead className="bg-[#1c1c1c] text-slate-400 font-bold text-[10px] uppercase sticky top-0 z-10 border-b border-[#262626]">
+                          <tr>
+                            <th className="p-3 w-10 text-center">#</th>
+                            <th className="p-3">Member</th>
+                            <th className="p-3">Reg. No</th>
+                            <th className="p-3">Phone</th>
+                            <th className="p-3">Domain</th>
+                            <th className="p-3">Position</th>
+                            <th className="p-3 text-right">Status</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody className="divide-y divide-[#222222]">
+                          {previewMembers
+                            .filter((m) => {
+                              if (previewFilter === 'new' && m.isExisting) return false;
+                              if (previewFilter === 'existing' && !m.isExisting) return false;
+                              if (previewSearch) {
+                                const q = previewSearch.toLowerCase();
+                                return (
+                                  m.name.toLowerCase().includes(q) ||
+                                  m.registrationNumber.toLowerCase().includes(q) ||
+                                  m.email.toLowerCase().includes(q) ||
+                                  m.team.toLowerCase().includes(q) ||
+                                  m.position.toLowerCase().includes(q)
+                                );
+                              }
+                              return true;
+                            })
+                            .map((row, idx) => (
+                              <tr
+                                key={row.id}
+                                className={`hover:bg-[#1a1a1a] transition-colors ${
+                                  row.selected ? 'bg-purple-950/10' : 'opacity-60'
+                                }`}
+                              >
+                                <td className="p-3 text-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={row.selected}
+                                    onChange={(e) => {
+                                      const checked = e.target.checked;
+                                      setPreviewMembers((prev) =>
+                                        prev.map((item) =>
+                                          item.id === row.id ? { ...item, selected: checked } : item
+                                        )
+                                      );
+                                    }}
+                                    className="w-4 h-4 rounded accent-purple-600 cursor-pointer"
+                                  />
+                                </td>
+                                <td className="p-3">
+                                  <div className="font-bold text-white flex items-center gap-2">
+                                    <span>{row.name}</span>
+                                  </div>
+                                  <div className="font-mono text-[11px] text-slate-400 mt-0.5">
+                                    {row.email}
+                                  </div>
+                                </td>
+                                <td className="p-3 font-mono text-purple-300 font-bold">
+                                  {row.registrationNumber || '—'}
+                                </td>
+                                <td className="p-3 font-mono text-slate-300 text-[11px]">
+                                  {row.phone || '—'}
+                                </td>
+                                <td className="p-3">
+                                  <span className="px-2 py-0.5 rounded bg-purple-900/30 text-purple-200 border border-purple-700/30 text-[11px] font-medium">
+                                    {row.team}
+                                  </span>
+                                </td>
+                                <td className="p-3 text-slate-300">
+                                  <span className="px-2 py-0.5 rounded bg-[#222222] text-slate-200 border border-[#333333] text-[11px] font-medium">
+                                    {row.position}
+                                  </span>
+                                </td>
+                                <td className="p-3 text-right">
+                                  {row.isExisting ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-950/60 border border-amber-600/50 text-amber-300 text-[10px] font-bold">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                                      {conflictMode === 'update' ? 'Will Update' : 'Will Skip'}
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-600/50 text-emerald-300 text-[10px] font-bold">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                                      New Member
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
               </div>
-            </div>
 
-            {/* Modal Footer */}
-            <div className="p-4 bg-[#181818] border-t border-[#262626] flex items-center justify-between shrink-0">
-              <button
-                type="button"
-                onClick={() => setImportModalOpen(false)}
-                className="px-4 py-2 bg-[#262626] hover:bg-[#333333] text-slate-300 text-xs font-bold rounded-lg cursor-pointer"
-              >
-                Cancel
-              </button>
+              {/* Modal Footer */}
+              <div className="p-4 sm:p-5 bg-[#181818] border-t border-[#262626] flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImportModalOpen(false);
+                      setImportStep('upload');
+                      setPreviewMembers([]);
+                    }}
+                    className="px-4 py-2 bg-[#222222] hover:bg-[#333333] text-slate-300 rounded-xl font-bold text-xs cursor-pointer transition-colors"
+                  >
+                    Cancel
+                  </button>
 
-              <button
-                type="button"
-                onClick={handleConfirmImport}
-                disabled={savingImport || (newEntriesToImport.length === 0 && clashingEntries.length === 0)}
-                className="px-5 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-2 disabled:opacity-50 shadow-[0_0_15px_rgba(147,51,234,0.3)]"
-              >
-                {savingImport && <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                Confirm &amp; Commit to Firebase
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+                  {importStep === 'preview' && (
+                    <button
+                      type="button"
+                      onClick={() => setImportStep('upload')}
+                      className="px-3.5 py-2 bg-purple-950/40 hover:bg-purple-900/60 text-purple-300 border border-purple-700/40 rounded-xl font-bold text-xs cursor-pointer transition-colors flex items-center gap-1.5"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">file_upload</span>
+                      <span>Choose Different File</span>
+                    </button>
+                  )}
+                </div>
 
-      {/* ─── MODAL 2: Manual Edit Inside Clash ────────────────────────────────── */}
-      {clashEditTarget && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/95">
-          <div className="w-full max-w-md bg-[#161616] border border-purple-600 rounded-2xl p-6 space-y-4 text-left shadow-[0_0_40px_rgba(147,51,234,0.3)]">
-            <h4 className="text-sm font-black text-white uppercase tracking-wider">
-              Manually Edit Clashing Record
-            </h4>
-
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 mb-1">NAME</label>
-                <input
-                  type="text"
-                  value={clashEditTarget.manualEdits?.name ?? clashEditTarget.incoming.name}
-                  onChange={(e) =>
-                    setClashEditTarget({
-                      ...clashEditTarget,
-                      manualEdits: {
-                        ...(clashEditTarget.manualEdits || clashEditTarget.incoming),
-                        name: e.target.value,
-                      },
-                    })
-                  }
-                  className="w-full px-3 py-2 bg-[#222222] border border-[#333333] rounded-lg text-white"
-                />
+                <div className="flex items-center gap-2">
+                  {importStep === 'upload' ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        fileInputRef.current?.click();
+                      }}
+                      disabled={importingFile}
+                      className="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 active:scale-95 text-white rounded-xl font-bold flex items-center gap-2 cursor-pointer shadow-lg shadow-purple-900/40 transition-all text-xs"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">upload_file</span>
+                      <span>{importingFile ? 'Parsing File...' : 'Choose File to Upload'}</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleConfirmImport}
+                      disabled={savingImport || previewMembers.filter((m) => m.selected).length === 0}
+                      className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 active:scale-95 text-white rounded-xl font-black flex items-center gap-2 cursor-pointer shadow-xl shadow-purple-900/50 transition-all text-xs disabled:opacity-50 disabled:pointer-events-none"
+                    >
+                      {savingImport ? (
+                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        <span className="material-symbols-outlined text-[18px]">cloud_done</span>
+                      )}
+                      <span>
+                        {savingImport
+                          ? 'Importing to Database...'
+                          : `Add ${previewMembers.filter((m) => m.selected).length} Members to DB`}
+                      </span>
+                    </button>
+                  )}
+                </div>
               </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 mb-1">REGISTRATION NUMBER</label>
-                <input
-                  type="text"
-                  value={clashEditTarget.manualEdits?.registrationNumber ?? clashEditTarget.incoming.registrationNumber}
-                  onChange={(e) =>
-                    setClashEditTarget({
-                      ...clashEditTarget,
-                      manualEdits: {
-                        ...(clashEditTarget.manualEdits || clashEditTarget.incoming),
-                        registrationNumber: e.target.value.toUpperCase(),
-                      },
-                    })
-                  }
-                  className="w-full px-3 py-2 bg-[#222222] border border-[#333333] rounded-lg text-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 mb-1">TEAM / DOMAIN</label>
-                <input
-                  type="text"
-                  value={clashEditTarget.manualEdits?.team ?? clashEditTarget.incoming.team}
-                  onChange={(e) =>
-                    setClashEditTarget({
-                      ...clashEditTarget,
-                      manualEdits: {
-                        ...(clashEditTarget.manualEdits || clashEditTarget.incoming),
-                        team: e.target.value,
-                      },
-                    })
-                  }
-                  className="w-full px-3 py-2 bg-[#222222] border border-[#333333] rounded-lg text-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 mb-1">ROLE / POSITION</label>
-                <input
-                  type="text"
-                  value={clashEditTarget.manualEdits?.position ?? clashEditTarget.incoming.position}
-                  onChange={(e) =>
-                    setClashEditTarget({
-                      ...clashEditTarget,
-                      manualEdits: {
-                        ...(clashEditTarget.manualEdits || clashEditTarget.incoming),
-                        position: e.target.value,
-                      },
-                    })
-                  }
-                  className="w-full px-3 py-2 bg-[#222222] border border-[#333333] rounded-lg text-white"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t border-[#262626]">
-              <button
-                type="button"
-                onClick={() => setClashEditTarget(null)}
-                className="px-3 py-1.5 bg-[#262626] text-slate-300 rounded text-xs"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setClashingEntries((prev) =>
-                    prev.map((c) =>
-                      c.id === clashEditTarget.id
-                        ? {
-                            ...c,
-                            decision: 'manual',
-                            manualEdits: clashEditTarget.manualEdits || clashEditTarget.incoming,
-                          }
-                        : c
-                    )
-                  );
-                  setClashEditTarget(null);
-                }}
-                className="px-4 py-1.5 bg-emerald-600 text-white font-bold rounded text-xs"
-              >
-                Apply Adjustments
-              </button>
-            </div>
-          </div>
-        </div>,
+            </motion.div>
+          </motion.div>
+          )}
+        </AnimatePresence>,
         document.body
       )}
 

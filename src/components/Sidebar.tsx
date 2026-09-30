@@ -29,6 +29,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const baseItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
     { id: 'members', label: 'Members Roster', icon: 'groups' },
+    { id: 'ideahub', label: 'Idea Curator Hub', icon: 'lightbulb' },
     { id: 'planned_events', label: 'Planned Events', icon: 'event_upcoming' },
     { id: 'payments', label: isFaculty ? 'Payments View' : 'Payments & Dues', icon: 'payments' },
     { id: 'idcard', label: 'ID Card Portal', icon: 'badge' },

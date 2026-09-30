@@ -2917,7 +2917,7 @@ const Payments: React.FC<PaymentsProps> = ({
                     className="col-span-1 px-3 py-2.5 rounded-xl bg-surface-container-lowest border border-white/10 text-white focus:outline-none focus:border-amber-500 font-mono text-xs"
                   />
                 </div>
-                <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-1 custom-scrollbar">
+                <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-1 no-scrollbar">
                   <span className="text-[10px] text-slate-400 font-semibold flex-shrink-0">Presets:</span>
                   {[
                     { label: '+1 Day', days: 1 },
@@ -3070,7 +3070,7 @@ const Payments: React.FC<PaymentsProps> = ({
                     className="col-span-1 px-3 py-2.5 rounded-xl bg-surface-container-lowest border border-white/10 text-white focus:outline-none focus:border-amber-500 font-mono text-xs"
                   />
                 </div>
-                <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-1 custom-scrollbar">
+                <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-1 no-scrollbar">
                   <span className="text-[10px] text-slate-400 font-semibold flex-shrink-0">Presets:</span>
                   {[
                     { label: '+1 Day', days: 1 },
@@ -3223,7 +3223,7 @@ const Payments: React.FC<PaymentsProps> = ({
                     className="col-span-1 px-3 py-2.5 rounded-xl bg-surface-container-lowest border border-white/10 text-white focus:outline-none focus:border-indigo-500 font-mono text-xs"
                   />
                 </div>
-                <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-1 custom-scrollbar">
+                <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-1 no-scrollbar">
                   <span className="text-[10px] text-slate-400 font-semibold flex-shrink-0">Presets:</span>
                   {[
                     { label: '+1 Day', days: 1 },
@@ -3453,7 +3453,7 @@ const Payments: React.FC<PaymentsProps> = ({
                     className="col-span-1 px-3 py-2.5 rounded-xl bg-surface-container-lowest border border-white/10 text-white focus:outline-none focus:border-purple-500 font-mono text-xs"
                   />
                 </div>
-                <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-1 custom-scrollbar">
+                <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-1 no-scrollbar">
                   <span className="text-[10px] text-slate-400 font-semibold flex-shrink-0">Presets:</span>
                   {[
                     { label: '+1 Day', days: 1 },
@@ -3597,7 +3597,7 @@ const Payments: React.FC<PaymentsProps> = ({
                     className="col-span-1 px-3 py-2.5 rounded-xl bg-surface-container-lowest border border-white/10 text-white focus:outline-none focus:border-amber-500 font-mono text-xs"
                   />
                 </div>
-                <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-1 custom-scrollbar">
+                <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-1 no-scrollbar">
                   <span className="text-[10px] text-slate-400 font-semibold flex-shrink-0">Presets:</span>
                   {[
                     { label: '+1 Day', days: 1 },

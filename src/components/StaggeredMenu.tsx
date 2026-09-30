@@ -472,7 +472,7 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
       <aside
         id="staggered-menu-panel"
         ref={panelRef}
-        className="staggered-menu-panel custom-scrollbar"
+        className="staggered-menu-panel no-scrollbar"
         aria-hidden={!open}
       >
         <div className="sm-panel-inner">

@@ -33,6 +33,23 @@ service cloud.firestore {
       );
     }
 
+    // Checks whether the user is explicitly flagged as blocked in the database.
+    // Super Admins are immune from blocking restrictions.
+    function isBlockedUser() {
+      return isAuthenticated() && !isSuperAdmin() && (
+        (exists(/databases/$(database)/documents/members/$(userEmail())) &&
+         get(/databases/$(database)/documents/members/$(userEmail())).data.get('isBlocked', false) == true) ||
+        (exists(/databases/$(database)/documents/id_cards/$(userEmail())) &&
+         get(/databases/$(database)/documents/id_cards/$(userEmail())).data.get('isBlocked', false) == true) ||
+        exists(/databases/$(database)/documents/blocked_users/$(userEmail()))
+      );
+    }
+
+    // Ensures that caller is authenticated AND not blocked
+    function isActiveMember() {
+      return isAuthenticated() && !isBlockedUser();
+    }
+
     // =========================================================================
     // 1. System Configuration & Metadata
     // =========================================================================
@@ -83,11 +100,11 @@ service cloud.firestore {
     // Direct client mutation is completely disabled. All payment creation,
     // verification, updates, and webhook callbacks run via Firebase Admin SDK.
     match /payments/{paymentId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveMember();
       allow write: if false;
 
       match /attempts/{attemptId} {
-        allow read: if isAuthenticated();
+        allow read: if isActiveMember();
         allow write: if false;
       }
     }
@@ -97,7 +114,7 @@ service cloud.firestore {
     // =========================================================================
     // Member directory: Authenticated users can browse roster; writable only by Admins.
     match /members/{memberId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveMember();
       allow write: if isAdmin();
     }
 
@@ -105,8 +122,8 @@ service cloud.firestore {
     // Public ID verification runs server-side via Admin SDK.
     // Authenticated users may create/update only their own dossier. Deletions require Admin.
     match /id_cards/{cardId} {
-      allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated() && (
+      allow read: if isActiveMember();
+      allow create, update: if isActiveMember() && (
         isAdmin() || (
           cardId == userEmail() &&
           (!('email' in request.resource.data) || request.resource.data.email.lower() == userEmail())
@@ -119,12 +136,17 @@ service cloud.firestore {
     // 5. Faculty & Events
     // =========================================================================
     match /faculty/{facultyId} {
+      allow read: if isActiveMember();
+      allow write: if isAdmin();
+    }
+
+    match /blocked_users/{userId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
 
     match /future_events/{eventId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveMember();
       allow write: if isAdmin();
     }
 
@@ -134,8 +156,8 @@ service cloud.firestore {
     // Authenticated users can read referrals and submit candidate referrals under their own identity.
     // Status updates (approvals/rejections) and record deletions are restricted to Admins.
     match /referrals/{referralId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && (request.resource.data.referrerEmail == userEmail() || isAdmin());
+      allow read: if isActiveMember();
+      allow create: if isActiveMember() && (request.resource.data.referrerEmail == userEmail() || isAdmin());
       allow update, delete: if isAdmin();
     }
 
@@ -151,7 +173,15 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // 8. Explicit Catch-All Default Deny
+    // 8. Idea Curator Hub
+    // =========================================================================
+    match /club_ideas/{ideaId} {
+      allow read, create, update: if isActiveMember();
+      allow delete: if isAdmin();
+    }
+
+    // =========================================================================
+    // 9. Explicit Catch-All Default Deny
     // =========================================================================
     // Unmatched documents across all databases/collections are denied by default.
     match /{document=**} {
@@ -159,3 +189,4 @@ service cloud.firestore {
     }
   }
 }
+

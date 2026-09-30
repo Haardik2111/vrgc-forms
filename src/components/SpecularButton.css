@@ -96,6 +96,11 @@
   justify-content: center;
   gap: 0.5rem;
   width: 100%;
+  pointer-events: none;
+}
+
+.specular-button__label * {
+  pointer-events: none;
 }
 
 /* Mobile Touch Performance Mode: 120fps CSS Specular Glow without WebGL Context Overhead */

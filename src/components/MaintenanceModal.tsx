@@ -12,6 +12,24 @@ export interface MaintenanceCategory {
 
 export const MAINTENANCE_CATEGORIES: MaintenanceCategory[] = [
   {
+    id: 'members',
+    label: 'Members Roster',
+    description: 'Chapter directory, domain subdivisions, and crew roster',
+    icon: 'groups',
+  },
+  {
+    id: 'ideahub',
+    label: 'Idea Curator Hub',
+    description: 'Community idea proposals, live voting counter, and coordinator curation',
+    icon: 'lightbulb',
+  },
+  {
+    id: 'planned_events',
+    label: 'Planned Future Events',
+    description: 'Faculty advisory review desk, timeline, and event proposals',
+    icon: 'event_upcoming',
+  },
+  {
     id: 'idcard',
     label: 'ID Card Portal & Forms',
     description: 'Digital ID card generation, profile updates, and photo uploads',
@@ -30,16 +48,16 @@ export const MAINTENANCE_CATEGORIES: MaintenanceCategory[] = [
     icon: 'share',
   },
   {
-    id: 'members',
-    label: 'Members Roster',
-    description: 'Chapter directory, domain subdivisions, and crew roster',
-    icon: 'groups',
+    id: 'documents',
+    label: 'Documents & Verification',
+    description: 'Official offer letters, club credentials, and verifiable passes',
+    icon: 'description',
   },
   {
-    id: 'planned_events',
-    label: 'Planned Future Events',
-    description: 'Faculty advisory review desk and event proposals',
-    icon: 'event_upcoming',
+    id: 'tickets',
+    label: 'Resolve Tickets & Helpdesk',
+    description: 'User support tickets, grievances, and inquiry resolution',
+    icon: 'confirmation_number',
   },
 ];
 

@@ -697,7 +697,7 @@ const PlannedEvents: React.FC<PlannedEventsProps> = ({
                 </div>
 
                 {/* Presets */}
-                <div className="flex items-center gap-1.5 mt-2.5 overflow-x-auto pb-1 custom-scrollbar">
+                <div className="flex items-center gap-1.5 mt-2.5 overflow-x-auto pb-1 no-scrollbar">
                   <span className="text-[10px] text-slate-400 font-semibold flex-shrink-0">Presets:</span>
                   {[
                     { label: '+7 Days', days: 7 },

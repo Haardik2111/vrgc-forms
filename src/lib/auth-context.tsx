@@ -22,6 +22,9 @@ export interface MemberData {
   email: string;
   team: string;
   position: string;
+  photoUrl?: string;
+  avatarUrl?: string;
+  isBlocked?: boolean;
 }
 
 interface AuthContextType {
@@ -151,6 +154,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUserEmail(em);
 
     try {
+      // 0. Check blocked_users collection
+      try {
+        const blockedDoc = await getDoc(doc(db, 'blocked_users', em));
+        const bridgeSuperAdmins = await getSuperAdminEmails();
+        const isSuper = bridgeSuperAdmins.some((se) => se.toLowerCase().trim() === em);
+        if (blockedDoc.exists() && blockedDoc.data()?.isBlocked !== false && !isSuper) {
+          setIsAuthorized(false);
+          setMemberData(null);
+          setAuthError('Access Denied: Your account has been blocked from accessing VRGC Forms.');
+          signOut(auth).catch(console.error);
+          setAuthLoading(false);
+          return;
+        }
+      } catch (bErr) {
+        console.warn('Blocked users check notice:', bErr);
+      }
 
       ensureDefaultTestFaculty().catch(() => {});
 
@@ -239,10 +258,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const memberQuery = query(collection(db, 'members'), where('email', '==', em));
         const memberSnap = await getDocs(memberQuery);
         if (!memberSnap.empty) {
-          const userEntries = memberSnap.docs.map((d) => d.data() as MemberData);
+          const userEntries = memberSnap.docs.map((d) => d.data() as any);
           const teams = [...new Set(userEntries.map((m) => m.team).filter(Boolean))].join(', ');
           const positions = [...new Set(userEntries.map((m) => m.position).filter(Boolean))].join(', ');
           const first = userEntries[0];
+          const mPhoto = first.photoUrl || first.photoURL || first.avatarUrl || first.photo || first.image || '';
           memberRecord = {
             name: first.name || firebaseUser.displayName || 'Member',
             registrationNumber: first.registrationNumber || '',
@@ -250,6 +270,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             email: em,
             team: teams || first.team || 'General Crew',
             position: positions || first.position || 'Member',
+            photoUrl: mPhoto || undefined,
+            avatarUrl: first.avatarUrl || undefined,
+            isBlocked: first.isBlocked || false,
           };
 
           if (!assignedRole && (first as any).role) {
@@ -260,11 +283,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.warn('Firestore member check warning:', memberErr);
       }
 
-      if (!memberRecord) {
-        try {
-          const idDoc = await getDoc(doc(db, 'id_cards', em));
-          if (idDoc.exists()) {
-            const d = idDoc.data();
+      // Check id_cards collection for Supabase uploaded pass photo & details
+      try {
+        const idDoc = await getDoc(doc(db, 'id_cards', em));
+        if (idDoc.exists()) {
+          const d = idDoc.data();
+          const cardPhoto = d.photoUrl || d.photoURL || d.avatarUrl || d.photo || d.image || '';
+          if (memberRecord) {
+            if (cardPhoto && !memberRecord.photoUrl) {
+              memberRecord.photoUrl = cardPhoto;
+            }
+          } else {
             memberRecord = {
               name: d.name || firebaseUser.displayName || 'Member',
               registrationNumber: d.regNo || d.registrationNumber || '',
@@ -272,15 +301,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               email: em,
               team: d.team || 'General',
               position: d.position || d.role || (assignedRole || 'Member'),
+              photoUrl: cardPhoto || undefined,
+              avatarUrl: d.avatarUrl || undefined,
+              isBlocked: d.isBlocked || false,
             };
             if (!assignedRole && d.role) {
               assignedRole = d.role;
             }
-          } else {
-            const idQuery = query(collection(db, 'id_cards'), where('email', '==', em));
-            const idSnap = await getDocs(idQuery);
-            if (!idSnap.empty) {
-              const d = idSnap.docs[0].data();
+          }
+        } else {
+          const idQuery = query(collection(db, 'id_cards'), where('email', '==', em));
+          const idSnap = await getDocs(idQuery);
+          if (!idSnap.empty) {
+            const d = idSnap.docs[0].data();
+            const cardPhoto = d.photoUrl || d.photoURL || d.avatarUrl || d.photo || d.image || '';
+            if (memberRecord) {
+              if (cardPhoto && !memberRecord.photoUrl) {
+                memberRecord.photoUrl = cardPhoto;
+              }
+            } else {
               memberRecord = {
                 name: d.name || firebaseUser.displayName || 'Member',
                 registrationNumber: d.regNo || d.registrationNumber || '',
@@ -288,15 +327,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 email: em,
                 team: d.team || 'General',
                 position: d.position || d.role || (assignedRole || 'Member'),
+                photoUrl: cardPhoto || undefined,
+                avatarUrl: d.avatarUrl || undefined,
+                isBlocked: d.isBlocked || false,
               };
               if (!assignedRole && d.role) {
                 assignedRole = d.role;
               }
             }
           }
-        } catch (idErr) {
-          console.warn('Firestore id_cards check warning:', idErr);
         }
+      } catch (idErr) {
+        console.warn('Firestore id_cards check warning:', idErr);
       }
 
       const isPaymentAdminEmail = assignedRole === 'Payment Admin';
@@ -323,7 +365,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsPaymentAdmin(paymentAdmin);
         setUserRole(assignedRole);
 
-        if (memberRecord) {
+        if (memberRecord?.isBlocked && !superAdmin) {
+          setIsAuthorized(false);
+          setMemberData(null);
+          setAuthError('Access Denied: Your account has been blocked from accessing VRGC Forms.');
+          signOut(auth).catch(console.error);
+        } else if (memberRecord) {
           setMemberData({
             ...memberRecord,
             position: assignedRole || memberRecord.position || (superAdmin ? 'Super Administrator' : admin ? 'Administrator' : 'Club Member'),
@@ -416,7 +463,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await signInWithPopup(auth, googleProvider);
     } catch (err: any) {
       console.error('Login error:', err);
-      if (err?.code === 'auth/unauthorized-domain') {
+      if (err?.code === 'auth/user-disabled') {
+        setAuthError('Access Denied: Your account has been blocked from accessing VRGC Forms.');
+      } else if (err?.code === 'auth/unauthorized-domain') {
         setAuthError('Unauthorized domain. Add this domain to Firebase Console → Authentication → Authorized Domains.');
       } else if (err?.code === 'auth/popup-closed-by-user') {
         setAuthError('Sign-in popup was closed. Please try again.');

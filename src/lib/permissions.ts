@@ -9,7 +9,8 @@ export type PageId =
   | 'payments'
   | 'tickets'
   | 'maintenance'
-  | 'documents';
+  | 'documents'
+  | 'ideahub';
 
 export interface PagePermission {
   canView: boolean;
@@ -25,6 +26,7 @@ export interface PermissionsConfig {
   };
   customRoles: string[];
   allowedMetadataRoles: string[];
+  allowedBlockAccessRoles?: string[];
   updatedAt?: string;
 }
 
@@ -43,6 +45,7 @@ export const ALL_PAGE_IDS: { id: PageId; label: string; icon: string }[] = [
   { id: 'documents', label: 'Documents', icon: 'description' },
   { id: 'tickets', label: 'Resolve Tickets', icon: 'confirmation_number' },
   { id: 'maintenance', label: 'Maintenance Desk', icon: 'construction' },
+  { id: 'ideahub', label: 'Idea Curator Hub', icon: 'lightbulb' },
 ];
 
 export const SYSTEM_ROLES = ['Admin', 'Payment Admin', 'Technical'];
@@ -118,6 +121,7 @@ export const DEFAULT_PERMISSIONS_CONFIG: PermissionsConfig = {
       tickets: createDefaultPagePermission(false, false, false),
       maintenance: createDefaultPagePermission(false, false, false),
       documents: createDefaultPagePermission(true, false, false),
+      ideahub: createDefaultPagePermission(true, true, false),
     },
     faculty: {
       members: createDefaultPagePermission(true, false, false),
@@ -128,10 +132,12 @@ export const DEFAULT_PERMISSIONS_CONFIG: PermissionsConfig = {
       tickets: createDefaultPagePermission(false, false, false),
       maintenance: createDefaultPagePermission(false, false, false),
       documents: createDefaultPagePermission(true, false, false),
+      ideahub: createDefaultPagePermission(true, true, false),
     },
   },
   customRoles: [],
   allowedMetadataRoles: ['Admin', 'Technical'],
+  allowedBlockAccessRoles: ['Admin', 'Technical'],
 };
 
 export const DEFAULT_CLUB_METADATA: ClubMetadata = {
@@ -154,6 +160,7 @@ export async function fetchPermissionsConfig(): Promise<PermissionsConfig> {
         },
         customRoles: data.customRoles || [],
         allowedMetadataRoles: data.allowedMetadataRoles || DEFAULT_PERMISSIONS_CONFIG.allowedMetadataRoles,
+        allowedBlockAccessRoles: data.allowedBlockAccessRoles || DEFAULT_PERMISSIONS_CONFIG.allowedBlockAccessRoles,
         updatedAt: data.updatedAt,
       };
     }

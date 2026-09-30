@@ -93,9 +93,7 @@ export const SessionTracker: React.FC = () => {
     });
   }, [authLoading, userEmail, resolvedRole, user?.photoURL, user?.displayName, user?.email, isElevatedSession, isAuthenticSuperAdmin, memberData]);
 
-  // 2. Upgrade identity when an anonymous (or Guest Visitor) session transitions to authenticated.
-  //    Fires after init when auth state changes — e.g., user navigates anonymously then logs in.
-  //    Uses setDoc merge via upgradeSessionIdentity — no new session, no duplicate records.
+  // 2. Upgrade identity when an anonymous session authenticates or when memberData resolves from Firestore.
   useEffect(() => {
     if (authLoading) return;
     if (!initDoneRef.current) return;
@@ -105,22 +103,19 @@ export const SessionTracker: React.FC = () => {
 
     // Prefer auth-context email (admitted user), fall back to raw Firebase email (denied/transitioning).
     const effectiveEmail = userEmail || rawFirebaseEmailRef.current || null;
+    if (!effectiveEmail) return;
 
-    // Only write if we now have an email that differs from what was previously recorded.
-    if (!effectiveEmail || effectiveEmail === recordedEmailRef.current) return;
-
-    recordedEmailRef.current = effectiveEmail;
     const effectiveName = memberData?.name || user?.displayName || effectiveEmail.split('@')[0];
-
-    // Role for upgrade: admitted user → resolvedRole, denied (rawFirebaseEmail only) → 'Access Denied'
     const upgradeRole = userEmail ? resolvedRole : 'Access Denied';
 
+    // Update session record with official database member name
     upgradeSessionIdentity({
       email: effectiveEmail,
       name: effectiveName,
       photo: user?.photoURL || null,
       role: upgradeRole,
     });
+    recordedEmailRef.current = effectiveEmail;
   }, [authLoading, userEmail, resolvedRole, user?.displayName, user?.photoURL, isElevatedSession, isAuthenticSuperAdmin, memberData]);
 
   // 3. Periodic gentle heartbeat every 3 minutes while tab is active and visible (Zero waste on Spark quota)
