@@ -270,7 +270,9 @@ const SuperAdminManagementModal: React.FC<SuperAdminManagementModalProps> = ({
             roleDoc?.assignedBy &&
             (roleDoc.assignedBy.toLowerCase().includes('jaiyansh') || roleDoc.assignedBy.toLowerCase().includes('dhaulakhandi'))
           ) {
-            setDoc(doc(db, 'roles', email), { assignedBy: 'haardik.24bcg10051@vitbhopal.ac.in' }, { merge: true }).catch(() => {});
+            // Use the current authenticated super admin's email for correct attribution
+            const canonicalAttribution = currentUserEmail || 'Super Admin';
+            setDoc(doc(db, 'roles', email), { assignedBy: canonicalAttribution }, { merge: true }).catch(() => {});
           }
         }
 

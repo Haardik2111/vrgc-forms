@@ -18,6 +18,7 @@ import MaintenanceModal, {
   MAINTENANCE_CATEGORIES,
 } from '@/components/MaintenanceModal';
 import PlannedEvents from '@/components/PlannedEvents';
+import IdeaHub from '@/components/IdeaHub';
 import SuperAdminManagementModal from '@/components/SuperAdminManagementModal';
 import SuperAdminControlCenter from '@/components/SuperAdminControlCenter';
 import UnderMaintenanceCard from '@/components/UnderMaintenanceCard';
@@ -145,6 +146,7 @@ function AppContent() {
           },
           customRoles: data.customRoles || [],
           allowedMetadataRoles: data.allowedMetadataRoles || DEFAULT_PERMISSIONS_CONFIG.allowedMetadataRoles,
+          allowedBlockAccessRoles: data.allowedBlockAccessRoles || DEFAULT_PERMISSIONS_CONFIG.allowedBlockAccessRoles,
         });
       }
     });
@@ -207,7 +209,7 @@ function AppContent() {
   };
 
   const isSectionLocked = (sectionKey: string): boolean => {
-    if (sectionKey === 'dashboard' || sectionKey === 'superadmin' || sectionKey === 'documents' || sectionKey === 'offer_letter') return false;
+    if (sectionKey === 'superadmin') return false;
     const perm = getPagePermission(sectionKey);
     // If the role/tier has bypassMaintenance granted by Super Admin, never lock
     if (perm.bypassMaintenance) return false;
@@ -217,7 +219,7 @@ function AppContent() {
   };
 
   const isSectionUnderMaintenanceForAdmin = (sectionKey: string): boolean => {
-    if (sectionKey === 'dashboard' || sectionKey === 'superadmin' || sectionKey === 'documents' || sectionKey === 'offer_letter') return false;
+    if (sectionKey === 'superadmin') return false;
     return !!(maintenanceConfig.all || maintenanceConfig.enabled || maintenanceConfig.sections?.[sectionKey]);
   };
 
@@ -237,7 +239,7 @@ function AppContent() {
       const path = window.location.pathname.replace(/^\//, '');
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get('tab');
-      const validPaths = ['referrals', 'idcard', 'payments', 'dashboard', 'members', 'planned_events', 'superadmin', 'documents'];
+      const validPaths = ['referrals', 'idcard', 'payments', 'dashboard', 'members', 'planned_events', 'superadmin', 'documents', 'ideahub'];
 
       if (path && validPaths.includes(path)) {
         setActivePage(path);
@@ -271,6 +273,7 @@ function AppContent() {
       case 'dashboard': return isFaculty ? 'Faculty Dashboard' : 'Dashboard';
       case 'members': return 'Members Roster';
       case 'planned_events': return 'Planned Events';
+      case 'ideahub': return 'Idea Curator Hub';
       case 'referrals': return 'Referrals';
       case 'idcard': return 'ID Card Portal';
       case 'payments': return isFaculty ? 'Faculty Payments Ledger' : 'Payments & Dues Portal';
@@ -508,6 +511,19 @@ function AppContent() {
             )
           )}
 
+          {activePage === 'ideahub' && getPagePermission('ideahub').canView && (
+            isSectionLocked('ideahub') ? (
+              <MaintenanceScreen
+                section="Idea Curator Hub"
+                onBack={() => handlePageChange('dashboard')}
+              />
+            ) : (
+              <IdeaHub
+                onRedirect={() => handlePageChange('dashboard')}
+              />
+            )
+          )}
+
           {activePage === 'planned_events' && getPagePermission('planned_events').canView && (
             isSectionLocked('planned_events') ? (
               <MaintenanceScreen
@@ -584,14 +600,28 @@ function AppContent() {
           )}
 
           {activePage === 'documents' && getPagePermission('documents').canView && (
-            isAuthorized ? (
+            isSectionLocked('documents') ? (
+              <MaintenanceScreen
+                section="Documents & Credentials"
+                onBack={() => handlePageChange('dashboard')}
+              />
+            ) : isAuthorized ? (
               <OfferLetter onPageChange={handlePageChange} />
             ) : (
               renderRestrictedSignIn('Documents')
             )
           )}
 
-          {activePage === 'tickets' && <Tickets onRedirect={() => handlePageChange('dashboard')} />}
+          {activePage === 'tickets' && (
+            isSectionLocked('tickets') ? (
+              <MaintenanceScreen
+                section="Tickets & Helpdesk"
+                onBack={() => handlePageChange('dashboard')}
+              />
+            ) : (
+              <Tickets onRedirect={() => handlePageChange('dashboard')} />
+            )
+          )}
         </main>
       </div>
 

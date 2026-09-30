@@ -173,7 +173,16 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
   const [faqActionMsg, setFaqActionMsg] = useState<string>('');
 
   // ─── 5. Visitor Presence & Sessions Audit State ──────────────────────────
+  interface MemberAuditIdentity {
+    name: string;
+    regNo?: string;
+    team?: string;
+    role?: string;
+    photo?: string;
+    isFaculty?: boolean;
+  }
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
+  const [membersDirectory, setMembersDirectory] = useState<Map<string, MemberAuditIdentity>>(new Map());
   const [loadingSessions, setLoadingSessions] = useState<boolean>(true);
   const [sessionSearch, setSessionSearch] = useState<string>('');
   const [sessionStatusFilter, setSessionStatusFilter] = useState<'all' | 'online' | 'members' | 'guests'>('all');
@@ -298,7 +307,70 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
     if (!sessionsFetched) setLoadingSessions(true);
 
     try {
-      // Limit to 50 most recent sessions to save read quotas
+      // 1. Build members & id_cards directory map for accurate database identity resolution
+      const dirMap = new Map<string, MemberAuditIdentity>();
+
+      try {
+        const [membersSnap, idCardsSnap] = await Promise.all([
+          getDocs(collection(db, 'members')).catch(() => null),
+          getDocs(collection(db, 'id_cards')).catch(() => null),
+        ]);
+
+        if (membersSnap) {
+          membersSnap.forEach((docSnap) => {
+            const data = docSnap.data();
+            const email = (data.email || data.Email || '').toLowerCase().trim();
+            const reg = (data.registrationNumber || data['Registration Number'] || data.regNo || (!docSnap.id.includes('@') ? docSnap.id : '')).toUpperCase().trim();
+            const name = (data.name || data.Name || data.fullName || '').trim();
+            if (name && name !== 'Member') {
+              const info: MemberAuditIdentity = {
+                name,
+                regNo: reg && !reg.includes('@') ? reg : undefined,
+                team: data.team || data.domain || undefined,
+                role: data.position || data.role || 'Member',
+                photo: data.photoUrl || data.photoURL || data.avatarUrl || data.photo || data.image || '',
+              };
+              if (email) dirMap.set(email, info);
+              if (reg) dirMap.set(reg.toLowerCase(), info);
+            }
+          });
+        }
+
+        if (idCardsSnap) {
+          idCardsSnap.forEach((docSnap) => {
+            const data = docSnap.data();
+            const email = (data.email || data.Email || '').toLowerCase().trim();
+            const reg = (data.regNo || data.registrationNumber || (!docSnap.id.includes('@') ? docSnap.id : '')).toUpperCase().trim();
+            const name = (data.name || data.fullName || '').trim();
+            const photo = data.photoUrl || data.photoURL || data.avatarUrl || data.photo || data.image || '';
+
+            if (name && name !== 'Member') {
+              const existing = email ? dirMap.get(email) : (reg ? dirMap.get(reg.toLowerCase()) : undefined);
+              if (existing) {
+                if (photo && !existing.photo) existing.photo = photo;
+                if (reg && !existing.regNo && !reg.includes('@')) existing.regNo = reg;
+                if ((data.team || data.domain) && !existing.team) existing.team = data.team || data.domain;
+              } else if (data.isGenerated === true || (reg && !reg.includes('@'))) {
+                const info: MemberAuditIdentity = {
+                  name,
+                  regNo: reg && !reg.includes('@') ? reg : undefined,
+                  team: data.team || data.domain || undefined,
+                  role: data.position || data.role || 'Member',
+                  photo,
+                };
+                if (email) dirMap.set(email, info);
+                if (reg) dirMap.set(reg.toLowerCase(), info);
+              }
+            }
+          });
+        }
+
+        setMembersDirectory(dirMap);
+      } catch (dirErr) {
+        console.warn('[AuditSessions] Directory resolution notice:', dirErr);
+      }
+
+      // 2. Limit to 50 most recent sessions to save read quotas
       const q = query(
         collection(db, 'audit_sessions'),
         orderBy('enteredAt', 'desc'),
@@ -440,6 +512,33 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
     }
   };
 
+  const resolveSessionIdentity = (s: SessionRecord) => {
+    const email = (s.userEmail || '').toLowerCase().trim();
+    const dirInfo = email ? membersDirectory.get(email) : undefined;
+    const facMatch = facultyList.find((f) => f.email?.toLowerCase().trim() === email);
+    const adminMatch = admins.find((a) => a.email.toLowerCase().trim() === email);
+    const isRealSuper = !!email && superAdminEmails.some((se) => se.toLowerCase().trim() === email);
+
+    let name = s.userName || 'Guest Visitor';
+    if (isRealSuper) {
+      if (email.includes('haardik')) name = 'Haardik';
+      else if (email.includes('parardha')) name = 'Parardha';
+      else name = 'Super Admin';
+    } else if (dirInfo?.name && dirInfo.name !== 'Member') {
+      name = dirInfo.name;
+    } else if (facMatch?.name) {
+      name = facMatch.name;
+    } else if (adminMatch?.name && !adminMatch.name.includes('@') && adminMatch.name !== 'Admin' && adminMatch.name !== 'Administrator') {
+      name = adminMatch.name;
+    }
+
+    const regNo = dirInfo?.regNo || facMatch?.facultyId || undefined;
+    const team = dirInfo?.team || facMatch?.department || (isRealSuper ? 'Core Lead' : adminMatch?.role || undefined);
+    const photo = dirInfo?.photo || facMatch?.avatarUrl || s.userPhoto || null;
+
+    return { name, regNo, team, photo };
+  };
+
   const resolveSessionDisplayRole = (s: SessionRecord): string => {
     const email = (s.userEmail || '').toLowerCase().trim();
     const isRealSuper = !!email && superAdminEmails.some((se) => se.toLowerCase().trim() === email);
@@ -483,12 +582,15 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
     // Search filter
     if (sessionSearch.trim()) {
       const q = sessionSearch.toLowerCase().trim();
-      const matchesName = (s.userName || '').toLowerCase().includes(q);
+      const identity = resolveSessionIdentity(s);
+      const matchesName = identity.name.toLowerCase().includes(q) || (s.userName || '').toLowerCase().includes(q);
+      const matchesReg = identity.regNo ? identity.regNo.toLowerCase().includes(q) : false;
+      const matchesTeam = identity.team ? identity.team.toLowerCase().includes(q) : false;
       const matchesEmail = (s.userEmail || '').toLowerCase().includes(q);
       const matchesRole = (s.userRole || '').toLowerCase().includes(q);
       const matchesDevice = (s.device || '').toLowerCase().includes(q);
       const matchesPath = (s.currentPath || '').toLowerCase().includes(q);
-      return matchesName || matchesEmail || matchesRole || matchesDevice || matchesPath;
+      return matchesName || matchesReg || matchesTeam || matchesEmail || matchesRole || matchesDevice || matchesPath;
     }
 
     return true;
@@ -607,7 +709,9 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
             roleDoc?.assignedBy &&
             (roleDoc.assignedBy.toLowerCase().includes('jaiyansh') || roleDoc.assignedBy.toLowerCase().includes('dhaulakhandi'))
           ) {
-            setDoc(doc(db, 'roles', email), { assignedBy: 'haardik.24bcg10051@vitbhopal.ac.in' }, { merge: true }).catch(() => {});
+            // Use the current authenticated super admin's email for correct attribution
+            const canonicalAttribution = currentUserEmail || 'Super Admin';
+            setDoc(doc(db, 'roles', email), { assignedBy: canonicalAttribution }, { merge: true }).catch(() => {});
           }
         }
 
@@ -854,6 +958,31 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
     });
   };
 
+  const handleToggleMetadataRole = (roleName: string) => {
+    setPermissions((prev) => {
+      const exists = prev.allowedMetadataRoles.includes(roleName);
+      const updated = exists
+        ? prev.allowedMetadataRoles.filter((r) => r !== roleName)
+        : [...prev.allowedMetadataRoles, roleName];
+      return {
+        ...prev,
+        allowedMetadataRoles: updated,
+      };
+    });
+  };
+
+  const handleToggleBlockAccessRole = (roleName: string) => {
+    setPermissions((prev) => {
+      const exists = (prev.allowedBlockAccessRoles || []).includes(roleName);
+      const updated = exists
+        ? (prev.allowedBlockAccessRoles || []).filter((r) => r !== roleName)
+        : [...(prev.allowedBlockAccessRoles || []), roleName];
+      return {
+        ...prev,
+        allowedBlockAccessRoles: updated,
+      };
+    });
+  };
   const handleSavePermissions = async () => {
     setSavingPermissions(true);
     setPermissionsSuccess('');
@@ -1902,7 +2031,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                           {2 + allRolesList.length} Total
                         </span>
                       </div>
-                      <div className="space-y-1.5 flex flex-row lg:flex-col overflow-x-auto lg:overflow-x-visible pb-1 lg:pb-0 custom-scrollbar">
+                      <div className="space-y-1.5 flex flex-row lg:flex-col overflow-x-auto lg:overflow-x-visible pb-1 lg:pb-0 no-scrollbar">
                         {[
                           { id: 'Members', label: 'Chapter Members', tier: 'members' as const, sub: 'Student Tier', dot: 'bg-cyan-400' },
                           { id: 'Faculty', label: 'Faculty Advisory', tier: 'faculty' as const, sub: 'Academic Mentors', dot: 'bg-indigo-400' },
@@ -2091,7 +2220,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                         <span>SYSTEM PORTALS</span>
                         <span className="text-slate-500">{ALL_PAGE_IDS.length} Total</span>
                       </div>
-                      <div className="space-y-1.5 flex flex-row lg:flex-col overflow-x-auto lg:overflow-x-visible pb-1 lg:pb-0 custom-scrollbar">
+                      <div className="space-y-1.5 flex flex-row lg:flex-col overflow-x-auto lg:overflow-x-visible pb-1 lg:pb-0 no-scrollbar">
                         {ALL_PAGE_IDS.map((p) => {
                           const isSelected = selectedMobilePortal === p.id;
                           return (
@@ -2216,6 +2345,41 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Sub-section: Login Block / Unblock Permissions */}
+            <div className="p-5 bg-[#0e071a] border border-[#261238] rounded-2xl space-y-3">
+              <h3 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
+                <span className="material-symbols-outlined text-purple-400 text-sm">block</span>
+                <span>Delegated Member Login Access Management</span>
+              </h3>
+              <p className="text-xs text-slate-300">
+                Super Admin can permit designated roles to block or unblock the login access of members directly from the Members Roster.
+              </p>
+
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                {allRolesList.map((roleName) => {
+                  const isAllowed = (permissions.allowedBlockAccessRoles || []).includes(roleName);
+                  return (
+                    <label
+                      key={roleName}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold transition-colors cursor-pointer ${
+                        isAllowed
+                          ? 'bg-red-900/60 border-red-500 text-white'
+                          : 'bg-[#150a24] border-red-900/30 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isAllowed}
+                        onChange={() => handleToggleBlockAccessRole(roleName)}
+                        className="accent-red-600 rounded cursor-pointer"
+                      />
+                      <span>{roleName} can Block/Unblock Members</span>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
 
           </div>
@@ -3245,6 +3409,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
               ) : (
                 filteredSessions.map((s) => {
                   const isOnline = isSessionOnline(s);
+                  const identity = resolveSessionIdentity(s);
 
                   return (
                     <div
@@ -3257,9 +3422,9 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                       {/* Header: User & Live Status */}
                       <div className="flex items-start justify-between gap-2 min-w-0">
                         <div className="flex items-center gap-2.5 min-w-0">
-                          {s.userPhoto ? (
+                          {identity.photo ? (
                             <img
-                              src={s.userPhoto}
+                              src={identity.photo}
                               alt="Avatar"
                               className="w-8 h-8 rounded-full object-cover border border-purple-400/50 shrink-0"
                               referrerPolicy="no-referrer"
@@ -3269,16 +3434,28 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                               ? 'bg-purple-950 border-purple-600 text-purple-300'
                               : 'bg-slate-900 border-slate-700 text-slate-400'
                               }`}>
-                              {s.isLoggedIn ? (s.userName?.charAt(0).toUpperCase() || 'M') : 'G'}
+                              {s.isLoggedIn ? (identity.name?.charAt(0).toUpperCase() || 'M') : 'G'}
                             </div>
                           )}
                           <div className="min-w-0">
-                            <h4 className="font-bold text-white text-xs sm:text-sm truncate">
-                              {s.userName || 'Guest Visitor'}
-                            </h4>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <h4 className="font-bold text-white text-xs sm:text-sm truncate">
+                                {identity.name}
+                              </h4>
+                              {identity.regNo && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-purple-900/40 text-purple-300 border border-purple-700/50">
+                                  {identity.regNo}
+                                </span>
+                              )}
+                            </div>
                             <div className="text-[10px] text-purple-400 font-mono truncate">
                               {s.userEmail || 'Unauthenticated Visitor'}
                             </div>
+                            {identity.team && (
+                              <div className="text-[9px] text-slate-400 truncate">
+                                {identity.team}
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -3299,7 +3476,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                               setDeleteConfirm({
                                 type: 'session',
                                 id: s.id,
-                                label: `${s.userName || 'Visitor'} session from ${formatAuditDateTime(s.enteredAt)}`,
+                                label: `${identity.name} session from ${formatAuditDateTime(s.enteredAt)}`,
                               })
                             }
                             className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
@@ -3392,6 +3569,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                   ) : (
                     filteredSessions.map((s) => {
                       const isOnline = isSessionOnline(s);
+                      const identity = resolveSessionIdentity(s);
 
                       return (
                         <tr
@@ -3402,9 +3580,9 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                           {/* 1. Visitor Profile */}
                           <td className="p-3.5">
                             <div className="flex items-center gap-2.5">
-                              {s.userPhoto ? (
+                              {identity.photo ? (
                                 <img
-                                  src={s.userPhoto}
+                                  src={identity.photo}
                                   alt="Avatar"
                                   className="w-8 h-8 rounded-full object-cover border border-purple-400/50 shrink-0"
                                   referrerPolicy="no-referrer"
@@ -3414,12 +3592,17 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                                   ? 'bg-purple-950 border-purple-600 text-purple-300'
                                   : 'bg-slate-900 border-slate-700 text-slate-400'
                                   }`}>
-                                  {s.isLoggedIn ? (s.userName?.charAt(0).toUpperCase() || 'M') : 'G'}
+                                  {s.isLoggedIn ? (identity.name?.charAt(0).toUpperCase() || 'M') : 'G'}
                                 </div>
                               )}
                               <div className="min-w-0">
-                                <div className="font-bold text-white flex items-center gap-1.5">
-                                  <span className="truncate">{s.userName || 'Guest Visitor'}</span>
+                                <div className="font-bold text-white flex items-center gap-1.5 flex-wrap">
+                                  <span className="truncate">{identity.name}</span>
+                                  {identity.regNo && (
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-purple-900/40 text-purple-300 border border-purple-700/50 shrink-0">
+                                      {identity.regNo}
+                                    </span>
+                                  )}
                                   {isOnline && (
                                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" title="Online now" />
                                   )}
@@ -3427,6 +3610,11 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                                 <div className="text-[11px] text-purple-400 font-mono truncate">
                                   {s.userEmail || 'Anonymous Guest'}
                                 </div>
+                                {identity.team && (
+                                  <div className="text-[10px] text-slate-400 truncate">
+                                    {identity.team}
+                                  </div>
+                                )}
                                 <div className="mt-0.5">
                                   {(() => {
                                     const displayRole = resolveSessionDisplayRole(s);

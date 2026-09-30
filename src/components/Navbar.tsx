@@ -13,7 +13,16 @@ interface NavbarProps {
   activePage?: string;
   userEmail?: string | null;
   user?: User | null;
-  memberData?: { name?: string; fullName?: string; registrationNumber?: string; regNo?: string } | null;
+  memberData?: {
+    name?: string;
+    fullName?: string;
+    registrationNumber?: string;
+    regNo?: string;
+    photoUrl?: string;
+    avatarUrl?: string;
+    photo?: string;
+    image?: string;
+  } | null;
   isAdmin?: boolean;
   isSuperAdmin?: boolean;
   isFaculty?: boolean;
@@ -50,10 +59,10 @@ const Navbar: React.FC<NavbarProps> = ({
   };
 
   const regNo = memberData?.registrationNumber || memberData?.regNo || extractRegNo(userEmail);
-  const rawName = user?.displayName || memberData?.name || memberData?.fullName || (userEmail ? userEmail.split('@')[0] : 'User');
+  const rawName = memberData?.name || memberData?.fullName || user?.displayName || (userEmail ? userEmail.split('@')[0] : 'User');
   const cleanName = cleanFullName(rawName, regNo);
   const firstName = cleanName.trim().split(' ')[0];
-  const photoUrl = user?.photoURL || null;
+  const photoUrl = memberData?.photoUrl || memberData?.avatarUrl || memberData?.photo || memberData?.image || user?.photoURL || null;
 
   const handleMobileNavClick = (pageId: string) => {
     if (onPageChange) {
@@ -73,6 +82,12 @@ const Navbar: React.FC<NavbarProps> = ({
       label: 'Members Roster',
       icon: 'groups',
       onClick: () => handleMobileNavClick('members'),
+    },
+    {
+      id: 'ideahub',
+      label: 'Idea Curator Hub',
+      icon: 'lightbulb',
+      onClick: () => handleMobileNavClick('ideahub'),
     },
     {
       id: 'planned_events',
@@ -297,6 +312,8 @@ const Navbar: React.FC<NavbarProps> = ({
               FACULTY
             </span>
           )}
+
+
 
           {/* User First Name & Google Photo Pill (desktop only on lg+) */}
           {userEmail && (

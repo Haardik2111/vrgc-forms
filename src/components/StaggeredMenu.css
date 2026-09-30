@@ -318,12 +318,18 @@
   flex-direction: column;
   padding: max(1.15rem, env(safe-area-inset-top, 1.15rem)) 1.25rem 1.75rem 1.25rem;
   overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   z-index: 58;
   pointer-events: auto;
   opacity: 0;
   visibility: hidden;
   box-shadow: -15px 0 50px rgba(0, 0, 0, 0.9), 0 0 30px rgba(168, 85, 247, 0.15);
   box-sizing: border-box;
+}
+
+.staggered-menu-panel::-webkit-scrollbar {
+  display: none;
 }
 
 [data-position='left'] .staggered-menu-panel {
