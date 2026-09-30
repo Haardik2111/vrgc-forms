@@ -15,7 +15,6 @@ const bebasNeue = Bebas_Neue({
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
   variable: '--font-head',
   fallback: ['-apple-system', 'sans-serif'],
   display: 'swap',
@@ -23,7 +22,6 @@ const spaceGrotesk = Space_Grotesk({
 
 const inter = Inter({
   subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
   variable: '--font-body',
   fallback: ['-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
   display: 'swap',
@@ -31,7 +29,6 @@ const inter = Inter({
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
-  weight: ['400', '500', '700'],
   variable: '--font-mono',
   fallback: ['monospace'],
   display: 'swap',

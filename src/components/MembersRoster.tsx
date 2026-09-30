@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
+import { collection, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
 import { getClientAuthToken } from '@/lib/auth-client';
@@ -324,7 +324,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
         console.warn('Error fetching members collection:', mErr);
       }
 
-      // 2. Query `id_cards` collection to enrich member photos & missing records
+      // 2. Query `id_cards` collection to enrich confirmed member photos & details (never fabricates phantom members)
       try {
         const idCardsSnap = await getDocs(collection(db, 'id_cards'));
         idCardsSnap.forEach((docSnap) => {
@@ -350,48 +350,38 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
             if (data.isBlocked === true) {
               existing.isBlocked = true;
             }
-          } else {
-            // Only add member from id_cards if it has an authentic member profile
-            const hasAuthenticProfile = (data.name && data.name.trim() !== '' && data.name !== 'Member') &&
-              (reg && !reg.includes('@')) && (data.isGenerated === true || data.team || data.domain || data.position);
-
-            if (!hasAuthenticProfile) {
-              return;
-            }
-
-            const pos = (data.position || data.role || 'Member').trim();
-            const rawTeam = (data.team || data.domain || 'General').trim();
-            const posLower = pos.toLowerCase();
-            const teamLower = rawTeam.toLowerCase();
-
-            const isCoPres = (posLower.includes('president') || teamLower.includes('president')) && !posLower.includes('vice');
-            const isCoord = posLower.includes('student coordinator') || teamLower.includes('student coordinator') || (posLower.includes('coordinator') && !posLower.includes('event'));
-            const isLd = posLower.includes('lead') || posLower.includes('head');
-            const assignedTeams = extractMemberTeams(rawTeam);
-            const mapKey = email || reg || docSnap.id;
-
-            membersMap.set(mapKey, {
-              id: docSnap.id,
-              name: data.name || data.fullName || 'Member',
-              registrationNumber: reg,
-              email: email || `${reg.toLowerCase()}@vitbhopal.ac.in`,
-              phone: data.phone || '',
-              team: assignedTeams.join(' • '),
-              teams: assignedTeams,
-              position: pos || 'Member',
-              avatarUrl: idPhoto,
-              isCoPresident: isCoPres,
-              isCoordinator: isCoord,
-              isLead: isLd,
-              isBlocked: data.isBlocked === true,
-            });
           }
         });
       } catch (idErr) {
         console.warn('Error fetching id_cards collection:', idErr);
       }
 
-      // 3. Fallback any members without photos to personalized Dicebear avatar
+      // 3. Query `blocked_users` collection to sync active block status
+      try {
+        const blockedSnap = await getDocs(collection(db, 'blocked_users'));
+        const blockedEmails = new Set<string>();
+        const blockedRegs = new Set<string>();
+        blockedSnap.forEach((bDoc) => {
+          const bData = bDoc.data();
+          if (bData?.isBlocked !== false) {
+            if (bDoc.id) blockedEmails.add(bDoc.id.toLowerCase().trim());
+            if (bData?.email) blockedEmails.add(bData.email.toLowerCase().trim());
+            if (bData?.registrationNumber) blockedRegs.add(bData.registrationNumber.toUpperCase().trim());
+          }
+        });
+
+        membersMap.forEach((mem) => {
+          const mEmail = (mem.email || '').toLowerCase().trim();
+          const mReg = (mem.registrationNumber || '').toUpperCase().trim();
+          if (blockedEmails.has(mEmail) || (mReg && blockedRegs.has(mReg))) {
+            mem.isBlocked = true;
+          }
+        });
+      } catch (bErr) {
+        console.warn('Error fetching blocked_users collection:', bErr);
+      }
+
+      // 4. Fallback any members without photos to personalized Dicebear avatar
       const membersList = Array.from(membersMap.values()).map((m) => ({
         ...m,
         avatarUrl: m.avatarUrl || `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(m.name || m.email || m.registrationNumber)}`,
@@ -1131,7 +1121,24 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
           emailSnap.forEach((d) => {
             setDoc(d.ref, { isBlocked: newStatus, updatedAt: new Date().toISOString() }, { merge: true }).catch(console.warn);
           });
-          
+
+          // Sync to id_cards collection if document exists
+          const idCardDocRef = doc(db, 'id_cards', cleanEmail);
+          getDoc(idCardDocRef).then((idSnap) => {
+            if (idSnap.exists()) {
+              setDoc(idCardDocRef, { isBlocked: newStatus, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+            }
+          }).catch(() => {});
+        }
+
+        if (cleanReg) {
+          const regSnap = await getDocs(query(collection(db, 'members'), where('registrationNumber', '==', cleanReg)));
+          regSnap.forEach((d) => {
+            setDoc(d.ref, { isBlocked: newStatus, updatedAt: new Date().toISOString() }, { merge: true }).catch(console.warn);
+          });
+        }
+
+        if (cleanEmail) {
           if (newStatus) {
             await setDoc(doc(db, 'blocked_users', cleanEmail), {
               email: cleanEmail,

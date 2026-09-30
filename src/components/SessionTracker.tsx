@@ -7,7 +7,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { initOrResumeSession, finalizeSession, touchSessionActivity, upgradeSessionIdentity } from '@/lib/sessionTracker';
 
 export const SessionTracker: React.FC = () => {
-  const { user, userEmail, memberData, authenticRole, isAuthenticSuperAdmin, isAdmin, isElevatedSession, isFaculty, authLoading } = useAuth();
+  const { user, userEmail, memberData, authenticRole, isAuthenticSuperAdmin, isAdmin, isElevatedSession, isFaculty, isAuthorized, authLoading } = useAuth();
 
   // Last raw Firebase email seen before any admission processing.
   // Preserved across signOut() — never cleared when Firebase fires with null.
@@ -23,9 +23,10 @@ export const SessionTracker: React.FC = () => {
   const initDoneRef = useRef<boolean>(false);
 
   // resolvedRole: for admitted users only (userEmail is set by auth-context ONLY on success).
-  // Denied users have userEmail='', so they fall through to 'Guest' here.
-  // The actual 'Access Denied' label is applied in the init effect using rawFirebaseEmailRef.
-  const resolvedRole = isAuthenticSuperAdmin
+  // Denied users have isAuthorized=false or userEmail='', so they evaluate to 'Access Denied'.
+  const resolvedRole = !isAuthorized
+    ? 'Access Denied'
+    : isAuthenticSuperAdmin
     ? 'Super Admin'
     : authenticRole
     ? authenticRole
@@ -72,11 +73,13 @@ export const SessionTracker: React.FC = () => {
       : 'Guest Visitor';
 
     // Determine the role for the session record:
-    // - Admitted user (userEmail is set)   → use resolvedRole
-    // - Denied user (only rawFirebaseEmail) → 'Access Denied'
+    // - Admitted user (userEmail is set & isAuthorized) → use resolvedRole
+    // - Denied user (isAuthorized is false or rawFirebaseEmail) → 'Access Denied'
     // - Truly anonymous (no email)          → 'Guest'
     const effectiveRole = isElevated
       ? 'Guest'
+      : !isAuthorized
+      ? (rawFirebaseEmailRef.current || userEmail ? 'Access Denied' : 'Guest')
       : userEmail
       ? resolvedRole
       : rawFirebaseEmailRef.current
@@ -91,7 +94,7 @@ export const SessionTracker: React.FC = () => {
       photo: user?.photoURL || null,
       role: effectiveRole,
     });
-  }, [authLoading, userEmail, resolvedRole, user?.photoURL, user?.displayName, user?.email, isElevatedSession, isAuthenticSuperAdmin, memberData]);
+  }, [authLoading, userEmail, isAuthorized, resolvedRole, user?.photoURL, user?.displayName, user?.email, isElevatedSession, isAuthenticSuperAdmin, memberData]);
 
   // 2. Upgrade identity when an anonymous session authenticates or when memberData resolves from Firestore.
   useEffect(() => {
@@ -106,7 +109,7 @@ export const SessionTracker: React.FC = () => {
     if (!effectiveEmail) return;
 
     const effectiveName = memberData?.name || user?.displayName || effectiveEmail.split('@')[0];
-    const upgradeRole = userEmail ? resolvedRole : 'Access Denied';
+    const upgradeRole = (userEmail && isAuthorized) ? resolvedRole : 'Access Denied';
 
     // Update session record with official database member name
     upgradeSessionIdentity({
@@ -116,7 +119,7 @@ export const SessionTracker: React.FC = () => {
       role: upgradeRole,
     });
     recordedEmailRef.current = effectiveEmail;
-  }, [authLoading, userEmail, resolvedRole, user?.displayName, user?.photoURL, isElevatedSession, isAuthenticSuperAdmin, memberData]);
+  }, [authLoading, userEmail, isAuthorized, resolvedRole, user?.displayName, user?.photoURL, isElevatedSession, isAuthenticSuperAdmin, memberData]);
 
   // 3. Periodic gentle heartbeat every 3 minutes while tab is active and visible (Zero waste on Spark quota)
   useEffect(() => {

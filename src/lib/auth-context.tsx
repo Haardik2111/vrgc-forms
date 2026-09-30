@@ -154,18 +154,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUserEmail(em);
 
     try {
-      // 0. Check blocked_users collection
+      // 0. Comprehensive Blocked Check across blocked_users, members, and id_cards
       try {
-        const blockedDoc = await getDoc(doc(db, 'blocked_users', em));
         const bridgeSuperAdmins = await getSuperAdminEmails();
         const isSuper = bridgeSuperAdmins.some((se) => se.toLowerCase().trim() === em);
-        if (blockedDoc.exists() && blockedDoc.data()?.isBlocked !== false && !isSuper) {
-          setIsAuthorized(false);
-          setMemberData(null);
-          setAuthError('Access Denied: Your account has been blocked from accessing VRGC Forms.');
-          signOut(auth).catch(console.error);
-          setAuthLoading(false);
-          return;
+
+        if (!isSuper) {
+          // Check blocked_users collection
+          const blockedDoc = await getDoc(doc(db, 'blocked_users', em));
+          if (blockedDoc.exists() && blockedDoc.data()?.isBlocked !== false) {
+            setIsAuthorized(false);
+            setMemberData(null);
+            setUserEmail('');
+            setUser(null);
+            setAuthError('Access Denied: Your account has been blocked from accessing VRGC Forms.');
+            signOut(auth).catch(console.error);
+            setAuthLoading(false);
+            return;
+          }
+
+          // Check members collection for explicit isBlocked flag
+          const memBlockedQuery = query(collection(db, 'members'), where('email', '==', em));
+          const memBlockedSnap = await getDocs(memBlockedQuery);
+          if (memBlockedSnap.docs.some((d) => d.data()?.isBlocked === true)) {
+            setIsAuthorized(false);
+            setMemberData(null);
+            setUserEmail('');
+            setUser(null);
+            setAuthError('Access Denied: Your account has been blocked from accessing VRGC Forms.');
+            signOut(auth).catch(console.error);
+            setAuthLoading(false);
+            return;
+          }
+
+          // Check id_cards collection for isBlocked flag
+          const idBlockedDoc = await getDoc(doc(db, 'id_cards', em));
+          if (idBlockedDoc.exists() && idBlockedDoc.data()?.isBlocked === true) {
+            setIsAuthorized(false);
+            setMemberData(null);
+            setUserEmail('');
+            setUser(null);
+            setAuthError('Access Denied: Your account has been blocked from accessing VRGC Forms.');
+            signOut(auth).catch(console.error);
+            setAuthLoading(false);
+            return;
+          }
         }
       } catch (bErr) {
         console.warn('Blocked users check notice:', bErr);
@@ -284,6 +317,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Check id_cards collection for Supabase uploaded pass photo & details
+      // Note: id_cards ONLY enriches details for confirmed club members; it NEVER fabricates general member records
       try {
         const idDoc = await getDoc(doc(db, 'id_cards', em));
         if (idDoc.exists()) {
@@ -293,20 +327,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (cardPhoto && !memberRecord.photoUrl) {
               memberRecord.photoUrl = cardPhoto;
             }
-          } else {
-            memberRecord = {
-              name: d.name || firebaseUser.displayName || 'Member',
-              registrationNumber: d.regNo || d.registrationNumber || '',
-              phone: d.phone || '',
-              email: em,
-              team: d.team || 'General',
-              position: d.position || d.role || (assignedRole || 'Member'),
-              photoUrl: cardPhoto || undefined,
-              avatarUrl: d.avatarUrl || undefined,
-              isBlocked: d.isBlocked || false,
-            };
-            if (!assignedRole && d.role) {
-              assignedRole = d.role;
+            if (d.isBlocked === true) {
+              memberRecord.isBlocked = true;
             }
           }
         } else {
@@ -319,20 +341,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               if (cardPhoto && !memberRecord.photoUrl) {
                 memberRecord.photoUrl = cardPhoto;
               }
-            } else {
-              memberRecord = {
-                name: d.name || firebaseUser.displayName || 'Member',
-                registrationNumber: d.regNo || d.registrationNumber || '',
-                phone: d.phone || '',
-                email: em,
-                team: d.team || 'General',
-                position: d.position || d.role || (assignedRole || 'Member'),
-                photoUrl: cardPhoto || undefined,
-                avatarUrl: d.avatarUrl || undefined,
-                isBlocked: d.isBlocked || false,
-              };
-              if (!assignedRole && d.role) {
-                assignedRole = d.role;
+              if (d.isBlocked === true) {
+                memberRecord.isBlocked = true;
               }
             }
           }
@@ -368,6 +378,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (memberRecord?.isBlocked && !superAdmin) {
           setIsAuthorized(false);
           setMemberData(null);
+          setUserEmail('');
+          setUser(null);
           setAuthError('Access Denied: Your account has been blocked from accessing VRGC Forms.');
           signOut(auth).catch(console.error);
         } else if (memberRecord) {
