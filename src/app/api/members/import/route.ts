@@ -18,7 +18,7 @@ async function isAuthorizedToImport(email: string | null): Promise<boolean> {
   const normalized = email.toLowerCase().trim();
 
   // 1. Super Admin via env
-  if (SERVER_CONFIG.SUPER_ADMIN_EMAILS.includes(normalized)) {
+  if (SERVER_CONFIG.SUPER_ADMIN_EMAILS.some((e) => e.toLowerCase().trim() === normalized)) {
     return true;
   }
 

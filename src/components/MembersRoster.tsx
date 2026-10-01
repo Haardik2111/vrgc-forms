@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { collection, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
+import { collection, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc, writeBatch, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
 import { getClientAuthToken } from '@/lib/auth-client';
@@ -800,27 +800,84 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
         position: m.position,
       }));
 
-      // Call fast backend API
-      const token = await getClientAuthToken();
-      const res = await fetch('/api/members/import', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ members: payload }),
-      });
+      // Execute import directly into Firestore via client writeBatch (immediate, reliable, zero serverless timeout)
+      let importedCount = 0;
+      let directWriteSuccess = false;
 
-      const resData = await res.json();
-      if (!res.ok || !resData.success) {
-        throw new Error(resData?.error || 'Failed to import members via server API');
+      try {
+        const CHUNK_SIZE = 400;
+        const nowIso = new Date().toISOString();
+
+        for (let i = 0; i < toImport.length; i += CHUNK_SIZE) {
+          const chunk = toImport.slice(i, i + CHUNK_SIZE);
+          const batch = writeBatch(db);
+
+          for (const m of chunk) {
+            const cleanName = (m.name || '').trim();
+            const cleanReg = (m.registrationNumber || '').toUpperCase().trim();
+            const cleanEmail = (m.email || '').toLowerCase().trim();
+            const cleanPhone = (m.phone || '').trim();
+            const cleanTeam = (m.team || 'General').trim();
+            const cleanPos = (m.position || 'Member').trim();
+
+            const targetDocId = (cleanReg || cleanEmail.replace(/[/@.]/g, '_')).trim();
+            if (!targetDocId) continue;
+
+            const docRef = doc(db, 'members', targetDocId);
+            batch.set(
+              docRef,
+              {
+                name: cleanName || 'Member',
+                registrationNumber: cleanReg,
+                email: cleanEmail || (cleanReg ? `${cleanReg.toLowerCase()}@vitbhopal.ac.in` : ''),
+                phone: cleanPhone,
+                team: cleanTeam,
+                position: cleanPos,
+                updatedAt: nowIso,
+              },
+              { merge: true }
+            );
+            importedCount++;
+          }
+
+          await batch.commit();
+        }
+        directWriteSuccess = true;
+      } catch (directErr) {
+        console.warn('[Members Import] Direct Firestore writeBatch notice, attempting server API fallback:', directErr);
+      }
+
+      // If direct write failed (e.g. security rules permission nuance), fallback to backend API with safe JSON parsing
+      if (!directWriteSuccess) {
+        const token = await getClientAuthToken();
+        const res = await fetch('/api/members/import', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ members: payload }),
+        });
+
+        let resData: any = null;
+        try {
+          const text = await res.text();
+          resData = text ? JSON.parse(text) : null;
+        } catch {
+          resData = null;
+        }
+
+        if (!res.ok || !resData?.success) {
+          throw new Error(resData?.error || `Failed to import members (Server returned status ${res.status})`);
+        }
+        importedCount = resData.count || toImport.length;
       }
 
       await loadAllMembers();
       setImportModalOpen(false);
       setImportStep('upload');
       setPreviewMembers([]);
-      alert(`🎉 Successfully imported ${resData.count || toImport.length} members into the database!`);
+      alert(`🎉 Successfully imported ${importedCount || toImport.length} members into the database!`);
     } catch (err: any) {
       console.error('Error saving imported members:', err);
       setImportError(err?.message || 'Failed to save members to database.');
