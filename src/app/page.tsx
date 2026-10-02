@@ -22,6 +22,7 @@ import IdeaHub from '@/components/IdeaHub';
 import SuperAdminManagementModal from '@/components/SuperAdminManagementModal';
 import SuperAdminControlCenter from '@/components/SuperAdminControlCenter';
 import UnderMaintenanceCard from '@/components/UnderMaintenanceCard';
+import NotificationCenter from '@/components/NotificationCenter';
 import { useAuth } from '@/lib/auth-context';
 import { auth, db } from '@/lib/firebase';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
@@ -666,6 +667,15 @@ function AppContent() {
           <span className="text-xs font-bold">{toast}</span>
         </div>
       )}
+
+      {/* ─── Global Notification Center ─── */}
+      <NotificationCenter 
+        userEmail={userEmail} 
+        isAdmin={isAdmin}
+        isSuperAdmin={isSuperAdmin}
+        isFaculty={!!isFaculty}
+        onNavigate={handlePageChange} 
+      />
 
       <Footer />
     </div>

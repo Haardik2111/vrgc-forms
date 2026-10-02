@@ -165,19 +165,17 @@ const MaintenanceModal: React.FC<MaintenanceModalProps> = ({
         <div className="space-y-3 shrink-0">
           {/* Master Switch Banner */}
           <div
-            className={`p-4 rounded-2xl border transition-all flex items-center justify-between gap-4 ${
-              allCategories
+            className={`p-4 rounded-2xl border transition-all flex items-center justify-between gap-4 ${allCategories
                 ? 'bg-purple-950/60 border-purple-500/60 shadow-[0_0_20px_rgba(168,85,247,0.2)]'
                 : 'bg-white/5 border-white/10'
-            }`}
+              }`}
           >
             <div className="flex items-center gap-3">
               <div
-                className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                  allCategories
+                className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${allCategories
                     ? 'bg-purple-600 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]'
                     : 'bg-white/10 text-slate-400'
-                }`}
+                  }`}
               >
                 <span className="material-symbols-outlined text-xl">build_circle</span>
               </div>
@@ -240,19 +238,17 @@ const MaintenanceModal: React.FC<MaintenanceModalProps> = ({
                 <div
                   key={cat.id}
                   onClick={() => handleToggleSection(cat.id)}
-                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 select-none ${
-                    isLocked
+                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 select-none ${isLocked
                       ? 'bg-purple-950/40 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.15)]'
                       : 'bg-white/[0.03] hover:bg-white/[0.06] border-white/10 hover:border-purple-500/30'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div
-                      className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                        isLocked
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${isLocked
                           ? 'bg-purple-600 text-white'
                           : 'bg-white/10 text-slate-400'
-                      }`}
+                        }`}
                     >
                       <span className="material-symbols-outlined text-lg">{cat.icon}</span>
                     </div>
@@ -278,7 +274,7 @@ const MaintenanceModal: React.FC<MaintenanceModalProps> = ({
                     <input
                       type="checkbox"
                       checked={isLocked}
-                      onChange={() => {}}
+                      onChange={() => { }}
                       className="sr-only peer"
                     />
                     <div className="w-9 h-5 bg-white/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>

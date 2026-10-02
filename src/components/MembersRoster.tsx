@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { collection, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
+import { collection, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc, writeBatch, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
 import { getClientAuthToken } from '@/lib/auth-client';
@@ -225,6 +225,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedTeam, setSelectedTeam] = useState<string>('ALL');
   const [selectedPosition, setSelectedPosition] = useState<string>('ALL');
+  const [blockedFilter, setBlockedFilter] = useState<'ALL' | 'BLOCKED' | 'UNBLOCKED'>('ALL');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
   // Club metadata (domains & positions)
@@ -266,13 +267,18 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
   // Delete Member state
   const [deleteConfirmMember, setDeleteConfirmMember] = useState<RosterMember | null>(null);
   const [deletingMember, setDeletingMember] = useState<boolean>(false);
+  const [selectedMemberIds, setSelectedMemberIds] = useState<Set<string>>(new Set());
+  const [pendingBulkDelete, setPendingBulkDelete] = useState<RosterMember[] | null>(null);
+  const [bulkUpdating, setBulkUpdating] = useState<boolean>(false);
+
+  const getMemberKey = (m: RosterMember) => (m.id || m.email || m.registrationNumber || '').toLowerCase();
 
   // Manual Edit inside Clash state
   const [clashEditTarget, setClashEditTarget] = useState<ClashingMemberRecord | null>(null);
 
   // Load members from Firestore `members` and `id_cards` collections
-  const loadAllMembers = async () => {
-    setLoading(true);
+  const loadAllMembers = async (showLoadingSpinner: boolean = true) => {
+    if (showLoadingSpinner) setLoading(true);
     try {
       const membersMap = new Map<string, RosterMember>();
 
@@ -391,7 +397,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
     } catch (err) {
       console.error('Failed to load roster:', err);
     } finally {
-      setLoading(false);
+      if (showLoadingSpinner) setLoading(false);
     }
   };
 
@@ -488,9 +494,16 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
         matchesPosition = !m.isCoPresident && !m.isCoordinator && !m.isLead;
       }
 
-      return matchesSearch && matchesTeam && matchesPosition;
+      let matchesBlocked = true;
+      if (blockedFilter === 'BLOCKED') {
+        matchesBlocked = !!m.isBlocked;
+      } else if (blockedFilter === 'UNBLOCKED') {
+        matchesBlocked = !m.isBlocked;
+      }
+
+      return matchesSearch && matchesTeam && matchesPosition && matchesBlocked;
     });
-  }, [members, searchQuery, selectedTeam, selectedPosition]);
+  }, [members, searchQuery, selectedTeam, selectedPosition, blockedFilter]);
 
   // Page limit for progressive loading (load 12 at a time, exactly like ID card loading system)
   const PAGE_SIZE = 12;
@@ -500,12 +513,48 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPageLimit(PAGE_SIZE);
-  }, [searchQuery, selectedTeam, selectedPosition]);
+  }, [searchQuery, selectedTeam, selectedPosition, blockedFilter]);
 
   // Paginated visible members slice
   const visibleMembers = useMemo(() => {
     return filteredMembers.slice(0, pageLimit);
   }, [filteredMembers, pageLimit]);
+
+  const handleToggleSelectAll = () => {
+    const allKeys = visibleMembers.map((m) => getMemberKey(m));
+    const allSelected = allKeys.length > 0 && allKeys.every((k) => selectedMemberIds.has(k));
+
+    if (allSelected) {
+      setSelectedMemberIds(new Set());
+    } else {
+      setSelectedMemberIds(new Set(allKeys));
+    }
+  };
+
+  const handleToggleSelectOne = (key: string) => {
+    setSelectedMemberIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  // Selected members list and their block state status
+  const selectedMembers = useMemo(() => {
+    return members.filter((m) => selectedMemberIds.has(getMemberKey(m)));
+  }, [members, selectedMemberIds]);
+
+  const hasSelectedBlocked = useMemo(() => {
+    return selectedMembers.some((m) => !!m.isBlocked);
+  }, [selectedMembers]);
+
+  const hasSelectedUnblocked = useMemo(() => {
+    return selectedMembers.some((m) => !m.isBlocked);
+  }, [selectedMembers]);
 
   // Dynamic available domains combining member's current domain, Firestore metadata, and system defaults
   const availableDomains = useMemo(() => {
@@ -800,27 +849,84 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
         position: m.position,
       }));
 
-      // Call fast backend API
-      const token = await getClientAuthToken();
-      const res = await fetch('/api/members/import', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ members: payload }),
-      });
+      // Execute import directly into Firestore via client writeBatch (immediate, reliable, zero serverless timeout)
+      let importedCount = 0;
+      let directWriteSuccess = false;
 
-      const resData = await res.json();
-      if (!res.ok || !resData.success) {
-        throw new Error(resData?.error || 'Failed to import members via server API');
+      try {
+        const CHUNK_SIZE = 400;
+        const nowIso = new Date().toISOString();
+
+        for (let i = 0; i < toImport.length; i += CHUNK_SIZE) {
+          const chunk = toImport.slice(i, i + CHUNK_SIZE);
+          const batch = writeBatch(db);
+
+          for (const m of chunk) {
+            const cleanName = (m.name || '').trim();
+            const cleanReg = (m.registrationNumber || '').toUpperCase().trim();
+            const cleanEmail = (m.email || '').toLowerCase().trim();
+            const cleanPhone = (m.phone || '').trim();
+            const cleanTeam = (m.team || 'General').trim();
+            const cleanPos = (m.position || 'Member').trim();
+
+            const targetDocId = (cleanReg || cleanEmail.replace(/[/@.]/g, '_')).trim();
+            if (!targetDocId) continue;
+
+            const docRef = doc(db, 'members', targetDocId);
+            batch.set(
+              docRef,
+              {
+                name: cleanName || 'Member',
+                registrationNumber: cleanReg,
+                email: cleanEmail || (cleanReg ? `${cleanReg.toLowerCase()}@vitbhopal.ac.in` : ''),
+                phone: cleanPhone,
+                team: cleanTeam,
+                position: cleanPos,
+                updatedAt: nowIso,
+              },
+              { merge: true }
+            );
+            importedCount++;
+          }
+
+          await batch.commit();
+        }
+        directWriteSuccess = true;
+      } catch (directErr) {
+        console.warn('[Members Import] Direct Firestore writeBatch notice, attempting server API fallback:', directErr);
+      }
+
+      // If direct write failed (e.g. security rules permission nuance), fallback to backend API with safe JSON parsing
+      if (!directWriteSuccess) {
+        const token = await getClientAuthToken();
+        const res = await fetch('/api/members/import', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ members: payload }),
+        });
+
+        let resData: any = null;
+        try {
+          const text = await res.text();
+          resData = text ? JSON.parse(text) : null;
+        } catch {
+          resData = null;
+        }
+
+        if (!res.ok || !resData?.success) {
+          throw new Error(resData?.error || `Failed to import members (Server returned status ${res.status})`);
+        }
+        importedCount = resData.count || toImport.length;
       }
 
       await loadAllMembers();
       setImportModalOpen(false);
       setImportStep('upload');
       setPreviewMembers([]);
-      alert(`🎉 Successfully imported ${resData.count || toImport.length} members into the database!`);
+      alert(`🎉 Successfully imported ${importedCount || toImport.length} members into the database!`);
     } catch (err: any) {
       console.error('Error saving imported members:', err);
       setImportError(err?.message || 'Failed to save members to database.');
@@ -1021,13 +1127,10 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
   };
 
   // ─── Delete Member ──────────────────────────────────────────────────────────
-  const handleDeleteMember = async () => {
-    if (!deleteConfirmMember) return;
-    setDeletingMember(true);
-    try {
-      const targetDocId = (deleteConfirmMember.id || '').trim();
-      const cleanEmail = (deleteConfirmMember.email || '').toLowerCase().trim();
-      const cleanReg = (deleteConfirmMember.registrationNumber || '').toUpperCase().trim();
+  const executeDeleteForMember = async (member: RosterMember) => {
+      const targetDocId = (member.id || '').trim();
+      const cleanEmail = (member.email || '').toLowerCase().trim();
+      const cleanReg = (member.registrationNumber || '').toUpperCase().trim();
       
       // 1. Delete from Firestore 'members' collection
       if (targetDocId) {
@@ -1082,6 +1185,16 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
         snapRefEmail.forEach((d) => deleteDoc(d.ref).catch(() => {}));
       }
 
+  };
+
+  const handleDeleteMember = async () => {
+    if (!deleteConfirmMember) return;
+    setDeletingMember(true);
+    try {
+      await executeDeleteForMember(deleteConfirmMember);
+      const targetDocId = (deleteConfirmMember.id || '').trim();
+      const cleanEmail = (deleteConfirmMember.email || '').toLowerCase().trim();
+      const cleanReg = (deleteConfirmMember.registrationNumber || '').toUpperCase().trim();
       setMembers((prev) => prev.filter((m) => {
         const matchId = targetDocId && m.id === targetDocId;
         const matchEmail = cleanEmail && m.email.toLowerCase() === cleanEmail;
@@ -1097,9 +1210,28 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
     }
   };
 
-  const handleToggleBlockMember = async (member: RosterMember) => {
+  const executeBulkDeleteMembers = async () => {
+    if (!pendingBulkDelete || pendingBulkDelete.length === 0) return;
+    setBulkUpdating(true);
     try {
-      const newStatus = !member.isBlocked;
+      for (const member of pendingBulkDelete) {
+        await executeDeleteForMember(member);
+      }
+      setMembers((prev) => prev.filter((m) => !selectedMemberIds.has(getMemberKey(m))));
+      setSelectedMemberIds(new Set());
+      setPendingBulkDelete(null);
+      await loadAllMembers();
+    } catch (err: any) {
+      console.error('Error in bulk delete:', err);
+      alert('Failed to delete selected members: ' + (err?.message || 'Unknown error'));
+    } finally {
+      setBulkUpdating(false);
+    }
+  };
+
+  const handleToggleBlockMember = async (member: RosterMember, explicitStatus?: boolean) => {
+    try {
+      const newStatus = explicitStatus !== undefined ? explicitStatus : !member.isBlocked;
       const cleanEmail = (member.email || '').toLowerCase().trim();
       const cleanReg = (member.registrationNumber || '').toUpperCase().trim();
       const targetDocId = (member.id || cleanReg || cleanEmail).replace(/\//g, '_');
@@ -1180,7 +1312,27 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
     } catch (e: any) {
       console.error('Failed to update member access:', e);
       alert('Failed to update member access: ' + (e?.message || e));
-      await loadAllMembers();
+      await loadAllMembers(false);
+    }
+  };
+
+  const executeBulkBlockMembers = async (newStatus: boolean) => {
+    if (selectedMemberIds.size === 0) return;
+    setBulkUpdating(true);
+    try {
+      const targetMembers = members.filter(m => selectedMemberIds.has(getMemberKey(m)));
+      for (const member of targetMembers) {
+         if (member.position?.toLowerCase().includes('super')) continue;
+         if (member.isBlocked === newStatus) continue;
+         await handleToggleBlockMember(member, newStatus);
+      }
+      // Retain selection so the user can continue viewing and managing their selected batch
+    } catch (err: any) {
+      console.error('Error in bulk block:', err);
+      alert('Failed to update member access for some members.');
+    } finally {
+      setBulkUpdating(false);
+      await loadAllMembers(false);
     }
   };
 
@@ -1271,6 +1423,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
                 setSearchQuery('');
                 setSelectedTeam('ALL');
                 setSelectedPosition('ALL');
+                setBlockedFilter('ALL');
               }}
               className="font-bold text-slate-300"
             >
@@ -1408,6 +1561,16 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
                 <option value="MEMBER">Crew Members</option>
               </select>
 
+              <select
+                value={blockedFilter}
+                onChange={(e) => setBlockedFilter(e.target.value as 'ALL' | 'BLOCKED' | 'UNBLOCKED')}
+                className="flex-1 sm:flex-initial px-3 py-2 bg-[#1c1c1c] border border-[#333333] rounded-xl text-xs text-white focus:outline-none focus:border-purple-500 cursor-pointer min-w-[120px]"
+              >
+                <option value="ALL">All Status</option>
+                <option value="UNBLOCKED">Active</option>
+                <option value="BLOCKED">Blocked</option>
+              </select>
+
               {/* View Toggle */}
               <div className="flex items-center bg-[#1c1c1c] border border-[#333333] rounded-xl p-1 shrink-0">
                 <button
@@ -1431,6 +1594,67 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
               </div>
             </div>
           </div>
+
+          {/* Bulk Actions Toolbar */}
+          {selectedMemberIds.size > 0 && canManage && (
+            <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-purple-900/20 border border-purple-500/40 rounded-xl mb-4 shadow-[0_0_15px_rgba(168,85,247,0.15)] animate-in slide-in-from-top-2">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-purple-500/30 flex items-center justify-center text-purple-200">
+                  <span className="material-symbols-outlined text-sm">checklist</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-white">
+                    {selectedMemberIds.size} Member(s) Selected
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedMemberIds(new Set())}
+                    className="text-[11px] text-purple-300 hover:text-white underline cursor-pointer ml-1"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {canBlockAccess && hasSelectedUnblocked && !hasSelectedBlocked && (
+                  <button
+                    type="button"
+                    disabled={bulkUpdating}
+                    onClick={() => executeBulkBlockMembers(true)}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold font-mono bg-red-950/80 border border-red-500/60 text-red-300 hover:bg-red-900 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-sm">block</span>
+                    Block Selected
+                  </button>
+                )}
+                {canBlockAccess && hasSelectedBlocked && !hasSelectedUnblocked && (
+                  <button
+                    type="button"
+                    disabled={bulkUpdating}
+                    onClick={() => executeBulkBlockMembers(false)}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold font-mono bg-amber-950/80 border border-amber-500/60 text-amber-300 hover:bg-amber-900 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-sm">lock_open</span>
+                    Unblock Selected
+                  </button>
+                )}
+                {canManage && (
+                  <button
+                    type="button"
+                    disabled={bulkUpdating}
+                    onClick={() => {
+                      const targetMembers = members.filter(m => selectedMemberIds.has(getMemberKey(m)));
+                      if (targetMembers.length > 0) setPendingBulkDelete(targetMembers);
+                    }}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold font-mono bg-red-600/20 border border-red-500/60 text-red-300 hover:bg-red-600 hover:text-white transition-all cursor-pointer flex items-center gap-1.5 shadow-[0_0_15px_rgba(239,68,68,0.25)] disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-sm">delete_sweep</span>
+                    Delete Selected
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center justify-between text-xs text-slate-400 px-1">
             <span>
@@ -1465,6 +1689,7 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
                 setSearchQuery('');
                 setSelectedTeam('ALL');
                 setSelectedPosition('ALL');
+                setBlockedFilter('ALL');
               }}
               className="px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold transition-all mt-2 cursor-pointer"
             >
@@ -1486,11 +1711,21 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
                   <div>
                     {/* Top Avatar & Position Badge */}
                     <div className="flex items-start justify-between gap-3 mb-4">
-                      <img
-                        src={m.avatarUrl}
-                        alt={m.name}
-                        className="w-12 h-12 rounded-xl object-cover border border-purple-500 bg-purple-950 shrink-0"
-                      />
+                      <div className="flex items-center gap-3">
+                        {canManage && (
+                          <input
+                            type="checkbox"
+                            checked={selectedMemberIds.has(getMemberKey(m))}
+                            onChange={() => handleToggleSelectOne(getMemberKey(m))}
+                            className="w-4 h-4 rounded accent-purple-600 cursor-pointer"
+                          />
+                        )}
+                        <img
+                          src={m.avatarUrl}
+                          alt={m.name}
+                          className="w-12 h-12 rounded-xl object-cover border border-purple-500 bg-purple-950 shrink-0"
+                        />
+                      </div>
                       <span
                         className={`px-2.5 py-1 rounded text-[9px] font-bold border truncate max-w-[140px] ${
                           m.isCoPresident
@@ -1598,6 +1833,20 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
               <table className="w-full min-w-[720px] text-left text-xs text-slate-300">
                 <thead className="bg-[#181818] text-purple-300 font-bold border-b border-[#262626]">
                   <tr>
+                    {canManage && (
+                      <th className="py-3.5 px-4 w-10">
+                        <input
+                          type="checkbox"
+                          checked={
+                            visibleMembers.length > 0 &&
+                            visibleMembers.every((m) => selectedMemberIds.has(getMemberKey(m)))
+                          }
+                          onChange={handleToggleSelectAll}
+                          className="w-4 h-4 rounded accent-purple-600 cursor-pointer"
+                          title="Select All / Deselect All Visible Members"
+                        />
+                      </th>
+                    )}
                     <th className="py-3.5 px-4">Member Name</th>
                     <th className="py-3.5 px-4">Registration No.</th>
                     <th className="py-3.5 px-4">Domain / Team</th>
@@ -1609,7 +1858,17 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
                 </thead>
                 <tbody className="divide-y divide-[#222222]">
                   {visibleMembers.map((m) => (
-                    <tr key={m.id || m.email} className="hover:bg-[#1c1c1c] transition-colors">
+                    <tr key={m.id || m.email} className={`hover:bg-[#1c1c1c] transition-colors ${selectedMemberIds.has(getMemberKey(m)) ? 'bg-purple-900/20' : ''}`}>
+                      {canManage && (
+                        <td className="py-3 px-4">
+                          <input
+                            type="checkbox"
+                            checked={selectedMemberIds.has(getMemberKey(m))}
+                            onChange={() => handleToggleSelectOne(getMemberKey(m))}
+                            className="w-4 h-4 rounded accent-purple-600 cursor-pointer"
+                          />
+                        </td>
+                      )}
                       <td className="py-3 px-4 flex items-center gap-2.5 font-bold text-white">
                         <img
                           src={m.avatarUrl}
@@ -1688,11 +1947,19 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
               {visibleMembers.map((m) => (
                 <div
                   key={m.id || m.email}
-                  className="p-3.5 space-y-2.5 bg-[#141414] border border-[#262626] hover:border-purple-500/40 rounded-2xl transition-all shadow-sm"
+                  className={`p-3.5 space-y-2.5 bg-[#141414] border border-[#262626] hover:border-purple-500/40 rounded-2xl transition-all shadow-sm ${selectedMemberIds.has(getMemberKey(m)) ? 'bg-purple-900/20' : ''}`}
                 >
                   {/* Top Bar: Avatar + Name + Reg No + Role Badge */}
                   <div className="flex items-center justify-between gap-2.5">
                     <div className="flex items-center gap-2.5 min-w-0">
+                      {canManage && (
+                        <input
+                          type="checkbox"
+                          checked={selectedMemberIds.has(getMemberKey(m))}
+                          onChange={() => handleToggleSelectOne(getMemberKey(m))}
+                          className="w-4 h-4 rounded accent-purple-600 cursor-pointer shrink-0"
+                        />
+                      )}
                       <img
                         src={m.avatarUrl}
                         alt={m.name}
@@ -2446,6 +2713,38 @@ const MembersRoster: React.FC<MembersRosterProps> = ({ onRedirect, isAdmin: prop
         document.body
       )}
 
+      {pendingBulkDelete && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[10000] p-4 bg-black/85 backdrop-blur-sm overflow-y-auto flex items-center justify-center">
+          <div className="bg-[#121212] border border-rose-500/50 p-6 rounded-2xl max-w-sm w-full text-center space-y-4 shadow-[0_0_50px_rgba(244,63,94,0.3)]">
+            <div className="w-12 h-12 rounded-full bg-rose-950 border border-rose-600 flex items-center justify-center mx-auto text-rose-400">
+              <span className="material-symbols-outlined text-2xl">delete_sweep</span>
+            </div>
+            <div>
+              <h4 className="text-sm font-black text-white">Delete {pendingBulkDelete.length} Members?</h4>
+              <p className="text-xs text-slate-300 mt-1">
+                Are you sure you want to permanently delete the <span className="text-rose-400 font-bold">{pendingBulkDelete.length} selected members</span> from the database? This action cannot be undone.
+              </p>
+            </div>
+            <div className="flex gap-2 justify-center pt-2">
+              <button
+                onClick={() => setPendingBulkDelete(null)}
+                className="px-4 py-2 bg-[#262626] hover:bg-[#333333] text-slate-300 text-xs font-semibold rounded-lg cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={executeBulkDeleteMembers}
+                disabled={bulkUpdating}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {bulkUpdating && <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                Yes, Delete All
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
       {/* ─── MODAL 4: Delete Member Confirmation ──────────────────────────────── */}
       {deleteConfirmMember && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/90">

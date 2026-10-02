@@ -16,7 +16,7 @@ import {
   createDefaultPagePermissionsMap,
 } from '@/lib/permissions';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, doc, setDoc, deleteDoc, query, where, onSnapshot, orderBy, limit, writeBatch } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, deleteDoc, query, where, onSnapshot, orderBy, limit, writeBatch, addDoc, serverTimestamp } from 'firebase/firestore';
 import { fetchAllFaculty, deleteFacultyMember, createFacultyMember, updateFacultyMember } from '@/lib/faculty';
 import { FacultyMember } from '@/types/faculty';
 import { CONFIG } from '@/lib/config';
@@ -84,7 +84,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
   onRedirect,
   currentUserEmail,
 }) => {
-  const [activeTab, setActiveTab] = useState<'permissions' | 'roles' | 'metadata' | 'faculty' | 'audit' | 'faqs'>('permissions');
+  const [activeTab, setActiveTab] = useState<'permissions' | 'roles' | 'metadata' | 'faculty' | 'audit' | 'faqs' | 'broadcast'>('permissions');
   const [selectedMobileRole, setSelectedMobileRole] = useState<string>('Members');
   const [mobileViewMode, setMobileViewMode] = useState<'by_role' | 'by_portal'>('by_role');
   const [selectedMobilePortal, setSelectedMobilePortal] = useState<PageId>('members');
@@ -203,6 +203,62 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
   const [purgeEndDate, setPurgeEndDate] = useState<string>('');
   const [isPurgingLogs, setIsPurgingLogs] = useState<boolean>(false);
   const [purgeSuccessMessage, setPurgeSuccessMessage] = useState<string>('');
+
+  // ─── 7. Notification Hub Governance State ─────────────────────────────────
+  const [targetAudience, setTargetAudience] = useState<
+    'all' | 'faculty' | 'leads' | 'domain' | 'role' | 'position' | 'custom'
+  >('all');
+  const [selectedBroadcastDomain, setSelectedBroadcastDomain] = useState<string>('');
+  const [selectedBroadcastRole, setSelectedBroadcastRole] = useState<string>('');
+  const [selectedBroadcastPosition, setSelectedBroadcastPosition] = useState<string>('');
+  const [customBroadcastEmails, setCustomBroadcastEmails] = useState<string>('');
+  const [selectedDirectMembers, setSelectedDirectMembers] = useState<
+    Array<{ email: string; name: string; regNo?: string }>
+  >([]);
+  const [directEmailSearch, setDirectEmailSearch] = useState<string>('');
+  const [isSearchingMembers, setIsSearchingMembers] = useState<boolean>(false);
+  const [directSearchResults, setDirectSearchResults] = useState<
+    Array<{ email: string; name: string; regNo: string; team: string; position: string; role?: string }>
+  >([]);
+  const [showDirectDropdown, setShowDirectDropdown] = useState<boolean>(false);
+  const [broadcastTitle, setBroadcastTitle] = useState<string>('Notification Hub');
+  const [broadcastChannel, setBroadcastChannel] = useState<string>('Notification Hub');
+  const [broadcastPath, setBroadcastPath] = useState<string>('dashboard');
+  const [customPathInput, setCustomPathInput] = useState<string>('');
+  const [broadcastType, setBroadcastType] = useState<'announcement' | 'alert' | 'event' | 'update' | 'milestone'>('announcement');
+  const [broadcastMessage, setBroadcastMessage] = useState<string>('');
+  const [sendingBroadcast, setSendingBroadcast] = useState<boolean>(false);
+  const [broadcastSuccess, setBroadcastSuccess] = useState<string>('');
+  const [broadcastError, setBroadcastError] = useState<string>('');
+  const [sentBroadcasts, setSentBroadcasts] = useState<any[]>([]);
+  const [loadingBroadcasts, setLoadingBroadcasts] = useState<boolean>(true);
+  const [broadcastSearch, setBroadcastSearch] = useState<string>('');
+  const [revokingBroadcastId, setRevokingBroadcastId] = useState<string | null>(null);
+  const [membersRoster, setMembersRoster] = useState<
+    Array<{ email: string; name: string; team: string; position: string; role?: string; regNo?: string; registrationNumber?: string }>
+  >([]);
+
+  const getBroadcastTypeIcon = (type: string) => {
+    switch (type) {
+      case 'alert': return 'warning';
+      case 'announcement': return 'campaign';
+      case 'event': return 'calendar_month';
+      case 'update': return 'verified';
+      case 'milestone': return 'emoji_events';
+      default: return 'campaign';
+    }
+  };
+
+  const getBroadcastTypeStyle = (type: string) => {
+    switch (type) {
+      case 'alert': return 'bg-rose-950/60 border-rose-500/40 text-rose-300';
+      case 'announcement': return 'bg-purple-900/60 border-purple-500/40 text-purple-300';
+      case 'event': return 'bg-cyan-950/60 border-cyan-500/40 text-cyan-300';
+      case 'update': return 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300';
+      case 'milestone': return 'bg-amber-950/60 border-amber-500/40 text-amber-300';
+      default: return 'bg-purple-900/60 border-purple-500/40 text-purple-300';
+    }
+  };
 
   const formatToLocalInput = (d: Date) => {
     const pad = (n: number) => String(n).padStart(2, '0');
@@ -1555,6 +1611,340 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
     return matchesSearch && matchesCategory;
   });
 
+  // ─── 7. Notification Hub Handlers & Effects ──────────────────────────────
+  useEffect(() => {
+    // Load members roster once for reach estimation & direct autocomplete
+    const loadRoster = async () => {
+      try {
+        const snap = await getDocs(collection(db, 'members'));
+        const list: Array<{ email: string; name: string; team: string; position: string; role?: string; regNo?: string; registrationNumber?: string }> = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          const email = (data.email || '').toLowerCase().trim();
+          if (email) {
+            const reg = (data.registrationNumber || data['Registration Number'] || data.regNo || (!d.id.includes('@') ? d.id : '')).toUpperCase().trim();
+            list.push({
+              email,
+              name: data.name || email.split('@')[0],
+              team: data.team || data.domain || '',
+              position: data.position || 'Member',
+              role: data.role || '',
+              regNo: reg,
+              registrationNumber: reg,
+            });
+          }
+        });
+        setMembersRoster(list);
+      } catch (err) {
+        console.warn('Failed to load roster for audience estimator:', err);
+      }
+    };
+    loadRoster();
+  }, []);
+
+  // Debounced direct member search with skeleton loading trigger
+  useEffect(() => {
+    const q = directEmailSearch.trim().toLowerCase();
+    if (!q) {
+      setDirectSearchResults([]);
+      setIsSearchingMembers(false);
+      return;
+    }
+
+    setIsSearchingMembers(true);
+    setShowDirectDropdown(true);
+
+    const timer = setTimeout(() => {
+      const selectedEmails = new Set(selectedDirectMembers.map((m) => m.email.toLowerCase()));
+      const matches: Array<{ email: string; name: string; regNo: string; team: string; position: string; role?: string }> = [];
+
+      // Search in membersRoster by Name, Registration Number, or Email
+      for (const m of membersRoster) {
+        if (selectedEmails.has(m.email.toLowerCase())) continue;
+        const nameMatch = (m.name || '').toLowerCase().includes(q);
+        const regMatch = (m.regNo || m.registrationNumber || '').toLowerCase().includes(q);
+        const emailMatch = m.email.toLowerCase().includes(q);
+
+        if (nameMatch || regMatch || emailMatch) {
+          matches.push({
+            email: m.email,
+            name: m.name || m.email.split('@')[0],
+            regNo: m.regNo || m.registrationNumber || '',
+            team: m.team || '',
+            position: m.position || '',
+            role: m.role || '',
+          });
+          if (matches.length >= 8) break;
+        }
+      }
+
+      // Also search in administrators if matching
+      if (matches.length < 8) {
+        for (const a of admins) {
+          const email = (a.email || '').toLowerCase().trim();
+          if (!email || selectedEmails.has(email)) continue;
+          const nameMatch = (a.name || '').toLowerCase().includes(q);
+          const emailMatch = email.includes(q);
+          if (nameMatch || emailMatch) {
+            if (!matches.some((m) => m.email.toLowerCase() === email)) {
+              matches.push({
+                email,
+                name: a.name || email.split('@')[0],
+                regNo: '',
+                team: 'SuperAdmin / Staff',
+                position: a.role || 'Administrator',
+                role: a.role || 'Admin',
+              });
+            }
+          }
+        }
+      }
+
+      setDirectSearchResults(matches);
+      setIsSearchingMembers(false);
+    }, 240);
+
+    return () => clearTimeout(timer);
+  }, [directEmailSearch, membersRoster, admins, selectedDirectMembers]);
+
+  const handleSelectDirectMember = (member: { email: string; name: string; regNo?: string }) => {
+    if (!selectedDirectMembers.some((m) => m.email.toLowerCase() === member.email.toLowerCase())) {
+      const next = [...selectedDirectMembers, member];
+      setSelectedDirectMembers(next);
+      setCustomBroadcastEmails(next.map((m) => m.email).join(', '));
+    }
+    setDirectEmailSearch('');
+    setShowDirectDropdown(false);
+  };
+
+  const handleRemoveDirectMember = (emailToRemove: string) => {
+    const next = selectedDirectMembers.filter((m) => m.email.toLowerCase() !== emailToRemove.toLowerCase());
+    setSelectedDirectMembers(next);
+    setCustomBroadcastEmails(next.map((m) => m.email).join(', '));
+  };
+
+  const handleAddRawEmail = (raw: string) => {
+    const trimmed = raw.trim().toLowerCase();
+    if (!trimmed || !trimmed.includes('@')) return;
+    if (!selectedDirectMembers.some((m) => m.email.toLowerCase() === trimmed)) {
+      const next = [...selectedDirectMembers, { email: trimmed, name: trimmed.split('@')[0] }];
+      setSelectedDirectMembers(next);
+      setCustomBroadcastEmails(next.map((m) => m.email).join(', '));
+    }
+    setDirectEmailSearch('');
+    setShowDirectDropdown(false);
+  };
+
+  // Real-time subscription to sent notifications
+  useEffect(() => {
+    if (activeTab !== 'broadcast') return;
+    setLoadingBroadcasts(true);
+
+    const q = query(
+      collection(db, 'idea_notifications'),
+      orderBy('createdAt', 'desc'),
+      limit(30)
+    );
+
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setSentBroadcasts(list);
+        setLoadingBroadcasts(false);
+      },
+      (err) => {
+        console.warn('Direct order query fallback, fetching unordered:', err);
+        getDocs(collection(db, 'idea_notifications'))
+          .then((s) => {
+            const list = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+            list.sort((a: any, b: any) => {
+              const tA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+              const tB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+              return tB - tA;
+            });
+            setSentBroadcasts(list.slice(0, 30));
+            setLoadingBroadcasts(false);
+          })
+          .catch(() => setLoadingBroadcasts(false));
+      }
+    );
+
+    return () => unsub();
+  }, [activeTab]);
+
+  const getEstimatedAudienceCount = useCallback((): { count: number; label: string } => {
+    if (targetAudience === 'all') {
+      const c = membersRoster.length || 1;
+      return { count: c, label: `All Chapter Members (~${c})` };
+    }
+    if (targetAudience === 'faculty') {
+      return { count: facultyList.length, label: `${facultyList.length} Faculty Mentors` };
+    }
+    if (targetAudience === 'leads') {
+      const count = membersRoster.filter((m) => {
+        const p = (m.position || '').toLowerCase();
+        return p.includes('lead') || p.includes('head') || p.includes('president') || p.includes('coordinator');
+      }).length;
+      return { count: count || 1, label: `${count || 1} Chapter Leads & Co-Leads` };
+    }
+    if (targetAudience === 'domain') {
+      if (!selectedBroadcastDomain) return { count: 0, label: 'Select a domain below' };
+      const count = membersRoster.filter((m) =>
+        (m.team || '').toLowerCase().includes(selectedBroadcastDomain.toLowerCase())
+      ).length;
+      return { count, label: `${count} members in Domain: ${selectedBroadcastDomain}` };
+    }
+    if (targetAudience === 'role') {
+      if (!selectedBroadcastRole) return { count: 0, label: 'Select a role below' };
+      const count = membersRoster.filter(
+        (m) => (m.role || '').toLowerCase() === selectedBroadcastRole.toLowerCase()
+      ).length + admins.filter(a => (a.role || '').toLowerCase() === selectedBroadcastRole.toLowerCase()).length;
+      return { count, label: `${count} members with Role: ${selectedBroadcastRole}` };
+    }
+    if (targetAudience === 'position') {
+      if (!selectedBroadcastPosition) return { count: 0, label: 'Select a position below' };
+      const count = membersRoster.filter((m) =>
+        (m.position || '').toLowerCase().includes(selectedBroadcastPosition.toLowerCase())
+      ).length;
+      return { count, label: `${count} members with Position: ${selectedBroadcastPosition}` };
+    }
+    if (targetAudience === 'custom') {
+      const parsed = customBroadcastEmails
+        .split(/[,;\s]+/)
+        .map((e) => e.trim().toLowerCase())
+        .filter((e) => e.includes('@'));
+      return { count: parsed.length, label: `${parsed.length} direct recipients` };
+    }
+    return { count: 0, label: 'Custom Target' };
+  }, [
+    targetAudience,
+    membersRoster,
+    admins,
+    facultyList,
+    selectedBroadcastDomain,
+    selectedBroadcastRole,
+    selectedBroadcastPosition,
+    customBroadcastEmails,
+  ]);
+
+  const handleSendBroadcast = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!broadcastMessage.trim()) {
+      setBroadcastError('Please enter a notification message body.');
+      return;
+    }
+
+    setSendingBroadcast(true);
+    setBroadcastError('');
+    setBroadcastSuccess('');
+
+    try {
+      let recipientKeysToSend: string[] = [];
+      let audienceLabel = 'All Members';
+
+      if (targetAudience === 'all') {
+        recipientKeysToSend = ['ROLE:member'];
+        audienceLabel = 'All Chapter Members';
+      } else if (targetAudience === 'faculty') {
+        recipientKeysToSend = ['ROLE:faculty'];
+        audienceLabel = 'Faculty Advisory';
+      } else if (targetAudience === 'leads') {
+        recipientKeysToSend = ['ROLE:leads'];
+        audienceLabel = 'Leads & Co-Leads';
+      } else if (targetAudience === 'domain') {
+        if (!selectedBroadcastDomain) throw new Error('Please select a domain.');
+        recipientKeysToSend = [`DOMAIN:${selectedBroadcastDomain.toLowerCase().trim()}`];
+        audienceLabel = `Domain: ${selectedBroadcastDomain}`;
+      } else if (targetAudience === 'role') {
+        if (!selectedBroadcastRole) throw new Error('Please select a role.');
+        recipientKeysToSend = [`ROLE:${selectedBroadcastRole.toLowerCase().trim()}`];
+        audienceLabel = `Role: ${selectedBroadcastRole}`;
+      } else if (targetAudience === 'position') {
+        if (!selectedBroadcastPosition) throw new Error('Please select a position.');
+        recipientKeysToSend = [`POSITION:${selectedBroadcastPosition.toLowerCase().trim()}`];
+        audienceLabel = `Position: ${selectedBroadcastPosition}`;
+      } else if (targetAudience === 'custom') {
+        const parsed = customBroadcastEmails
+          .split(/[,;\s]+/)
+          .map((e) => e.trim().toLowerCase())
+          .filter((e) => e.includes('@'));
+        if (!parsed.length) throw new Error('Please provide at least one valid email address.');
+        recipientKeysToSend = parsed;
+        audienceLabel = `Direct (${parsed.length} recipient${parsed.length > 1 ? 's' : ''})`;
+      }
+
+      const adminName = resolveSuperAdminName(currentUserEmail || 'Super Administrator');
+      const title = broadcastTitle.trim() || 'Notification Hub';
+      const channel = broadcastChannel.trim() || 'Notification Hub';
+      const rawPath = broadcastPath === 'custom' ? customPathInput.trim() : broadcastPath.trim();
+      const path = rawPath || 'dashboard';
+
+      if (recipientKeysToSend.length === 1) {
+        await addDoc(collection(db, 'idea_notifications'), {
+          type: broadcastType,
+          recipientEmail: recipientKeysToSend[0],
+          targetAudienceLabel: audienceLabel,
+          actorName: adminName,
+          actorEmail: currentUserEmail || '',
+          ideaId: 'broadcast_' + Date.now(),
+          ideaTitle: title,
+          message: broadcastMessage.trim(),
+          coordinatorNote: '',
+          channelName: channel,
+          channelPath: path,
+          read: false,
+          createdAt: serverTimestamp(),
+          isBroadcast: true,
+        });
+      } else {
+        const batch = writeBatch(db);
+        for (const email of recipientKeysToSend) {
+          const newRef = doc(collection(db, 'idea_notifications'));
+          batch.set(newRef, {
+            type: broadcastType,
+            recipientEmail: email,
+            targetAudienceLabel: audienceLabel,
+            actorName: adminName,
+            actorEmail: currentUserEmail || '',
+            ideaId: 'broadcast_' + Date.now(),
+            ideaTitle: title,
+            message: broadcastMessage.trim(),
+            coordinatorNote: '',
+            channelName: channel,
+            channelPath: path,
+            read: false,
+            createdAt: serverTimestamp(),
+            isBroadcast: true,
+          });
+        }
+        await batch.commit();
+      }
+
+      setBroadcastSuccess(`Notification successfully dispatched to ${audienceLabel}!`);
+      setBroadcastMessage('');
+      setTimeout(() => setBroadcastSuccess(''), 5000);
+    } catch (err: any) {
+      console.error('Notification dispatch error:', err);
+      setBroadcastError(err.message || 'Failed to dispatch notification.');
+    } finally {
+      setSendingBroadcast(false);
+    }
+  };
+
+  const handleRevokeBroadcast = async (notifId: string) => {
+    setRevokingBroadcastId(notifId);
+    try {
+      await deleteDoc(doc(db, 'idea_notifications', notifId));
+      setSentBroadcasts((prev) => prev.filter((b) => b.id !== notifId));
+    } catch (err: any) {
+      console.error('Failed to revoke broadcast:', err);
+      alert('Failed to revoke broadcast: ' + err.message);
+    } finally {
+      setRevokingBroadcastId(null);
+    }
+  };
+
   // Filter lists
   const filteredAdmins = admins.filter((a) => {
     const q = adminSearch.toLowerCase();
@@ -1828,7 +2218,7 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
         </header>
 
         {/* Tab Navigation Strip - Zero Scroll Responsive Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-1.5 p-1.5 bg-[#090312] border border-[#231238] rounded-2xl w-full max-w-full shadow-inner">
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-7 gap-1.5 p-1.5 bg-[#090312] border border-[#231238] rounded-2xl w-full max-w-full shadow-inner">
           <button
             onClick={() => setActiveTab('permissions')}
             className={`px-2 sm:px-3 py-2.5 rounded-xl text-[11px] sm:text-xs font-black tracking-wider uppercase flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${activeTab === 'permissions'
@@ -1896,6 +2286,17 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
           >
             <span className="material-symbols-outlined text-sm sm:text-base">quiz</span>
             <span className="truncate">Ticket FAQs ({faqs.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('broadcast')}
+            className={`px-2 sm:px-3 py-2.5 rounded-xl text-[11px] sm:text-xs font-black tracking-wider uppercase flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${activeTab === 'broadcast'
+              ? 'bg-purple-600 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)] border-purple-400/60'
+              : 'bg-[#130924] text-slate-400 hover:text-white hover:bg-white/5 border-purple-950/40'
+              }`}
+          >
+            <span className="material-symbols-outlined text-sm sm:text-base">campaign</span>
+            <span className="truncate">Notification Hub</span>
           </button>
         </div>
 
@@ -3966,6 +4367,747 @@ const SuperAdminControlCenter: React.FC<SuperAdminControlCenterProps> = ({
                 })}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ════════════════════════════════════════════════════════════════════ */}
+        {/* TAB 7: NOTIFICATION HUB                                             */}
+        {/* ════════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'broadcast' && (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            {/* Action & Overview Bar */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 sm:p-5 bg-[#0e071a] border border-[#261238] rounded-2xl shadow-lg">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 rounded-lg bg-purple-500/20 text-purple-300">
+                    <span className="material-symbols-outlined text-lg">campaign</span>
+                  </span>
+                  <h2 className="text-base font-black text-white uppercase tracking-tight">
+                    Notification Hub &amp; Dispatch Console
+                  </h2>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Deploy real-time notifications to all chapter members or targeted sub-groups across club domains, administrative tiers, and leadership roles.
+                </p>
+              </div>
+
+              {/* Status alerts */}
+              <div className="flex items-center gap-3">
+                {broadcastSuccess && (
+                  <span className="px-3 py-1.5 rounded-xl bg-emerald-950 border border-emerald-500/60 text-emerald-300 text-xs font-bold animate-in fade-in flex items-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+                    <span className="material-symbols-outlined text-sm">check_circle</span>
+                    {broadcastSuccess}
+                  </span>
+                )}
+                {broadcastError && (
+                  <span className="px-3 py-1.5 rounded-xl bg-rose-950 border border-rose-500/60 text-rose-300 text-xs font-bold animate-in fade-in flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm">error</span>
+                    {broadcastError}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Main Form & Live Preview Grid */}
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+              
+              {/* Left Column: Composer Form (7 cols) */}
+              <div className="xl:col-span-7 space-y-5">
+                <form onSubmit={handleSendBroadcast} className="p-5 sm:p-6 bg-[#0e071a] border border-[#2b1642] rounded-3xl space-y-6 shadow-xl">
+                  
+                  {/* Step 1: Target Audience Selection */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-black uppercase tracking-wider text-purple-300 flex items-center gap-1.5">
+                        <span className="w-5 h-5 rounded-full bg-purple-900/60 border border-purple-500/40 text-purple-200 text-[10px] flex items-center justify-center font-mono">1</span>
+                        Target Recipient Audience
+                      </label>
+                      <span className="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-purple-950 text-purple-300 border border-purple-800 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                        {getEstimatedAudienceCount().label}
+                      </span>
+                    </div>
+
+                    {/* Audience Target Chips Grid (Admin & Casters removed per request) */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {[
+                        { id: 'all', label: 'All Members', icon: 'public', desc: 'Global chapter broadcast' },
+                        { id: 'faculty', label: 'Faculty Advisory', icon: 'school', desc: 'Academic mentors' },
+                        { id: 'leads', label: 'Leads & Co-Leads', icon: 'military_tech', desc: 'Domain heads & coordinators' },
+                        { id: 'domain', label: 'Specific Domain', icon: 'diversity_3', desc: 'By team / committee' },
+                        { id: 'role', label: 'Specific Role', icon: 'badge', desc: 'Custom or system role' },
+                        { id: 'position', label: 'Specific Position', icon: 'work', desc: 'Member position level' },
+                        { id: 'custom', label: 'Direct Emails', icon: 'mail', desc: 'Selected member list' },
+                      ].map((aud) => {
+                        const isSelected = targetAudience === aud.id;
+                        return (
+                          <button
+                            key={aud.id}
+                            type="button"
+                            onClick={() => setTargetAudience(aud.id as any)}
+                            className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                              isSelected
+                                ? 'bg-purple-900/50 border-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.3)] text-white'
+                                : 'bg-[#140b24] border-[#2e154a] text-slate-400 hover:text-slate-200 hover:border-purple-600/40'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between w-full mb-1">
+                              <span className={`material-symbols-outlined text-lg ${isSelected ? 'text-purple-300' : 'text-slate-400'}`}>
+                                {aud.icon}
+                              </span>
+                              {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />}
+                            </div>
+                            <div>
+                              <div className="text-xs font-bold truncate text-white">{aud.label}</div>
+                              <div className="text-[10px] text-slate-400 truncate font-mono">{aud.desc}</div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Sub-selector conditional inputs */}
+                    {targetAudience === 'domain' && (
+                      <div className="p-3.5 rounded-2xl bg-[#140b24] border border-purple-500/30 space-y-2 animate-in fade-in">
+                        <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block">
+                          Select Domain / Committee <span className="text-rose-400">*</span>
+                        </label>
+                        <select
+                          value={selectedBroadcastDomain}
+                          onChange={(e) => setSelectedBroadcastDomain(e.target.value)}
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-[#0b0414] border border-[#3b1c5c] text-xs text-white focus:outline-none focus:border-purple-500 cursor-pointer"
+                        >
+                          <option value="">-- Choose a Domain --</option>
+                          {clubMetadata.domains.map((dom) => (
+                            <option key={dom} value={dom}>
+                              Domain: {dom}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {targetAudience === 'role' && (
+                      <div className="p-3.5 rounded-2xl bg-[#140b24] border border-purple-500/30 space-y-2 animate-in fade-in">
+                        <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block">
+                          Select Role <span className="text-rose-400">*</span>
+                        </label>
+                        <select
+                          value={selectedBroadcastRole}
+                          onChange={(e) => setSelectedBroadcastRole(e.target.value)}
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-[#0b0414] border border-[#3b1c5c] text-xs text-white focus:outline-none focus:border-purple-500 cursor-pointer"
+                        >
+                          <option value="">-- Choose a Role --</option>
+                          <option value="Admin">Admin</option>
+                          <option value="Payment Admin">Payment Admin</option>
+                          <option value="Technical">Technical</option>
+                          <option value="Caster">Caster</option>
+                          <option value="Member">Member</option>
+                          {Object.keys(permissions.roles).filter(r => !['Admin', 'Payment Admin', 'Technical'].includes(r)).map((r) => (
+                            <option key={r} value={r}>
+                              Custom Role: {r}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {targetAudience === 'position' && (
+                      <div className="p-3.5 rounded-2xl bg-[#140b24] border border-purple-500/30 space-y-2 animate-in fade-in">
+                        <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block">
+                          Select Position Hierarchy <span className="text-rose-400">*</span>
+                        </label>
+                        <select
+                          value={selectedBroadcastPosition}
+                          onChange={(e) => setSelectedBroadcastPosition(e.target.value)}
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-[#0b0414] border border-[#3b1c5c] text-xs text-white focus:outline-none focus:border-purple-500 cursor-pointer"
+                        >
+                          <option value="">-- Choose a Position --</option>
+                          {clubMetadata.positions.map((pos) => (
+                            <option key={pos} value={pos}>
+                              Position: {pos}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Direct Member Selection with Skeleton Autocomplete */}
+                    {targetAudience === 'custom' && (
+                      <div className="p-4 rounded-2xl bg-[#140b24] border border-purple-500/30 space-y-3 animate-in fade-in">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block">
+                            Direct Member Search &amp; Email Dispatch <span className="text-rose-400">*</span>
+                          </label>
+                          <span className="text-[10px] text-purple-300 font-mono">
+                            {selectedDirectMembers.length} selected
+                          </span>
+                        </div>
+
+                        {/* Selected Recipient Chips */}
+                        {selectedDirectMembers.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 p-2 rounded-xl bg-[#0a0413] border border-purple-900/40 max-h-32 overflow-y-auto">
+                            {selectedDirectMembers.map((m) => (
+                              <span
+                                key={m.email}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-900/50 border border-purple-500/40 text-purple-200 text-xs font-medium shadow-sm animate-in fade-in"
+                              >
+                                <span className="truncate max-w-[140px] font-bold">{m.name}</span>
+                                {m.regNo && (
+                                  <span className="text-[9px] font-mono text-cyan-300 bg-cyan-950/60 px-1 py-0.2 rounded border border-cyan-800/40">
+                                    {m.regNo}
+                                  </span>
+                                )}
+                                <span className="text-[10px] text-slate-400 truncate max-w-[100px]">
+                                  ({m.email})
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveDirectMember(m.email)}
+                                  className="w-4 h-4 rounded-full hover:bg-rose-500/20 text-slate-400 hover:text-rose-300 flex items-center justify-center transition-colors ml-0.5 cursor-pointer"
+                                >
+                                  <span className="material-symbols-outlined text-[13px]">close</span>
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Search Input with Autocomplete Popover */}
+                        <div className="relative">
+                          <div className="relative flex items-center">
+                            <span className="material-symbols-outlined text-slate-400 absolute left-3 text-base pointer-events-none">
+                              person_search
+                            </span>
+                            <input
+                              type="text"
+                              value={directEmailSearch}
+                              onChange={(e) => setDirectEmailSearch(e.target.value)}
+                              onFocus={() => {
+                                if (directEmailSearch.trim()) setShowDirectDropdown(true);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  if (directSearchResults.length > 0) {
+                                    handleSelectDirectMember(directSearchResults[0]);
+                                  } else if (directEmailSearch.includes('@')) {
+                                    handleAddRawEmail(directEmailSearch);
+                                  }
+                                }
+                              }}
+                              placeholder="Type member name, registration number (e.g. 22BCE...), or email..."
+                              className="w-full pl-9 pr-24 py-2.5 rounded-xl bg-[#0b0414] border border-[#3b1c5c] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                            />
+                            {directEmailSearch.trim() && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (directEmailSearch.includes('@')) {
+                                    handleAddRawEmail(directEmailSearch);
+                                  } else if (directSearchResults.length > 0) {
+                                    handleSelectDirectMember(directSearchResults[0]);
+                                  }
+                                }}
+                                className="absolute right-2 px-2 py-1 rounded-lg bg-purple-700 hover:bg-purple-600 text-white text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                              >
+                                Add
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Interactive Dropdown Popover with Skeleton Loading */}
+                          {showDirectDropdown && directEmailSearch.trim().length > 0 && (
+                            <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-[#120820] border border-purple-500/40 rounded-2xl shadow-[0_15px_40px_rgba(0,0,0,0.8),0_0_25px_rgba(168,85,247,0.2)] overflow-hidden">
+                              {/* Skeleton Loading State */}
+                              {isSearchingMembers ? (
+                                <div className="p-3 space-y-2">
+                                  <div className="flex items-center gap-1.5 text-[10px] text-purple-400 font-mono mb-1 animate-pulse">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+                                    <span>Searching members roster...</span>
+                                  </div>
+                                  {[1, 2, 3].map((i) => (
+                                    <div
+                                      key={i}
+                                      className="flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.03] border border-white/5 animate-pulse"
+                                    >
+                                      <div className="w-8 h-8 rounded-xl bg-purple-900/40 border border-purple-500/20 shrink-0" />
+                                      <div className="flex-1 space-y-1.5">
+                                        <div className="flex items-center gap-2">
+                                          <div className="h-3 w-28 bg-purple-300/20 rounded" />
+                                          <div className="h-2.5 w-16 bg-cyan-300/20 rounded" />
+                                        </div>
+                                        <div className="h-2.5 w-44 bg-slate-500/20 rounded" />
+                                      </div>
+                                      <div className="h-5 w-16 bg-purple-500/10 rounded-full" />
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : directSearchResults.length > 0 ? (
+                                <div className="max-h-60 overflow-y-auto divide-y divide-purple-950/40">
+                                  <div className="px-3 py-1.5 bg-[#170a29] text-[10px] text-purple-300/80 font-mono font-bold flex justify-between items-center border-b border-purple-900/40">
+                                    <span>MATCHING MEMBERS ({directSearchResults.length})</span>
+                                    <span className="text-[9px] text-slate-400">Click to add</span>
+                                  </div>
+                                  {directSearchResults.map((m) => (
+                                    <div
+                                      key={m.email}
+                                      onClick={() => handleSelectDirectMember(m)}
+                                      className="p-2.5 hover:bg-purple-900/30 cursor-pointer flex items-center justify-between gap-3 transition-colors group"
+                                    >
+                                      <div className="flex items-center gap-2.5 min-w-0">
+                                        <div className="w-8 h-8 rounded-xl bg-purple-950/80 border border-purple-500/30 text-purple-300 flex items-center justify-center text-xs font-bold shrink-0 group-hover:scale-105 transition-transform">
+                                          {m.name.charAt(0).toUpperCase()}
+                                        </div>
+                                        <div className="min-w-0">
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="text-xs font-bold text-white group-hover:text-purple-200 truncate">
+                                              {m.name}
+                                            </span>
+                                            {m.regNo && (
+                                              <span className="text-[9px] font-mono font-bold text-cyan-300 bg-cyan-950/80 border border-cyan-800/60 px-1.5 py-0.2 rounded-md">
+                                                {m.regNo}
+                                              </span>
+                                            )}
+                                          </div>
+                                          <div className="text-[11px] text-slate-400 truncate font-mono">
+                                            {m.email}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-1.5 shrink-0">
+                                        {m.team && (
+                                          <span className="text-[10px] font-bold text-purple-300 bg-purple-950/60 border border-purple-800/60 px-2 py-0.5 rounded-lg">
+                                            {m.team}
+                                          </span>
+                                        )}
+                                        <span className="material-symbols-outlined text-sm text-slate-500 group-hover:text-purple-300 transition-colors">
+                                          add_circle
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="p-4 text-center space-y-2">
+                                  <p className="text-xs text-slate-400">
+                                    No registered members found matching <span className="text-white font-mono">"{directEmailSearch}"</span>
+                                  </p>
+                                  {directEmailSearch.includes('@') && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAddRawEmail(directEmailSearch)}
+                                      className="px-3 py-1.5 rounded-xl bg-purple-800 hover:bg-purple-700 text-white text-xs font-bold transition-colors cursor-pointer inline-flex items-center gap-1"
+                                    >
+                                      <span className="material-symbols-outlined text-sm">mail</span>
+                                      Add as direct recipient: {directEmailSearch}
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Raw emails comma input fallback */}
+                        <div className="pt-1">
+                          <label className="text-[10px] font-mono text-slate-400 block mb-1">
+                            Or paste comma-separated email list:
+                          </label>
+                          <input
+                            type="text"
+                            value={customBroadcastEmails}
+                            onChange={(e) => {
+                              setCustomBroadcastEmails(e.target.value);
+                              const parsed = e.target.value
+                                .split(/[,;\s]+/)
+                                .map((em) => em.trim().toLowerCase())
+                                .filter((em) => em.includes('@'));
+                              setSelectedDirectMembers(
+                                parsed.map((em) => {
+                                  const existing = selectedDirectMembers.find((m) => m.email.toLowerCase() === em);
+                                  return existing || { email: em, name: em.split('@')[0] };
+                                })
+                              );
+                            }}
+                            placeholder="member1@vitstudent.ac.in, member2@vitstudent.ac.in"
+                            className="w-full px-3 py-1.5 rounded-xl bg-[#090310] border border-[#2b1442] text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-purple-500 font-mono"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Step 2: Notification Metadata & Route */}
+                  <div className="space-y-3 pt-2 border-t border-purple-500/20">
+                    <label className="text-xs font-black uppercase tracking-wider text-purple-300 flex items-center gap-1.5">
+                      <span className="w-5 h-5 rounded-full bg-purple-900/60 border border-purple-500/40 text-purple-200 text-[10px] flex items-center justify-center font-mono">2</span>
+                      Channel, Priority &amp; Routing
+                    </label>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {/* Priority / Type */}
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-slate-400">Type / Urgency</label>
+                        <select
+                          value={broadcastType}
+                          onChange={(e) => setBroadcastType(e.target.value as any)}
+                          className="w-full px-3 py-2 rounded-xl bg-[#150a24] border border-[#2e154a] text-xs text-white focus:outline-none focus:border-purple-500 cursor-pointer font-bold"
+                        >
+                          <option value="announcement">📢 Announcement</option>
+                          <option value="alert">⚠️ Urgent Alert</option>
+                          <option value="event">📅 Event Notice</option>
+                          <option value="update">✅ Official Update</option>
+                          <option value="milestone">🏆 Milestone Award</option>
+                        </select>
+                      </div>
+
+                      {/* Channel Name */}
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-slate-400">Channel Name</label>
+                        <input
+                          type="text"
+                          value={broadcastChannel}
+                          onChange={(e) => setBroadcastChannel(e.target.value)}
+                          placeholder="e.g. Notification Hub"
+                          className="w-full px-3 py-2 rounded-xl bg-[#150a24] border border-[#2e154a] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 font-bold"
+                        />
+                      </div>
+
+                      {/* Target Navigation Route */}
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-slate-400">Target Action Link</label>
+                        <select
+                          value={broadcastPath}
+                          onChange={(e) => {
+                            setBroadcastPath(e.target.value);
+                            if (e.target.value !== 'custom') setCustomPathInput('');
+                          }}
+                          className="w-full px-3 py-2 rounded-xl bg-[#150a24] border border-[#2e154a] text-xs text-white focus:outline-none focus:border-purple-500 cursor-pointer font-medium"
+                        >
+                          <option value="dashboard">Dashboard (Home)</option>
+                          <option value="ideahub">Idea Curator Hub</option>
+                          <option value="planned_events">Planned Events</option>
+                          <option value="members">Members Roster</option>
+                          <option value="idcard">ID Card Dossier</option>
+                          <option value="payments">Payments &amp; Dues Portal</option>
+                          <option value="documents">Official Documents</option>
+                          <option value="referrals">Referrals Portal</option>
+                          <option value="custom">Custom Web Link / Path...</option>
+                        </select>
+                        {broadcastPath === 'custom' && (
+                          <input
+                            type="text"
+                            value={customPathInput}
+                            onChange={(e) => setCustomPathInput(e.target.value)}
+                            placeholder="e.g. https://... or custom-page"
+                            className="w-full mt-1.5 px-3 py-1.5 rounded-xl bg-[#0e0618] border border-purple-500/40 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-400 font-mono"
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Step 3: Message Content */}
+                  <div className="space-y-3 pt-2 border-t border-purple-500/20">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-black uppercase tracking-wider text-purple-300 flex items-center gap-1.5">
+                        <span className="w-5 h-5 rounded-full bg-purple-900/60 border border-purple-500/40 text-purple-200 text-[10px] flex items-center justify-center font-mono">3</span>
+                        Notification Message Body <span className="text-rose-400">*</span>
+                      </label>
+                      <span className="text-[10px] text-slate-500 font-mono">
+                        {broadcastMessage.length} characters
+                      </span>
+                    </div>
+
+                    {/* Quick Template Chips */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] text-slate-400 font-mono mr-1">Quick templates:</span>
+                      {[
+                        { label: 'General Meeting', text: 'All members are requested to attend the upcoming club sync. Check the dashboard for agenda details.' },
+                        { label: 'Event Review', text: 'New event proposal has been pushed to Idea Curator Hub. Please review and cast your vote!' },
+                        { label: 'Domain Task', text: 'Action required for all domain members: please update your active status on the team board.' },
+                        { label: 'Urgent Notice', text: 'Urgent notice from Chapter Leadership. Please check the announcements channel immediately.' },
+                      ].map((t) => (
+                        <button
+                          key={t.label}
+                          type="button"
+                          onClick={() => {
+                            setBroadcastMessage(t.text);
+                            if (t.label === 'Event Review') setBroadcastPath('ideahub');
+                          }}
+                          className="px-2 py-0.5 rounded-lg text-[10px] font-mono bg-purple-950/60 border border-purple-800/60 text-purple-300 hover:bg-purple-900/60 cursor-pointer transition-colors"
+                        >
+                          + {t.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <textarea
+                      required
+                      rows={3}
+                      value={broadcastMessage}
+                      onChange={(e) => setBroadcastMessage(e.target.value)}
+                      placeholder="Write your announcement or alert message here..."
+                      className="w-full px-3.5 py-2.5 rounded-2xl bg-[#140a24] border border-[#2e154a] focus:border-purple-500 focus:outline-none text-xs sm:text-sm text-white placeholder-slate-500 transition-colors leading-relaxed"
+                    />
+                  </div>
+
+                  {/* Dispatch Button */}
+                  <div className="pt-2 flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={sendingBroadcast || !broadcastMessage.trim()}
+                      className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-purple-700 to-fuchsia-700 hover:from-purple-600 hover:to-fuchsia-600 disabled:opacity-50 text-white text-xs font-black tracking-wider uppercase rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(168,85,247,0.4)] active:scale-95"
+                    >
+                      {sendingBroadcast ? (
+                        <>
+                          <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          <span>Dispatching Notification...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="material-symbols-outlined text-base">send</span>
+                          <span>Deploy Notification Dispatch</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Right Column: Live Mockup & Preview (5 cols) */}
+              <div className="xl:col-span-5 space-y-5">
+                <div className="p-5 sm:p-6 bg-[#0e071a] border border-[#2b1642] rounded-3xl space-y-5 shadow-xl">
+                  <div className="flex items-center justify-between border-b border-purple-500/20 pb-3">
+                    <div className="flex items-center gap-2 text-xs font-black text-white uppercase tracking-wider">
+                      <span className="material-symbols-outlined text-purple-400 text-base">visibility</span>
+                      <span>Real-time Interface Preview</span>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-purple-950 text-purple-300 border border-purple-800">
+                      LIVE SIMULATION
+                    </span>
+                  </div>
+
+                  {/* 1. Pop-up Toast Preview (All 5 urgency/types synced) */}
+                  <div className="space-y-2">
+                    <div className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5 uppercase tracking-wider">
+                      <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                      1. Floating Toast (Shows 3 Seconds on Member Screen)
+                    </div>
+                    <div className="max-w-full bg-gradient-to-br from-[#1c0d2e] to-[#0a0514] border border-purple-500/60 p-4 rounded-2xl shadow-[0_10px_40px_rgba(168,85,247,0.3)]">
+                      <div className="flex gap-3 items-start">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center border shrink-0 ${getBroadcastTypeStyle(broadcastType)}`}>
+                          <span className="material-symbols-outlined text-lg">
+                            {getBroadcastTypeIcon(broadcastType)}
+                          </span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-xs font-black text-purple-400 uppercase tracking-wider mb-1 flex justify-between items-center">
+                            <span>{broadcastChannel || 'Notification Hub'}</span>
+                            <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+                          </h4>
+                          <p className="text-xs sm:text-sm text-slate-200 line-clamp-2 leading-tight">
+                            {broadcastMessage || 'Your message preview will show here in real time as you compose...'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 2. Notification Hub Drawer Row Preview (All 5 urgency/types synced) */}
+                  <div className="space-y-2 pt-2 border-t border-purple-500/20">
+                    <div className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5 uppercase tracking-wider">
+                      <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+                      2. Notification Hub Channel Item
+                    </div>
+                    <div className="bg-[#121212] rounded-2xl border border-white/5 overflow-hidden">
+                      <div className="px-4 py-2.5 bg-[#181818] border-b border-white/5 flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <span className="material-symbols-outlined text-[16px] text-purple-400">
+                            {getBroadcastTypeIcon(broadcastType)}
+                          </span>
+                          <span className="text-xs font-bold text-slate-200">{broadcastChannel || 'Notification Hub'}</span>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white text-[9px] font-black">
+                          1 NEW
+                        </span>
+                      </div>
+                      <div className="p-3.5 bg-purple-900/10 flex items-start gap-3">
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center border shrink-0 shadow-sm ${getBroadcastTypeStyle(broadcastType)}`}>
+                          <span className="material-symbols-outlined text-[16px]">
+                            {getBroadcastTypeIcon(broadcastType)}
+                          </span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-slate-200 font-medium leading-snug">
+                            {broadcastMessage || 'Notification message appears here inside the member drawer.'}
+                          </p>
+                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                            <span className="text-[10px] text-slate-500 font-mono">Just now</span>
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-purple-300 font-mono">
+                              → {broadcastPath === 'custom' ? customPathInput || 'dashboard' : broadcastPath}
+                            </span>
+                            <span className="text-[10px] text-purple-400 font-mono">
+                              [To: {getEstimatedAudienceCount().label}]
+                            </span>
+                          </div>
+                        </div>
+                        <div className="w-1.5 h-1.5 rounded-full bg-purple-500 mt-1 shrink-0" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Target Audience Summary Card */}
+                  <div className="p-4 rounded-2xl bg-[#140b24] border border-[#2b1642] space-y-2">
+                    <div className="text-[11px] font-bold text-purple-300 uppercase tracking-wider">
+                      Notification Hub Deployment Summary
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="p-2 rounded-xl bg-black/40 border border-white/5">
+                        <div className="text-[10px] text-slate-500 font-mono">Audience Target</div>
+                        <div className="font-bold text-white truncate">{getEstimatedAudienceCount().label}</div>
+                      </div>
+                      <div className="p-2 rounded-xl bg-black/40 border border-white/5">
+                        <div className="text-[10px] text-slate-500 font-mono">Destination Portal</div>
+                        <div className="font-bold text-white capitalize truncate">
+                          {broadcastPath === 'custom' ? customPathInput || 'dashboard' : broadcastPath}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Past Broadcasts Log & Real-time Revocation */}
+            <div className="p-5 sm:p-6 bg-[#0e071a] border border-[#261238] rounded-3xl space-y-4 shadow-xl">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-500/20 pb-4">
+                <div className="flex items-center gap-2.5">
+                  <span className="p-1.5 rounded-lg bg-purple-500/20 text-purple-300">
+                    <span className="material-symbols-outlined text-lg">history</span>
+                  </span>
+                  <div>
+                    <h3 className="text-sm sm:text-base font-black text-white uppercase tracking-tight">
+                      Notification Hub Dispatch Log ({sentBroadcasts.length})
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      Live notifications currently active in the database. Revoking deletes the notification instantly from all member hubs.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Search past notifications..."
+                    value={broadcastSearch}
+                    onChange={(e) => setBroadcastSearch(e.target.value)}
+                    className="px-3 py-1.5 rounded-xl bg-[#150a24] border border-[#2e154a] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 w-full sm:w-56"
+                  />
+                </div>
+              </div>
+
+              {loadingBroadcasts ? (
+                <div className="py-12 flex flex-col items-center justify-center gap-2">
+                  <span className="w-6 h-6 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
+                  <span className="text-xs text-slate-500 font-mono">Loading notifications stream...</span>
+                </div>
+              ) : sentBroadcasts.length === 0 ? (
+                <div className="py-12 text-center text-slate-500 text-xs font-mono">
+                  No active notifications found in the database. Use the composer above to deploy your first notification.
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {sentBroadcasts
+                    .filter((b) => {
+                      if (!broadcastSearch.trim()) return true;
+                      const q = broadcastSearch.toLowerCase();
+                      return (
+                        (b.message || '').toLowerCase().includes(q) ||
+                        (b.channelName || '').toLowerCase().includes(q) ||
+                        (b.targetAudienceLabel || '').toLowerCase().includes(q) ||
+                        (b.recipientEmail || '').toLowerCase().includes(q)
+                      );
+                    })
+                    .slice(0, 15)
+                    .map((b) => {
+                      const isRevoking = revokingBroadcastId === b.id;
+                      const timeStr = (() => {
+                        if (!b.createdAt) return 'Just now';
+                        try {
+                          const ms = b.createdAt.toMillis ? b.createdAt.toMillis() : (b.createdAt.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt).getTime());
+                          const diff = Math.max(0, Math.round((Date.now() - ms) / 1000));
+                          if (diff < 60) return 'Just now';
+                          if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+                          if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+                          return `${Math.floor(diff / 86400)}d ago`;
+                        } catch {
+                          return 'Recently';
+                        }
+                      })();
+
+                      return (
+                        <div
+                          key={b.id}
+                          className="p-3.5 sm:p-4 rounded-2xl bg-[#12081f] border border-[#26143d] hover:border-purple-500/40 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                        >
+                          <div className="flex items-start gap-3 min-w-0 flex-1">
+                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center border shrink-0 mt-0.5 ${getBroadcastTypeStyle(b.type)}`}>
+                              <span className="material-symbols-outlined text-[16px]">
+                                {getBroadcastTypeIcon(b.type)}
+                              </span>
+                            </div>
+                            <div className="space-y-1 min-w-0 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-purple-950 text-purple-300 border border-purple-800">
+                                  {b.channelName || 'Notification Hub'}
+                                </span>
+                                <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-800">
+                                  {b.targetAudienceLabel || b.recipientEmail || 'All'}
+                                </span>
+                                {b.channelPath && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-purple-300 font-mono">
+                                    → {b.channelPath}
+                                  </span>
+                                )}
+                                <span className="text-[10px] text-slate-500 font-mono">
+                                  {timeStr}
+                                </span>
+                              </div>
+                              <p className="text-xs sm:text-sm text-slate-200 line-clamp-2 leading-relaxed">
+                                {b.message}
+                              </p>
+                              {b.actorName && (
+                                <div className="text-[10px] text-slate-500 italic">
+                                  Dispatched by {b.actorName} {b.actorEmail ? `(${b.actorEmail})` : ''}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              disabled={isRevoking}
+                              onClick={() => handleRevokeBroadcast(b.id)}
+                              className="px-3 py-1.5 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-600/40 text-rose-300 hover:text-white text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                              title="Delete notification immediately from Firebase"
+                            >
+                              {isRevoking ? (
+                                <span className="w-3.5 h-3.5 border-2 border-rose-400/30 border-t-rose-400 rounded-full animate-spin" />
+                              ) : (
+                                <span className="material-symbols-outlined text-sm">delete</span>
+                              )}
+                              <span>Revoke</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
           </div>
         )}
 

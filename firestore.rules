@@ -181,6 +181,13 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // 9. Idea Notifications (Notification Hub)
+    // =========================================================================
+    match /idea_notifications/{notifId} {
+      allow read, create, update, delete: if isActiveMember();
+    }
+
+    // =========================================================================
     // 9. Explicit Catch-All Default Deny
     // =========================================================================
     // Unmatched documents across all databases/collections are denied by default.
