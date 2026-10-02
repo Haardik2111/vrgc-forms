@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -12,9 +12,11 @@ import {
   onSnapshot,
   query,
   orderBy,
+  where,
   serverTimestamp,
   arrayUnion,
   increment,
+  writeBatch,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
@@ -35,6 +37,29 @@ export type IdeaStatus =
   | 'approved'
   | 'rejected'
   | 'archived';
+
+export type IdeaNotifType =
+  | 'faculty_review'     // idea sent to faculty review
+  | 'promoted'           // idea promoted to community board
+  | 'approved'           // idea approved
+  | 'rejected'           // idea rejected
+  | 'vote_milestone'     // vote threshold reached
+  | 'new_comment'        // new comment on your idea
+  | 'restored';          // idea restored to pending
+
+export interface IdeaNotification {
+  id: string;
+  type: IdeaNotifType;
+  recipientEmail: string;   // who receives this notification
+  actorName: string;        // who triggered the action
+  actorEmail: string;
+  ideaId: string;
+  ideaTitle: string;
+  message: string;
+  read: boolean;
+  createdAt: any;
+  coordinatorNote?: string;
+}
 
 export interface IdeaComment {
   id: string;
@@ -210,6 +235,38 @@ const IdeaHub: React.FC<IdeaHubProps> = ({ onRedirect }) => {
     return () => unsub();
   }, []);
 
+  // ── Add a notification helper ─────────────────────────────────────────────
+  const addNotification = useCallback(async (
+    recipientEmail: string,
+    type: string,
+    ideaId: string,
+    ideaTitle: string,
+    message: string,
+    note?: string
+  ) => {
+    if (!userEmail || !recipientEmail) return;
+    // Don't notify yourself, unless it's a broadcast
+    if (recipientEmail.toLowerCase() === userEmail.toLowerCase() && !recipientEmail.startsWith('ROLE:')) return;
+    try {
+      await addDoc(collection(db, 'idea_notifications'), {
+        type,
+        recipientEmail,
+        actorName: memberData?.name || user?.displayName || userEmail.split('@')[0] || 'Coordinator',
+        actorEmail: userEmail,
+        ideaId,
+        ideaTitle,
+        message,
+        read: false,
+        coordinatorNote: note || '',
+        channelName: 'Idea Curator Hub',
+        channelPath: 'ideahub',
+        createdAt: serverTimestamp(),
+      });
+    } catch (err) {
+      console.error('Failed to create notification:', err);
+    }
+  }, [userEmail, memberData, user]);
+
   // Sync selectedIdea with live state if open
   useEffect(() => {
     if (selectedIdea) {
@@ -304,6 +361,33 @@ const IdeaHub: React.FC<IdeaHubProps> = ({ onRedirect }) => {
         upvoterEmails: arrayUnion(userEmail),
         updatedAt: serverTimestamp(),
       });
+      // Check if vote milestone reached (author notification)
+      const idea = voteConfirmIdea;
+      const newVoteCount = (idea.upvotes || 0) + 1;
+      const threshold = idea.upvoteThreshold || DEFAULT_UPVOTE_THRESHOLD;
+      if (newVoteCount >= threshold && idea.upvotes < threshold && idea.authorEmail) {
+        await addNotification(
+          idea.authorEmail,
+          'vote_milestone',
+          idea.id,
+          idea.title,
+          `🗳️ Your idea "${idea.title}" has reached ${threshold} community votes! Coordinators can now escalate it to Faculty Review.`
+        );
+        await addNotification(
+          'ROLE:member',
+          'vote_milestone_broadcast',
+          idea.id,
+          idea.title,
+          `🎯 Milestone Reached: "${idea.title}" hit ${threshold} votes and is ready for Coordinator Review.`
+        );
+        await addNotification(
+          'ROLE:admin',
+          'vote_milestone_admin',
+          idea.id,
+          idea.title,
+          `Action Required: "${idea.title}" hit ${threshold} votes and is ready for Faculty Escalation.`
+        );
+      }
       setVoteConfirmIdea(null);
     } catch (err) {
       console.error('Vote recording error:', err);
@@ -347,6 +431,17 @@ const IdeaHub: React.FC<IdeaHubProps> = ({ onRedirect }) => {
         isFeatured: false,
       });
 
+      // ── Notify Admins about new idea push ──
+      const ideaTitleForNotif = formTitle.trim();
+      await addNotification(
+        'ROLE:admin',
+        'new_idea',
+        'new_idea',
+        ideaTitleForNotif,
+        `New Idea Pushed: "${ideaTitleForNotif}" by ${memberData?.name || userEmail?.split('@')[0]}. Needs review!`,
+        ''
+      );
+
       setSubmitModalOpen(false);
       setFormTitle('');
       setFormDescription('');
@@ -380,6 +475,17 @@ const IdeaHub: React.FC<IdeaHubProps> = ({ onRedirect }) => {
         updatedAt: serverTimestamp(),
       });
       setCommentText('');
+      // Notify idea author about new comment (if commenter is not the author)
+      if (selectedIdea.authorEmail && selectedIdea.authorEmail.toLowerCase() !== userEmail.toLowerCase()) {
+        const commenterName = memberData?.name || user?.displayName || userEmail.split('@')[0] || 'Someone';
+        await addNotification(
+          selectedIdea.authorEmail,
+          'new_comment',
+          selectedIdea.id,
+          selectedIdea.title,
+          `${commenterName} commented on your idea "${selectedIdea.title}": "${commentText.trim().slice(0, 60)}${commentText.trim().length > 60 ? '…' : ''}"`
+        );
+      }
     } catch (err) {
       console.error('Comment error:', err);
     } finally {
@@ -396,46 +502,104 @@ const IdeaHub: React.FC<IdeaHubProps> = ({ onRedirect }) => {
     setSubmittingMod(true);
     try {
       const docRef = doc(db, 'club_ideas', moderateIdea.id);
-      
+      const note = moderateNote.trim();
+      const authorEmail = moderateIdea.authorEmail;
+      const ideaId = moderateIdea.id;
+      const ideaTitle = moderateIdea.title;
+
       if (moderateAction === 'promote') {
         const threshold = Math.max(1, Number(voteThresholdInput) || DEFAULT_UPVOTE_THRESHOLD);
         await updateDoc(docRef, {
           status: 'community',
           upvoteThreshold: threshold,
-          coordinatorNote: moderateNote.trim() || moderateIdea.coordinatorNote || '',
+          coordinatorNote: note || moderateIdea.coordinatorNote || '',
           promotedAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
+        // Notify idea author
+        await addNotification(
+          authorEmail,
+          'promoted',
+          ideaId,
+          ideaTitle,
+          `Your idea "${ideaTitle}" has been approved and published to the Community Board for member voting!`,
+          note
+        );
+        // Notify all members that an idea was promoted to community
+        await addNotification(
+          'ROLE:member',
+          'promoted_broadcast',
+          ideaId,
+          ideaTitle,
+          `New Idea on Community Board: "${ideaTitle}". Check it out and cast your vote!`,
+          ''
+        );
       } else if (moderateAction === 'faculty') {
         await updateDoc(docRef, {
           status: 'faculty',
-          coordinatorNote: moderateNote.trim() || moderateIdea.coordinatorNote || '',
+          coordinatorNote: note || moderateIdea.coordinatorNote || '',
           updatedAt: serverTimestamp(),
         });
+        // Notify idea author that their idea is in faculty review
+        await addNotification(
+          authorEmail,
+          'faculty_review',
+          ideaId,
+          ideaTitle,
+          `Your idea "${ideaTitle}" has been escalated to Faculty Review. The faculty coordinator will be in touch regarding next steps.`,
+          note
+        );
       } else if (moderateAction === 'approve') {
         await updateDoc(docRef, {
           status: 'approved',
-          facultyNote: moderateNote.trim() || moderateIdea.facultyNote || '',
+          facultyNote: note || moderateIdea.facultyNote || '',
           updatedAt: serverTimestamp(),
         });
+        // Notify idea author of approval
+        await addNotification(
+          authorEmail,
+          'approved',
+          ideaId,
+          ideaTitle,
+          `🎉 Great news! Your idea "${ideaTitle}" has been officially approved by the faculty. Time to make it happen!`,
+          note
+        );
       } else if (moderateAction === 'reject') {
         await updateDoc(docRef, {
           status: 'rejected',
-          coordinatorNote: moderateNote.trim() || moderateIdea.coordinatorNote || '',
+          coordinatorNote: note || moderateIdea.coordinatorNote || '',
           updatedAt: serverTimestamp(),
         });
+        // Notify idea author of rejection with feedback
+        await addNotification(
+          authorEmail,
+          'rejected',
+          ideaId,
+          ideaTitle,
+          `Your idea "${ideaTitle}" was not accepted at this time.${note ? ` Feedback: "${note}"` : ' Check the idea for coordinator feedback.'}`,
+          note
+        );
       } else if (moderateAction === 'archive') {
         await updateDoc(docRef, {
           status: 'archived',
-          coordinatorNote: moderateNote.trim() || moderateIdea.coordinatorNote || '',
+          coordinatorNote: note || moderateIdea.coordinatorNote || '',
           updatedAt: serverTimestamp(),
         });
       } else if (moderateAction === 'restore') {
         await updateDoc(docRef, {
           status: 'pending',
-          coordinatorNote: moderateNote.trim() || moderateIdea.coordinatorNote || '',
+          coordinatorNote: note || moderateIdea.coordinatorNote || '',
           updatedAt: serverTimestamp(),
         });
+        // Notify author that their idea was restored
+        await addNotification(
+          authorEmail,
+          'restored',
+          ideaId,
+          ideaTitle,
+          `Your idea "${ideaTitle}" has been restored to active review by a coordinator.`,
+          note
+        );
       } else if (moderateAction === 'delete') {
         await deleteDoc(docRef);
         if (selectedIdea?.id === moderateIdea.id) {
@@ -511,15 +675,17 @@ const IdeaHub: React.FC<IdeaHubProps> = ({ onRedirect }) => {
               Propose club events, cast your 1 permanent vote on community ideas, and track each proposal's progress across coordinator triage, community voting, and faculty review.
             </p>
           </div>
-          {isAuthorizedUser && (
-            <button
-              onClick={() => setSubmitModalOpen(true)}
-              className="flex items-center gap-2.5 px-5 py-2.5 bg-gradient-to-r from-purple-700 to-fuchsia-700 hover:from-purple-600 hover:to-fuchsia-600 text-white rounded-xl font-bold text-sm transition-all shadow-[0_0_25px_rgba(147,51,234,0.4)] hover:shadow-[0_0_35px_rgba(147,51,234,0.6)] active:scale-95 cursor-pointer shrink-0"
-            >
-              <span className="material-symbols-outlined text-lg">add_circle</span>
-              Submit an Event Idea
-            </button>
-          )}
+          <div className="flex items-center gap-2.5 shrink-0">
+            {isAuthorizedUser && (
+              <button
+                onClick={() => setSubmitModalOpen(true)}
+                className="flex items-center gap-2.5 px-5 py-2.5 bg-gradient-to-r from-purple-700 to-fuchsia-700 hover:from-purple-600 hover:to-fuchsia-600 text-white rounded-xl font-bold text-sm transition-all shadow-[0_0_25px_rgba(147,51,234,0.4)] hover:shadow-[0_0_35px_rgba(147,51,234,0.6)] active:scale-95 cursor-pointer shrink-0"
+              >
+                <span className="material-symbols-outlined text-lg">add_circle</span>
+                Submit an Event Idea
+              </button>
+            )}
+          </div>
         </header>
 
         {/* ─── Stats ───────────────────────────────────────────────────────── */}
