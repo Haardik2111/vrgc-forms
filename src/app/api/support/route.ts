@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import { adminDb } from "@/lib/firebase-admin";
+import { adminDb, hasAdminCredentials } from "@/lib/firebase-admin";
 import { SERVER_CONFIG } from '@/lib/server/config';
 import { authenticateRequest } from "@/lib/server/auth";
 
@@ -8,14 +8,27 @@ const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 
 async function generateUniqueTicketId(): Promise<string> {
   // Generate cryptographically secure ticket ID: VRGC-SUP-XXXXXX (6 digits)
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const candidateId = `VRGC-SUP-${crypto.randomInt(100000, 1000000)}`;
-    const docSnap = await adminDb.collection("support_tickets").doc(candidateId).get();
-    if (!docSnap.exists) {
-      return candidateId;
-    }
+  const candidateId = `VRGC-SUP-${crypto.randomInt(100000, 1000000)}`;
+
+  // If Admin credentials are not loaded in this environment, return candidate ID immediately
+  if (!hasAdminCredentials()) {
+    return candidateId;
   }
-  // High-entropy fallback if 5 consecutive collisions occur
+
+  try {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const currentCandidate = attempt === 0 ? candidateId : `VRGC-SUP-${crypto.randomInt(100000, 1000000)}`;
+      const docSnap = await adminDb.collection("support_tickets").doc(currentCandidate).get();
+      if (!docSnap.exists) {
+        return currentCandidate;
+      }
+    }
+  } catch (err) {
+    console.warn("[Support API] Collision check warning, using candidate ID:", err);
+    return candidateId;
+  }
+
+  // High-entropy fallback if consecutive collisions occur
   const entropy = crypto.randomBytes(3).toString("hex").toUpperCase();
   return `VRGC-SUP-${Date.now().toString().slice(-4)}${entropy}`;
 }
@@ -32,14 +45,90 @@ async function isAuthorizedToManageTickets(email: string | null): Promise<boolea
   }
 
   // 2. Firestore: admins and super_admins collections (managed by Super Admin Console)
-  try {
-    const adminDoc = await adminDb.collection("admins").doc(normalized).get();
-    if (adminDoc.exists) return true;
+  if (hasAdminCredentials()) {
+    try {
+      const adminDoc = await adminDb.collection("admins").doc(normalized).get();
+      if (adminDoc.exists) return true;
 
-    const superDoc = await adminDb.collection("super_admins").doc(normalized).get();
-    if (superDoc.exists) return true;
-  } catch (err) {
-    console.warn("[Support API] Admin authorization check notice:", err);
+      const superDoc = await adminDb.collection("super_admins").doc(normalized).get();
+      if (superDoc.exists) return true;
+    } catch (err) {
+      console.warn("[Support API] Admin authorization check notice:", err);
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Saves ticket document to Firestore using Admin SDK if credentials exist,
+ * or falls back to Firebase Firestore REST API with FIREBASE_API_KEY.
+ */
+async function saveSupportTicketToFirestore(ticketData: {
+  ticketId: string;
+  fullName: string;
+  contactInfo: string;
+  regNo: string;
+  category: string;
+  message: string;
+  status: string;
+  solvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}): Promise<boolean> {
+  const { ticketId } = ticketData;
+
+  // 1. Try Firebase Admin SDK if admin credentials are present
+  if (hasAdminCredentials()) {
+    try {
+      await adminDb.collection("support_tickets").doc(ticketId).set(ticketData);
+      console.log(`[Support Desk] Saved ticket ${ticketId} via Admin SDK.`);
+      return true;
+    } catch (adminErr) {
+      console.warn("[Support Desk] Admin SDK save failed, falling back to REST API:", adminErr);
+    }
+  }
+
+  // 2. Fallback: Save via Firebase Firestore REST API using FIREBASE_API_KEY
+  const apiKey = process.env.FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+  const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+
+  if (apiKey && projectId) {
+    try {
+      const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/support_tickets/${ticketId}?key=${apiKey}`;
+      const fields: Record<string, any> = {
+        ticketId: { stringValue: ticketData.ticketId },
+        fullName: { stringValue: ticketData.fullName },
+        contactInfo: { stringValue: ticketData.contactInfo },
+        regNo: { stringValue: ticketData.regNo },
+        category: { stringValue: ticketData.category },
+        message: { stringValue: ticketData.message },
+        status: { stringValue: ticketData.status },
+        createdAt: { stringValue: ticketData.createdAt },
+        updatedAt: { stringValue: ticketData.updatedAt },
+      };
+      if (ticketData.solvedAt) {
+        fields.solvedAt = { stringValue: ticketData.solvedAt };
+      } else {
+        fields.solvedAt = { nullValue: null };
+      }
+
+      const res = await fetch(url, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fields }),
+      });
+
+      if (res.ok) {
+        console.log(`[Support Desk] Saved ticket ${ticketId} via Firestore REST API.`);
+        return true;
+      } else {
+        const errText = await res.text();
+        console.warn(`[Support Desk] REST API returned ${res.status}:`, errText);
+      }
+    } catch (restErr) {
+      console.error("[Support Desk] Firestore REST API save error:", restErr);
+    }
   }
 
   return false;
@@ -136,9 +225,9 @@ export async function POST(req: Request) {
     ticketId = await generateUniqueTicketId();
     const nowIso = new Date().toISOString();
 
-    // 1. Always record ticket in Firebase Firestore
+    // 1. Record ticket in Firebase Firestore (Admin SDK with REST API fallback)
     try {
-      await adminDb.collection("support_tickets").doc(ticketId).set({
+      await saveSupportTicketToFirestore({
         ticketId,
         fullName: cleanName,
         contactInfo: cleanContact,
@@ -156,30 +245,32 @@ export async function POST(req: Request) {
     }
 
     // 2. Proactively sweep and purge any solved tickets older than 12 hours from Firebase
-    try {
-      const nowMs = Date.now();
-      const snap = await adminDb
-        .collection("support_tickets")
-        .where("status", "==", "solved")
-        .get();
-      const expiredRefs: any[] = [];
-      snap.forEach((d) => {
-        const data = d.data();
-        if (data.solvedAt) {
-          const solvedMs = new Date(data.solvedAt).getTime();
-          if (!isNaN(solvedMs) && (nowMs - solvedMs) >= TWELVE_HOURS_MS) {
-            expiredRefs.push(d.ref);
+    if (hasAdminCredentials()) {
+      try {
+        const nowMs = Date.now();
+        const snap = await adminDb
+          .collection("support_tickets")
+          .where("status", "==", "solved")
+          .get();
+        const expiredRefs: any[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          if (data.solvedAt) {
+            const solvedMs = new Date(data.solvedAt).getTime();
+            if (!isNaN(solvedMs) && (nowMs - solvedMs) >= TWELVE_HOURS_MS) {
+              expiredRefs.push(d.ref);
+            }
           }
+        });
+        if (expiredRefs.length > 0) {
+          const batch = adminDb.batch();
+          expiredRefs.forEach((ref) => batch.delete(ref));
+          await batch.commit();
+          console.log(`[Support Desk API] Purged ${expiredRefs.length} expired ticket(s) from Firebase.`);
         }
-      });
-      if (expiredRefs.length > 0) {
-        const batch = adminDb.batch();
-        expiredRefs.forEach((ref) => batch.delete(ref));
-        await batch.commit();
-        console.log(`[Support Desk API] Purged ${expiredRefs.length} expired ticket(s) from Firebase.`);
+      } catch (purgeErr) {
+        console.warn("[Support Desk API] Auto-sweep notice:", purgeErr);
       }
-    } catch (purgeErr) {
-      console.warn("[Support Desk API] Auto-sweep notice:", purgeErr);
     }
 
     // 3. Format Message Body for Email / Formspree notification
@@ -277,14 +368,24 @@ export async function DELETE(req: Request) {
     }
 
     // Delete direct doc
-    await adminDb.collection("support_tickets").doc(ticketId).delete().catch(() => {});
+    if (hasAdminCredentials()) {
+      await adminDb.collection("support_tickets").doc(ticketId).delete().catch(() => {});
 
-    // Also query and delete matching ticketId
-    const snap = await adminDb.collection("support_tickets").where("ticketId", "==", ticketId).get();
-    if (!snap.empty) {
-      const batch = adminDb.batch();
-      snap.forEach((d) => batch.delete(d.ref));
-      await batch.commit();
+      // Also query and delete matching ticketId
+      const snap = await adminDb.collection("support_tickets").where("ticketId", "==", ticketId).get();
+      if (!snap.empty) {
+        const batch = adminDb.batch();
+        snap.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+      }
+    } else {
+      // Fallback deletion via Firebase REST API
+      const apiKey = process.env.FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+      const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+      if (apiKey && projectId) {
+        const deleteUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/support_tickets/${ticketId}?key=${apiKey}`;
+        await fetch(deleteUrl, { method: "DELETE" }).catch(() => {});
+      }
     }
 
     return NextResponse.json({

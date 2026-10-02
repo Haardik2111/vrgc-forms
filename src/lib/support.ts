@@ -178,6 +178,40 @@ export async function cleanupExpiredSupportTickets(): Promise<number> {
 }
 
 /**
+ * Direct client-side ticket submission fallback into Firebase Firestore.
+ */
+export async function createSupportTicketDirectly(ticket: {
+  ticketId: string;
+  fullName: string;
+  contactInfo: string;
+  regNo?: string;
+  category: string;
+  message: string;
+}): Promise<SupportTicket> {
+  const cleanId = ticket.ticketId.trim().toUpperCase();
+  const nowIso = new Date().toISOString();
+  const docData: SupportTicket = {
+    id: cleanId,
+    ticketId: cleanId,
+    fullName: ticket.fullName.trim(),
+    contactInfo: ticket.contactInfo.trim(),
+    regNo: ticket.regNo?.trim() || '',
+    category: ticket.category || 'general',
+    message: ticket.message.trim(),
+    status: 'unsolved',
+    createdAt: nowIso,
+    updatedAt: nowIso,
+    solvedAt: null,
+    resolvedBy: null,
+    resolutionNote: null,
+  };
+
+  await setDoc(doc(db, SUPPORT_COLLECTION, cleanId), docData);
+  saveTicketToUserHistory(cleanId);
+  return docData;
+}
+
+/**
  * Fetch a single ticket by its generated ID (e.g. "VRGC-SUP-123456").
  * If the ticket was solved > 12 hours ago, it is permanently deleted from Firestore and returns null.
  */
@@ -186,7 +220,7 @@ export async function fetchTicketById(ticketId: string): Promise<SupportTicket |
   if (!cleanId) return null;
 
   try {
-    // 1. Direct doc lookup
+    // 1. Direct doc lookup (matching doc ID)
     const docRef = doc(db, SUPPORT_COLLECTION, cleanId);
     const snap = await getDoc(docRef);
     if (snap.exists()) {
@@ -217,37 +251,42 @@ export async function fetchTicketById(ticketId: string): Promise<SupportTicket |
       return ticket;
     }
 
-    // 2. Query lookup by ticketId field
-    const q = query(collection(db, SUPPORT_COLLECTION), where('ticketId', '==', cleanId), limit(1));
-    const querySnap = await getDocs(q);
-    if (!querySnap.empty) {
-      const docItem = querySnap.docs[0];
-      const data = docItem.data();
-      const ticket: SupportTicket = {
-        id: docItem.id,
-        ticketId: data.ticketId || docItem.id,
-        fullName: data.fullName || 'Anonymous User',
-        contactInfo: data.contactInfo || 'Not provided',
-        regNo: data.regNo || '',
-        category: data.category || 'general',
-        message: data.message || '',
-        status: data.status === 'solved' ? 'solved' : 'unsolved',
-        createdAt: data.createdAt || new Date().toISOString(),
-        updatedAt: data.updatedAt,
-        solvedAt: data.solvedAt || null,
-        resolvedBy: data.resolvedBy || null,
-        resolutionNote: data.resolutionNote || null,
-      };
+    // 2. Query lookup by ticketId field (for fallback or admin access)
+    try {
+      const q = query(collection(db, SUPPORT_COLLECTION), where('ticketId', '==', cleanId), limit(1));
+      const querySnap = await getDocs(q);
+      if (!querySnap.empty) {
+        const docItem = querySnap.docs[0];
+        const data = docItem.data();
+        const ticket: SupportTicket = {
+          id: docItem.id,
+          ticketId: data.ticketId || docItem.id,
+          fullName: data.fullName || 'Anonymous User',
+          contactInfo: data.contactInfo || 'Not provided',
+          regNo: data.regNo || '',
+          category: data.category || 'general',
+          message: data.message || '',
+          status: data.status === 'solved' ? 'solved' : 'unsolved',
+          createdAt: data.createdAt || new Date().toISOString(),
+          updatedAt: data.updatedAt,
+          solvedAt: data.solvedAt || null,
+          resolvedBy: data.resolvedBy || null,
+          resolutionNote: data.resolutionNote || null,
+        };
 
-      // If expired, permanently delete from Firebase right now
-      if (isTicketExpired(ticket)) {
-        await deleteDoc(docItem.ref).catch(console.warn);
-        removeTicketFromUserHistory(cleanId);
-        return null;
+        // If expired, permanently delete from Firebase right now
+        if (isTicketExpired(ticket)) {
+          await deleteDoc(docItem.ref).catch(console.warn);
+          removeTicketFromUserHistory(cleanId);
+          return null;
+        }
+
+        return ticket;
       }
-
-      return ticket;
+    } catch {
+      // Query fallback may be restricted by security rules for non-admin callers; safe to ignore
     }
+
     return null;
   } catch (err) {
     console.error('Error fetching ticket by ID:', err);

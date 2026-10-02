@@ -6,6 +6,13 @@ if (typeof window !== 'undefined') {
   throw new Error('Firebase Admin SDK must only be used in server-side environments.');
 }
 
+export function hasAdminCredentials(): boolean {
+  return Boolean(
+    (process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) ||
+    process.env.GOOGLE_APPLICATION_CREDENTIALS
+  );
+}
+
 function initAdminApp(): App {
   if (getApps().length > 0) {
     return getApp();
