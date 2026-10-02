@@ -46,6 +46,7 @@ import {
   cleanupExpiredSupportTickets,
   isTicketExpired,
   getRemainingSolvedTime,
+  createSupportTicketDirectly,
 } from '@/lib/support';
 import {
   SupportFaq,
@@ -250,17 +251,40 @@ function ContactPageContent() {
         }),
       });
 
-      const data = await res.json();
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {
+        // Non-JSON response
+      }
+
       if (!res.ok) {
         throw new Error(data.error || 'Failed to dispatch ticket');
       }
 
-      setTicketId(generatedId);
+      const assignedId = data.ticketId || generatedId;
+      setTicketId(assignedId);
       // Save to localStorage history
-      saveTicketToUserHistory(generatedId);
+      saveTicketToUserHistory(assignedId);
     } catch (err: any) {
-      console.error('Contact submission error:', err);
-      setErrorMsg(err.message || 'Failed to submit ticket. Please try again or email directly.');
+      console.warn('API submission notice, attempting direct client fallback:', err);
+      try {
+        // Fallback: save ticket directly into Firebase Firestore from client SDK
+        await createSupportTicketDirectly({
+          ticketId: generatedId,
+          fullName: fullName.trim(),
+          contactInfo: contactInfo.trim(),
+          regNo: regNo.trim().toUpperCase(),
+          category,
+          message: message.trim(),
+        });
+
+        setTicketId(generatedId);
+        saveTicketToUserHistory(generatedId);
+      } catch (fallbackErr: any) {
+        console.error('Contact submission error:', fallbackErr);
+        setErrorMsg(err.message || fallbackErr.message || 'Failed to submit ticket. Please try again or email directly.');
+      }
     } finally {
       setIsSubmitting(false);
     }

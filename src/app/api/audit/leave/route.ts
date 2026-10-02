@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { adminDb } from '@/lib/firebase-admin';
+import { adminDb, hasAdminCredentials } from '@/lib/firebase-admin';
 import { authenticateRequest } from '@/lib/server/auth';
 
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
@@ -23,6 +23,11 @@ async function handleLeaveSession(req: Request) {
       return NextResponse.json({ ok: false, error: 'Invalid sessionId format' }, { status: 400 });
     }
 
+    // If server admin credentials are not configured, acknowledge request cleanly
+    if (!hasAdminCredentials()) {
+      return NextResponse.json({ ok: true, sessionId, status: 'offline' });
+    }
+
     // 1. Authenticate caller via Firebase ID token
     const { user, errorResponse } = await authenticateRequest(req);
     if (errorResponse) {
@@ -31,9 +36,9 @@ async function handleLeaveSession(req: Request) {
 
     // 2. Look up the existing session to enforce ownership
     const sessionRef = adminDb.collection('audit_sessions').doc(sessionId);
-    const sessionSnap = await sessionRef.get();
+    const sessionSnap = await sessionRef.get().catch(() => null);
 
-    if (!sessionSnap.exists) {
+    if (!sessionSnap || !sessionSnap.exists) {
       return NextResponse.json({ ok: false, error: 'Session not found' }, { status: 404 });
     }
 

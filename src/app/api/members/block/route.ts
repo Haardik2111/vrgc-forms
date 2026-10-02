@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { adminAuth, adminDb } from '@/lib/firebase-admin';
+import { adminAuth, adminDb, hasAdminCredentials } from '@/lib/firebase-admin';
 import { authenticateRequest } from '@/lib/server/auth';
 import { SERVER_CONFIG } from '@/lib/server/config';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -11,6 +11,10 @@ async function isAuthorizedToBlock(email: string | null): Promise<boolean> {
   // 1. Super Admin via env
   if (SERVER_CONFIG.SUPER_ADMIN_EMAILS.includes(normalized)) {
     return true;
+  }
+
+  if (!hasAdminCredentials()) {
+    return false;
   }
 
   try {
@@ -65,6 +69,13 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { success: false, error: 'Forbidden: You do not have permission to block or unblock club members.' },
         { status: 403 }
+      );
+    }
+
+    if (!hasAdminCredentials()) {
+      return NextResponse.json(
+        { success: false, error: 'Firebase Admin credentials are not configured in this environment.' },
+        { status: 503 }
       );
     }
 

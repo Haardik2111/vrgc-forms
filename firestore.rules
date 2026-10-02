@@ -188,7 +188,31 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // 9. Explicit Catch-All Default Deny
+    // 10. Audit Sessions
+    // =========================================================================
+    match /audit_sessions/{sessionId} {
+      allow get: if isAuthenticated();
+      allow list: if isAdmin();
+      allow create, update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    // =========================================================================
+    // 11. Support Desk & Contact Tickets
+    // =========================================================================
+    match /support_tickets/{ticketId} {
+      // Anyone can submit a ticket from the Contact Us page
+      allow create: if true;
+      // Single ticket lookup by ID allows anyone with the ticket ID to track their ticket
+      allow get: if true;
+      // Listing all tickets requires Admin privilege
+      allow list: if isAdmin();
+      // Admins can resolve, update, or delete tickets
+      allow update, delete: if isAdmin();
+    }
+
+    // =========================================================================
+    // 12. Explicit Catch-All Default Deny
     // =========================================================================
     // Unmatched documents across all databases/collections are denied by default.
     match /{document=**} {
